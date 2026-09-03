@@ -30,6 +30,12 @@ public class ZycckAppController extends FrontBaseController {
     @GetMapping("/records/{id}")
     public AjaxResult record(@PathVariable Long id) { return AjaxResult.success(recordService.get(id, getCurrentStudent().getUserId())); }
 
+    @PostMapping("/records/{id}/answers")
+    public AjaxResult answer(@PathVariable Long id, @RequestBody Map<String,Object> body) { return AjaxResult.success(recordService.answer(id, getCurrentStudent().getUserId(), body)); }
+
+    @PostMapping("/records/{id}/finish")
+    public AjaxResult finish(@PathVariable Long id) { return AjaxResult.success(recordService.finish(id, getCurrentStudent().getUserId())); }
+
     @GetMapping("/report/pdf")
     public ResponseEntity<byte[]> pdf(@RequestParam Long recordId) {
         recordService.get(recordId, getCurrentStudent().getUserId());

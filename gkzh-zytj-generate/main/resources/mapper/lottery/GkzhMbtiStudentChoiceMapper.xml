@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.lottery.mapper.GkzhMbtiStudentChoiceMapper">
+    
+    <resultMap type="GkzhMbtiStudentChoice" id="GkzhMbtiStudentChoiceResult">
+        <result property="choiceId"    column="choice_id"    />
+        <result property="studentId"    column="student_id"    />
+        <result property="studentName"    column="student_name"    />
+        <result property="studentNo"    column="student_no"    />
+        <result property="activityId"    column="activity_id"    />
+        <result property="choiceCode"    column="choice_code"    />
+        <result property="productIds"    column="product_ids"    />
+        <result property="choiceTime"    column="choice_time"    />
+        <result property="isRedeemed"    column="is_redeemed"    />
+        <result property="redeemTime"    column="redeem_time"    />
+        <result property="remark"    column="remark"    />
+        <result property="createTime"    column="create_time"    />
+    </resultMap>
+
+    <sql id="selectGkzhMbtiStudentChoiceVo">
+        select choice_id, student_id, student_name, student_no, activity_id, choice_code, product_ids, choice_time, is_redeemed, redeem_time, remark, create_time from gkzh_mbti_student_choice
+    </sql>
+
+    <select id="selectGkzhMbtiStudentChoiceList" parameterType="GkzhMbtiStudentChoice" resultMap="GkzhMbtiStudentChoiceResult">
+        <include refid="selectGkzhMbtiStudentChoiceVo"/>
+        <where>  
+            <if test="studentId != null "> and student_id = #{studentId}</if>
+            <if test="studentName != null  and studentName != ''"> and student_name like concat('%', #{studentName}, '%')</if>
+            <if test="studentNo != null  and studentNo != ''"> and student_no = #{studentNo}</if>
+            <if test="activityId != null "> and activity_id = #{activityId}</if>
+            <if test="choiceCode != null  and choiceCode != ''"> and choice_code = #{choiceCode}</if>
+            <if test="productIds != null  and productIds != ''"> and product_ids = #{productIds}</if>
+            <if test="choiceTime != null "> and choice_time = #{choiceTime}</if>
+            <if test="isRedeemed != null  and isRedeemed != ''"> and is_redeemed = #{isRedeemed}</if>
+            <if test="redeemTime != null "> and redeem_time = #{redeemTime}</if>
+        </where>
+    </select>
+    
+    <select id="selectGkzhMbtiStudentChoiceByChoiceId" parameterType="Long" resultMap="GkzhMbtiStudentChoiceResult">
+        <include refid="selectGkzhMbtiStudentChoiceVo"/>
+        where choice_id = #{choiceId}
+    </select>
+
+    <insert id="insertGkzhMbtiStudentChoice" parameterType="GkzhMbtiStudentChoice" useGeneratedKeys="true" keyProperty="choiceId">
+        insert into gkzh_mbti_student_choice
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="studentId != null">student_id,</if>
+            <if test="studentName != null">student_name,</if>
+            <if test="studentNo != null">student_no,</if>
+            <if test="activityId != null">activity_id,</if>
+            <if test="choiceCode != null and choiceCode != ''">choice_code,</if>
+            <if test="productIds != null">product_ids,</if>
+            <if test="choiceTime != null">choice_time,</if>
+            <if test="isRedeemed != null">is_redeemed,</if>
+            <if test="redeemTime != null">redeem_time,</if>
+            <if test="remark != null">remark,</if>
+            <if test="createTime != null">create_time,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="studentId != null">#{studentId},</if>
+            <if test="studentName != null">#{studentName},</if>
+            <if test="studentNo != null">#{studentNo},</if>
+            <if test="activityId != null">#{activityId},</if>
+            <if test="choiceCode != null and choiceCode != ''">#{choiceCode},</if>
+            <if test="productIds != null">#{productIds},</if>
+            <if test="choiceTime != null">#{choiceTime},</if>
+            <if test="isRedeemed != null">#{isRedeemed},</if>
+            <if test="redeemTime != null">#{redeemTime},</if>
+            <if test="remark != null">#{remark},</if>
+            <if test="createTime != null">#{createTime},</if>
+         </trim>
+    </insert>
+
+    <update id="updateGkzhMbtiStudentChoice" parameterType="GkzhMbtiStudentChoice">
+        update gkzh_mbti_student_choice
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="studentId != null">student_id = #{studentId},</if>
+            <if test="studentName != null">student_name = #{studentName},</if>
+            <if test="studentNo != null">student_no = #{studentNo},</if>
+            <if test="activityId != null">activity_id = #{activityId},</if>
+            <if test="choiceCode != null and choiceCode != ''">choice_code = #{choiceCode},</if>
+            <if test="productIds != null">product_ids = #{productIds},</if>
+            <if test="choiceTime != null">choice_time = #{choiceTime},</if>
+            <if test="isRedeemed != null">is_redeemed = #{isRedeemed},</if>
+            <if test="redeemTime != null">redeem_time = #{redeemTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            <if test="createTime != null">create_time = #{createTime},</if>
+        </trim>
+        where choice_id = #{choiceId}
+    </update>
+
+    <delete id="deleteGkzhMbtiStudentChoiceByChoiceId" parameterType="Long">
+        delete from gkzh_mbti_student_choice where choice_id = #{choiceId}
+    </delete>
+
+    <delete id="deleteGkzhMbtiStudentChoiceByChoiceIds" parameterType="String">
+        delete from gkzh_mbti_student_choice where choice_id in 
+        <foreach item="choiceId" collection="array" open="(" separator="," close=")">
+            #{choiceId}
+        </foreach>
+    </delete>
+</mapper>

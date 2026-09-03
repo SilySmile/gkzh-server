@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.school.mapper.GkzhSchoolDepartmentMapper">
+
+    <resultMap id="GkzhSchoolDepartmentResult" type="com.gkzh.school.domain.GkzhSchoolDepartment">
+        <id property="departmentId" column="department_id"/>
+        <result property="schoolId" column="school_id"/>
+        <result property="parentId" column="parent_id"/>
+        <result property="ancestors" column="ancestors"/>
+        <result property="title" column="title"/>
+        <result property="sortNum" column="sort_num"/>
+        <result property="status" column="status"/>
+        <result property="delFlag" column="del_flag"/>
+        <result property="createBy" column="create_by"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateBy" column="update_by"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="parentName" column="parent_name"/>
+    </resultMap>
+
+    <sql id="selectDepartmentVo">
+        select d.department_id, d.school_id, d.parent_id, d.ancestors, d.title, d.sort_num, d.status, d.del_flag, d.create_by, d.create_time, d.update_by, d.update_time,
+        (select title from gkzh_school_department where department_id = d.parent_id) parent_name
+        from gkzh_school_department d
+    </sql>
+
+    <select id="selectDepartmentById" resultMap="GkzhSchoolDepartmentResult">
+        <include refid="selectDepartmentVo"/>
+        where d.department_id = #{departmentId}
+    </select>
+
+    <select id="selectDepartmentList" resultMap="GkzhSchoolDepartmentResult">
+        <include refid="selectDepartmentVo"/>
+        <where>
+            <if test="schoolId != null">AND d.school_id = #{schoolId}</if>
+            <if test="title != null and title != ''">AND d.title LIKE CONCAT('%', #{title}, '%')</if>
+            <if test="status != null and status != ''">AND d.status = #{status}</if>
+            AND d.del_flag = '0'
+        </where>
+        ORDER BY d.parent_id, d.sort_num ASC
+    </select>
+
+    <select id="selectDepartmentTreeBySchoolId" resultMap="GkzhSchoolDepartmentResult">
+        <include refid="selectDepartmentVo"/>
+        WHERE d.school_id = #{schoolId} AND d.del_flag = '0'
+        ORDER BY d.parent_id, d.sort_num ASC
+    </select>
+
+    <select id="selectChildrenDepartmentById" parameterType="Long" resultMap="GkzhSchoolDepartmentResult">
+        select * from gkzh_school_department where find_in_set(#{departmentId}, ancestors)
+    </select>
+
+    <select id="selectNormalChildrenDepartmentById" parameterType="Long" resultType="int">
+        select count(*) from gkzh_school_department where status = '0' and del_flag = '0' and find_in_set(#{departmentId}, ancestors)
+    </select>
+
+    <select id="hasChildByDepartmentId" parameterType="Long" resultType="int">
+        select count(1) from gkzh_school_department
+        where del_flag = '0' and parent_id = #{departmentId} limit 1
+    </select>
+
+    <select id="checkDepartmentNameUnique" resultMap="GkzhSchoolDepartmentResult">
+        <include refid="selectDepartmentVo"/>
+        where d.title=#{title} and d.parent_id = #{parentId} and d.school_id = #{schoolId} and d.del_flag = '0' limit 1
+    </select>
+
+    <insert id="insertDepartment" parameterType="com.gkzh.school.domain.GkzhSchoolDepartment" useGeneratedKeys="true" keyProperty="departmentId">
+        INSERT INTO gkzh_school_department
+        (school_id, parent_id, ancestors, title, sort_num, status, del_flag, create_by, create_time, update_by, update_time)
+        VALUES
+        (#{schoolId}, #{parentId}, #{ancestors}, #{title}, #{sortNum}, #{status}, #{delFlag}, #{createBy}, #{createTime}, #{updateBy}, #{updateTime})
+    </insert>
+
+    <update id="updateDepartment" parameterType="com.gkzh.school.domain.GkzhSchoolDepartment">
+        UPDATE gkzh_school_department
+        SET school_id = #{schoolId},
+            parent_id = #{parentId},
+            ancestors = #{ancestors},
+            title = #{title},
+            sort_num = #{sortNum},
+            status = #{status},
+            del_flag = #{delFlag},
+            update_by = #{updateBy},
+            update_time = #{updateTime}
+        WHERE department_id = #{departmentId}
+    </update>
+
+    <update id="updateDepartmentChildren" parameterType="java.util.List">
+        update gkzh_school_department set ancestors =
+        <foreach collection="list" item="item" index="index"
+            separator=" " open="case department_id" close="end">
+            when #{item.departmentId} then #{item.ancestors}
+        </foreach>
+        where department_id in
+        <foreach collection="list" item="item" index="index"
+            separator="," open="(" close=")">
+            #{item.departmentId}
+        </foreach>
+    </update>
+
+    <update id="updateDepartmentStatusNormal" parameterType="Long">
+        update gkzh_school_department set status = '0' where department_id in 
+        <foreach collection="array" item="departmentId" open="(" separator="," close=")">
+            #{departmentId}
+        </foreach>
+    </update>
+
+    <delete id="deleteDepartmentById" parameterType="Long">
+        UPDATE gkzh_school_department SET del_flag = '2' WHERE department_id = #{departmentId}
+    </delete>
+
+    <delete id="deleteDepartmentByIds" parameterType="Long">
+        UPDATE gkzh_school_department SET del_flag = '2' WHERE department_id IN
+        <foreach collection="array" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+</mapper> 

@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.activity.mapper.GkzhActivityParticipationRecordMapper">
+    
+    <resultMap type="GkzhActivityParticipationRecord" id="GkzhActivityParticipationRecordResult">
+        <result property="recordId"    column="record_id"    />
+        <result property="activityId"    column="activity_id"    />
+        <result property="moduleId"    column="module_id"    />
+        <result property="userId"    column="user_id"    />
+        <result property="userName"    column="user_name"    />
+        <result property="userCode"    column="user_code"    />
+        <result property="participationType"    column="participation_type"    />
+        <result property="participationTime"    column="participation_time"    />
+        <result property="result"    column="result"    />
+        <result property="status"    column="status"    />
+        <result property="createTime"    column="create_time"    />
+        <result property="remark"    column="remark"    />
+    </resultMap>
+
+    <sql id="selectGkzhActivityParticipationRecordVo">
+        select record_id, activity_id, module_id, user_id, user_name, user_code, participation_type, participation_time, result, status, create_time, remark from gkzh_activity_participation_record
+    </sql>
+
+    <select id="selectGkzhActivityParticipationRecordList" parameterType="GkzhActivityParticipationRecord" resultMap="GkzhActivityParticipationRecordResult">
+        <include refid="selectGkzhActivityParticipationRecordVo"/>
+        <where>  
+            <if test="activityId != null "> and activity_id = #{activityId}</if>
+            <if test="moduleId != null "> and module_id = #{moduleId}</if>
+            <if test="userId != null "> and user_id = #{userId}</if>
+            <if test="userName != null  and userName != ''"> and user_name like concat('%', #{userName}, '%')</if>
+            <if test="userCode != null  and userCode != ''"> and user_code = #{userCode}</if>
+            <if test="participationType != null "> and participation_type = #{participationType}</if>
+            <if test="participationTime != null "> and participation_time = #{participationTime}</if>
+            <if test="result != null  and result != ''"> and result = #{result}</if>
+            <if test="status != null "> and status = #{status}</if>
+        </where>
+    </select>
+    
+    <select id="selectGkzhActivityParticipationRecordByRecordId" parameterType="Long" resultMap="GkzhActivityParticipationRecordResult">
+        <include refid="selectGkzhActivityParticipationRecordVo"/>
+        where record_id = #{recordId}
+    </select>
+
+    <select id="selectLatestParticipationRecordByUserIdAndActivityId" resultType="com.gkzh.activity.domain.GkzhActivityParticipationRecord">
+        SELECT 
+            record_id AS recordId,
+            activity_id AS activityId,
+            module_id AS moduleId,
+            user_id AS userId,
+            user_name AS userName,
+            user_code AS userCode,
+            participation_type AS participationType,
+            participation_time AS participationTime,
+            result,
+            status,
+            create_time AS createTime,
+            remark
+        FROM
+            gkzh_activity_participation_record
+        WHERE 
+            user_id = #{userId} AND activity_id = #{activityId}
+        ORDER BY 
+            participation_time DESC
+        LIMIT 1
+    </select>
+
+    <insert id="insertGkzhActivityParticipationRecord" parameterType="GkzhActivityParticipationRecord" useGeneratedKeys="true" keyProperty="recordId">
+        insert into gkzh_activity_participation_record
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="activityId != null">activity_id,</if>
+            <if test="moduleId != null">module_id,</if>
+            <if test="userId != null">user_id,</if>
+            <if test="userName != null and userName != ''">user_name,</if>
+            <if test="userCode != null">user_code,</if>
+            <if test="participationType != null">participation_type,</if>
+            <if test="participationTime != null">participation_time,</if>
+            <if test="result != null">result,</if>
+            <if test="status != null">status,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="remark != null">remark,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="activityId != null">#{activityId},</if>
+            <if test="moduleId != null">#{moduleId},</if>
+            <if test="userId != null">#{userId},</if>
+            <if test="userName != null and userName != ''">#{userName},</if>
+            <if test="userCode != null">#{userCode},</if>
+            <if test="participationType != null">#{participationType},</if>
+            <if test="participationTime != null">#{participationTime},</if>
+            <if test="result != null">#{result},</if>
+            <if test="status != null">#{status},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="remark != null">#{remark},</if>
+         </trim>
+    </insert>
+
+    <update id="updateGkzhActivityParticipationRecord" parameterType="GkzhActivityParticipationRecord">
+        update gkzh_activity_participation_record
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="activityId != null">activity_id = #{activityId},</if>
+            <if test="moduleId != null">module_id = #{moduleId},</if>
+            <if test="userId != null">user_id = #{userId},</if>
+            <if test="userName != null and userName != ''">user_name = #{userName},</if>
+            <if test="userCode != null">user_code = #{userCode},</if>
+            <if test="participationType != null">participation_type = #{participationType},</if>
+            <if test="participationTime != null">participation_time = #{participationTime},</if>
+            <if test="result != null">result = #{result},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="createTime != null">create_time = #{createTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </trim>
+        where record_id = #{recordId}
+    </update>
+
+    <delete id="deleteGkzhActivityParticipationRecordByRecordId" parameterType="Long">
+        delete from gkzh_activity_participation_record where record_id = #{recordId}
+    </delete>
+
+    <delete id="deleteGkzhActivityParticipationRecordByRecordIds" parameterType="String">
+        delete from gkzh_activity_participation_record where record_id in 
+        <foreach item="recordId" collection="array" open="(" separator="," close=")">
+            #{recordId}
+        </foreach>
+    </delete>
+    <select id="selectByUserIdAndActivityId" resultType="com.gkzh.activity.domain.GkzhActivityParticipationRecord">
+        SELECT 
+            record_id AS recordId,
+            activity_id AS activityId,
+            module_id AS moduleId,
+            user_id AS userId,
+            user_name AS userName,
+            user_code AS userCode,
+            participation_type AS participationType,
+            participation_time AS participationTime,
+            result,
+            status,
+            create_time AS createTime,
+            remark
+        FROM
+            gkzh_activity_participation_record
+        WHERE 
+            user_id = #{userId} AND activity_id = #{activityId} AND participation_type = #{participationType}
+        LIMIT 1
+    </select>
+</mapper>

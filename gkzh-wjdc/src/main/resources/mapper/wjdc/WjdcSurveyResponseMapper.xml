@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.wjdc.mapper.WjdcSurveyResponseMapper">
+    
+    <resultMap type="WjdcSurveyResponse" id="WjdcSurveyResponseResult">
+        <result property="responseId"    column="response_id"    />
+        <result property="surveyId"    column="survey_id"    />
+        <result property="userId"    column="user_id"    />
+        <result property="submittedAt"    column="submitted_at"    />
+        <result property="surveyTitle"    column="survey_title"    />
+        <result property="userName"    column="user_name"    />
+    </resultMap>
+
+    <resultMap type="WjdcSurveyResponse" id="WjdcSurveyResponseDetailResult" extends="WjdcSurveyResponseResult">
+        <collection property="answers" ofType="WjdcSurveyAnswer">
+            <result property="answerId"    column="answer_id"    />
+            <result property="responseId"    column="response_id"    />
+            <result property="questionId"    column="question_id"    />
+            <result property="answerText"    column="answer_text"    />
+            <result property="questionTitle"    column="question_title"    />
+            <result property="questionType"    column="question_type"    />
+            <result property="optionText"    column="option_text"    />
+        </collection>
+    </resultMap>
+
+    <sql id="selectWjdcSurveyResponseVo">
+        select r.response_id, r.survey_id, r.user_id, r.submitted_at,
+               s.title as survey_title, u.user_name
+        from wjdc_survey_response r
+        left join wjdc_survey s on r.survey_id = s.id
+        left join sys_user u on r.user_id = u.user_id
+    </sql>
+
+    <select id="selectWjdcSurveyResponseList" parameterType="WjdcSurveyResponse" resultMap="WjdcSurveyResponseResult">
+        <include refid="selectWjdcSurveyResponseVo"/>
+        <where>  
+            <if test="surveyId != null "> and r.survey_id = #{surveyId}</if>
+            <if test="userId != null "> and r.user_id = #{userId}</if>
+            <if test="submittedAt != null "> and r.submitted_at = #{submittedAt}</if>
+            <if test="surveyTitle != null and surveyTitle != ''"> and s.title like concat('%', #{surveyTitle}, '%')</if>
+            <if test="userName != null and userName != ''"> and u.user_name like concat('%', #{userName}, '%')</if>
+            <if test="params.beginTime != null and params.beginTime != ''"><!-- 开始时间检索 -->
+                and date_format(r.submitted_at,'%y%m%d') &gt;= date_format(#{params.beginTime},'%y%m%d')
+            </if>
+            <if test="params.endTime != null and params.endTime != ''"><!-- 结束时间检索 -->
+                and date_format(r.submitted_at,'%y%m%d') &lt;= date_format(#{params.endTime},'%y%m%d')
+            </if>
+        </where>
+        order by r.submitted_at desc
+    </select>
+    
+    <select id="selectWjdcSurveyResponseByResponseId" parameterType="Long" resultMap="WjdcSurveyResponseResult">
+        <include refid="selectWjdcSurveyResponseVo"/>
+        where r.response_id = #{responseId}
+    </select>
+
+    <select id="selectWjdcSurveyResponseDetailByResponseId" parameterType="Long" resultMap="WjdcSurveyResponseDetailResult">
+        select r.response_id, r.survey_id, r.user_id, r.submitted_at,
+               s.title as survey_title, u.user_name,
+               a.answer_id, a.question_id, a.answer_text,
+               q.question_title, q.question_type,
+               case 
+                   when q.question_type in ('1', '2') then 
+                       (select GROUP_CONCAT(opt.option_text ORDER BY opt.sort_order SEPARATOR '; ')
+                        from wjdc_survey_option opt
+                        where opt.question_id = q.id
+                        and (
+                            FIND_IN_SET(opt.id, a.answer_text) > 0
+                            or a.answer_text = opt.id
+                        ))
+                   else a.answer_text
+               end as option_text
+        from wjdc_survey_response r
+        left join wjdc_survey s on r.survey_id = s.id
+        left join sys_user u on r.user_id = u.user_id
+        left join wjdc_survey_answer a on r.response_id = a.response_id
+        left join wjdc_survey_question q on a.question_id = q.id
+        where r.response_id = #{responseId}
+        order by q.sort_order
+    </select>
+        
+    <insert id="insertWjdcSurveyResponse" parameterType="WjdcSurveyResponse" useGeneratedKeys="true" keyProperty="responseId">
+        insert into wjdc_survey_response
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="surveyId != null">survey_id,</if>
+            <if test="userId != null">user_id,</if>
+            <if test="submittedAt != null">submitted_at,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="surveyId != null">#{surveyId},</if>
+            <if test="userId != null">#{userId},</if>
+            <if test="submittedAt != null">#{submittedAt},</if>
+         </trim>
+    </insert>
+
+    <update id="updateWjdcSurveyResponse" parameterType="WjdcSurveyResponse">
+        update wjdc_survey_response
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="surveyId != null">survey_id = #{surveyId},</if>
+            <if test="userId != null">user_id = #{userId},</if>
+            <if test="submittedAt != null">submitted_at = #{submittedAt},</if>
+        </trim>
+        where response_id = #{responseId}
+    </update>
+
+    <delete id="deleteWjdcSurveyResponseByResponseId" parameterType="Long">
+        delete from wjdc_survey_response where response_id = #{responseId}
+    </delete>
+
+    <delete id="deleteWjdcSurveyResponseByResponseIds" parameterType="String">
+        delete from wjdc_survey_response where response_id in 
+        <foreach item="responseId" collection="array" open="(" separator="," close=")">
+            #{responseId}
+        </foreach>
+    </delete>
+
+    <select id="countBySurveyIdAndUserId" resultType="int">
+        SELECT COUNT(1)
+        FROM wjdc_survey_response
+        WHERE survey_id = #{surveyId} AND user_id = #{userId}
+    </select>
+</mapper> 

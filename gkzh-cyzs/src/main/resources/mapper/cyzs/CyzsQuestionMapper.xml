@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.cyzs.mapper.CyzsQuestionMapper">
+    
+    <resultMap type="CyzsQuestion" id="CyzsQuestionResult">
+        <result property="id"    column="id"    />
+        <result property="questionText"    column="question_text"    />
+        <result property="optionA"    column="option_a"    />
+        <result property="optionB"    column="option_b"    />
+        <result property="optionC"    column="option_c"    />
+        <result property="optionD"    column="option_d"    />
+        <result property="correctOptionKey"    column="correct_option_key"    />
+        <result property="status"    column="status"    />
+        <result property="createBy"    column="create_by"    />
+        <result property="createTime"    column="create_time"    />
+        <result property="updateBy"    column="update_by"    />
+        <result property="updateTime"    column="update_time"    />
+        <result property="remark"    column="remark"    />
+    </resultMap>
+
+    <sql id="selectCyzsQuestionVo">
+        select id, question_text, question_image, option_a, option_b, option_c, correct_option_key, status, create_by, create_time, update_by, update_time, remark from cyzs_question
+    </sql>
+
+    <select id="selectCyzsQuestionList" parameterType="CyzsQuestion" resultMap="CyzsQuestionResult">
+        <include refid="selectCyzsQuestionVo"/>
+        <where>  
+            <if test="questionText != null  and questionText != ''"> and question_text like concat('%', #{questionText}, '%')</if>
+            <if test="status != null  and status != ''"> and status = #{status}</if>
+        </where>
+    </select>
+    
+    <select id="selectCyzsQuestionById" parameterType="Long" resultMap="CyzsQuestionResult">
+        <include refid="selectCyzsQuestionVo"/>
+        where id = #{id}
+    </select>
+
+    <insert id="insertCyzsQuestion" parameterType="CyzsQuestion" useGeneratedKeys="true" keyProperty="id">
+        insert into cyzs_question
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="questionText != null and questionText != ''">question_text,</if>
+            <if test="questionImage != null">question_image,</if>
+            <if test="optionA != null and optionA != ''">option_a,</if>
+            <if test="optionB != null and optionB != ''">option_b,</if>
+            <if test="optionC != null and optionC != ''">option_c,</if>
+            <if test="correctOptionKey != null and correctOptionKey != ''">correct_option_key,</if>
+            <if test="status != null and status != ''">status,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updateBy != null">update_by,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="remark != null">remark,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="questionText != null and questionText != ''">#{questionText},</if>
+            <if test="questionImage != null">#{questionImage},</if>
+            <if test="optionA != null and optionA != ''">#{optionA},</if>
+            <if test="optionB != null and optionB != ''">#{optionB},</if>
+            <if test="optionC != null and optionC != ''">#{optionC},</if>
+            <if test="correctOptionKey != null and correctOptionKey != ''">#{correctOptionKey},</if>
+            <if test="status != null and status != ''">#{status},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updateBy != null">#{updateBy},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="remark != null">#{remark},</if>
+         </trim>
+    </insert>
+
+    <update id="updateCyzsQuestion" parameterType="CyzsQuestion">
+        update cyzs_question
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="questionText != null and questionText != ''">question_text = #{questionText},</if>
+            <if test="questionImage != null">question_image = #{questionImage},</if>
+            <if test="optionA != null and optionA != ''">option_a = #{optionA},</if>
+            <if test="optionB != null and optionB != ''">option_b = #{optionB},</if>
+            <if test="optionC != null and optionC != ''">option_c = #{optionC},</if>
+            <if test="correctOptionKey != null and correctOptionKey != ''">correct_option_key = #{correctOptionKey},</if>
+            <if test="status != null and status != ''">status = #{status},</if>
+            <if test="createBy != null">create_by = #{createBy},</if>
+            <if test="createTime != null">create_time = #{createTime},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </trim>
+        where id = #{id}
+    </update>
+
+    <delete id="deleteCyzsQuestionById" parameterType="Long">
+        delete from cyzs_question where id = #{id}
+    </delete>
+
+    <delete id="deleteCyzsQuestionByIds" parameterType="String">
+        delete from cyzs_question where id in 
+        <foreach item="id" collection="array" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+    <select id="selectUserAnswerRecordsForExport" resultType="com.gkzh.cyzs.vo.UserAnswerRecordVO">
+        SELECT
+            bgr.user_id as userId,
+            su.user_name as userName,
+            su.nick_name as nickName,
+            bq.question_text as questionText,
+            bq.option_a as optionA,
+            bq.option_b as optionB,
+            bq.option_c as optionC,
+            bq.option_d as optionD,
+            bad.user_answer as userAnswer,
+            CASE
+                WHEN bad.is_correct = 1 THEN '正确'
+                ELSE '错误'
+                END as isCorrect,
+            DATE_FORMAT(bgr.create_time, '%Y-%m-%d %H:%i:%s') as answerTime
+        FROM cyzs_answer_detail bad
+                 JOIN cyzs_game_round bgr ON bad.round_id = bgr.id
+                 JOIN cyzs_question bq ON bad.question_id = bq.id
+                 LEFT JOIN sys_user su ON bgr.user_id = su.user_id
+        ORDER BY bgr.user_id, bgr.create_time, bad.id
+    </select>
+</mapper>

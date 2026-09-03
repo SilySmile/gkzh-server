@@ -1,0 +1,77 @@
+package com.gkzh.sszctop.service;
+
+import com.alibaba.fastjson2.JSON;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.gkzh.activity.domain.week.*;
+import com.gkzh.activity.service.IActivityWeekService;
+import com.gkzh.common.exception.ServiceException;
+import com.gkzh.common.utils.DateUtils;
+import com.gkzh.sszctop.domain.*;
+import com.gkzh.sszctop.mapper.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import java.util.*;
+import java.util.stream.Collectors;
+
+@Service
+public class SszctopRoomService {
+ // 房间状态机：waiting 等待组队，playing 进行排序，passed/failed 终态；空房直接物理删除，不保存 abandoned 状态。
+ @Autowired private SszctopDimensionMapper dimensionMapper; @Autowired private SszctopCareerMapper careerMapper; @Autowired private SszctopDimensionRankMapper rankMapper; @Autowired private SszctopRoomMapper roomMapper; @Autowired private SszctopRoomMemberMapper memberMapper; @Autowired private SszctopStudentReportMapper reportMapper; @Autowired private SszctopRoomLogMapper logMapper; @Autowired private IActivityWeekService weekService;
+ /** 查询学生端可选择的启用维度。 */
+ public List<SszctopDimension> dimensions(){return dimensionMapper.selectList(new QueryWrapper<SszctopDimension>().eq("status","0").orderByAsc("sort_order"));}
+ /** 查询启用职业，供抽题和报告使用。 */
+ public List<SszctopCareer> careers(){return careerMapper.selectList(new QueryWrapper<SszctopCareer>().eq("status","0").orderByAsc("sort_order"));}
+ public List<SszctopDimensionRank> ranks(Long d){return rankMapper.selectList(new QueryWrapper<SszctopDimensionRank>().eq("dimension_id",d).eq("status","0").orderByAsc("rank_order"));}
+ @Transactional public SszctopRoom create(GkzhActivityGame game,String mode,Long user,Long student,String name,String no){ if(!"solo".equals(mode)&&!"team".equals(mode))throw new ServiceException("参赛方式不正确"); ensureNotFinal(game.getGameId(),user); SszctopRoom room=new SszctopRoom();room.setRoomCode(code());room.setInstanceId(game.getInstanceId());room.setGameId(game.getGameId());room.setOwnerUserId(user);room.setMode(mode);room.setStatus("waiting");room.setOrderVersion(0);room.setCreateTime(DateUtils.getNowDate());room.setUpdateTime(DateUtils.getNowDate());roomMapper.insert(room); addMember(room,user,student,name,no);log(room,user,student,"room.created","创建"+("team".equals(mode)?"组队":"单人")+"房间");return room; }
+ /**
+  * 加入等待中的组队房间。成员退出后保留原记录用于房间日志，因此再次加入时必须恢复原成员行，
+  * 不能再次 insert，否则会触发 (room_id, user_id) 唯一索引并导致用户无法重新进入。
+  */
+ @Transactional public SszctopRoom join(String code,Long gameId,Long user,Long student,String name,String no){SszctopRoom room=room(code);if(!"team".equals(room.getMode())||!"waiting".equals(room.getStatus()))throw new ServiceException("房间当前不能加入");if(!room.getGameId().equals(gameId))throw new ServiceException("房间不属于当前游戏");ensureNotFinal(gameId,user);SszctopRoomMember existing=member(room.getRoomId(),user);if(existing==null){if(active(room.getRoomId()).size()>=4)throw new ServiceException("房间已满");addMember(room,user,student,name,no);log(room,user,student,"member.joined",name+"加入房间");}else if(existing.getRemovedTime()!=null){if(active(room.getRoomId()).size()>=4)throw new ServiceException("房间已满");restoreMember(existing,student,name,no);log(room,user,student,"member.rejoined",name+"重新加入房间");}return room;}
+ @Transactional public SszctopRoom leave(String code,Long user){SszctopRoom room=room(code);if(!"waiting".equals(room.getStatus()))throw new ServiceException("游戏开始后不能主动退出");SszctopRoomMember m=member(room.getRoomId(),user);if(m==null||m.getRemovedTime()!=null)throw new ServiceException("你不在房间内");remove(m,"left");log(room,user,m.getStudentId(),"member.left",m.getStudentName()+"退出房间");return transferOrDestroy(room)?room:roomMapper.selectById(room.getRoomId());}
+ @Transactional public SszctopRoom start(String code,Long user,Long dimensionId){SszctopRoom room=room(code);if(!user.equals(room.getOwnerUserId()))throw new ServiceException("仅房主可以开始");if(!"waiting".equals(room.getStatus()))throw new ServiceException("房间不能重复开始");List<SszctopRoomMember> members=active(room.getRoomId());int count=members.size();if("team".equals(room.getMode())&&(count<2||count>4))throw new ServiceException("组队房间需要 2 至 4 人");if("team".equals(room.getMode())&&!members.stream().filter(m->!m.getUserId().equals(room.getOwnerUserId())).allMatch(m->"ready".equals(m.getConfirmStatus())))throw new ServiceException("请等待所有队员准备完成");SszctopDimension d=dimensionMapper.selectById(dimensionId);if(d==null||!"0".equals(d.getStatus()))throw new ServiceException("维度不可用");List<SszctopDimensionRank> ranks=new ArrayList<>(ranks(dimensionId));if(ranks.size()<12)throw new ServiceException("该维度需配置至少 12 个职业");Collections.shuffle(ranks);List<Long> ids=ranks.subList(0,12).stream().map(SszctopDimensionRank::getCareerId).collect(Collectors.toList());room.setDimensionId(dimensionId);room.setCareerIds(csv(ids));room.setSharedOrderIds("");room.setStatus("playing");room.setOrderVersion(1);room.setUpdateTime(DateUtils.getNowDate());roomMapper.updateById(room);for(SszctopRoomMember m:members){m.setConfirmStatus("waiting");m.setConfirmVersion(null);m.setConfirmedAt(null);memberMapper.updateById(m);}log(room,user,null,"room.started","开始游戏，维度："+d.getName()+"，随机展示 12 个职业");return room;}
+ @Transactional public SszctopRoom ready(String code,Long user,boolean ready){SszctopRoom room=room(code);if(!"waiting".equals(room.getStatus()))throw new ServiceException("房间已经开始，不能修改准备状态");SszctopRoomMember m=member(room.getRoomId(),user);if(m==null||m.getRemovedTime()!=null)throw new ServiceException("你不在当前房间");m.setConfirmStatus(ready?"ready":"waiting");memberMapper.updateById(m);/* 准备状态仅用于房间协作，不写入游玩日志，避免后台详情产生噪声。 */return room;}
+ @Transactional public SszctopRoom updateOrder(String code,Long user,List<Long> ids,Integer version){SszctopRoom room=room(code);validPlayer(room,user);if(!"playing".equals(room.getStatus()))throw new ServiceException("本局已结束");if(!Objects.equals(room.getOrderVersion(),version))throw new ServiceException("排序已被队友更新，请同步后重试");List<Long> all=longs(room.getCareerIds());if(ids==null||ids.size()>3||new HashSet<>(ids).size()!=ids.size()||!all.containsAll(ids))throw new ServiceException("排序框只能选择 3 个不同职业");room.setSharedOrderIds(csv(ids));room.setOrderVersion(room.getOrderVersion()+1);room.setUpdateTime(DateUtils.getNowDate());roomMapper.updateById(room);for(SszctopRoomMember m:active(room.getRoomId())){m.setConfirmStatus("waiting");m.setConfirmVersion(null);m.setConfirmedAt(null);memberMapper.updateById(m);}/* 共享排序会实时同步，但不记入后台房间游玩日志。 */return room;}
+ @Transactional public SszctopRoom confirm(String code,Long user,Integer version){SszctopRoom room=room(code);validPlayer(room,user);if(!"playing".equals(room.getStatus()))throw new ServiceException("本局已结束");if(!Objects.equals(room.getOrderVersion(),version))throw new ServiceException("排序已更新，请确认最新版本");if(longs(room.getSharedOrderIds()).size()!=3)throw new ServiceException("请从职业列表中选择 3 个职业完成排序");SszctopRoomMember m=member(room.getRoomId(),user);m.setConfirmStatus("confirmed");m.setConfirmVersion(version);m.setConfirmedAt(DateUtils.getNowDate());memberMapper.updateById(m);log(room,user,m.getStudentId(),"confirm.submitted",m.getStudentName()+"确认第 "+version+" 版排序");List<SszctopRoomMember> members=active(room.getRoomId());if(members.stream().allMatch(x->"confirmed".equals(x.getConfirmStatus())&&Objects.equals(version,x.getConfirmVersion())))finish(room,members);return roomMapper.selectById(room.getRoomId());}
+ /**
+  * WebSocket 心跳超时或连接关闭后移出成员。
+  * 等待阶段同样执行移出和房主转移，避免断线成员长期占用房间名额；单人房间不建立 WebSocket，不会进入此方法。
+  */
+ @Transactional public SszctopRoom disconnect(String code,Long user){SszctopRoom room=room(code);SszctopRoomMember m=member(room.getRoomId(),user);if(m==null||m.getRemovedTime()!=null||(!"waiting".equals(room.getStatus())&&!"playing".equals(room.getStatus())))return room;remove(m,"disconnected");log(room,user,m.getStudentId(),"member.disconnected",m.getStudentName()+"连接断开，已移出房间");for(SszctopRoomMember x:active(room.getRoomId())){x.setConfirmStatus("waiting");x.setConfirmVersion(null);x.setConfirmedAt(null);memberMapper.updateById(x);}return transferOrDestroy(room)?room:roomMapper.selectById(room.getRoomId());}
+ /** 完成游戏时为每位成员保存独立快照，其中包含维度下职业的排序说明，保证历史报告可追溯。 */
+ private void finish(SszctopRoom room,List<SszctopRoomMember> members){
+  List<Long> actual=longs(room.getSharedOrderIds());
+  List<SszctopDimensionRank> allRanks=ranks(room.getDimensionId());
+  Map<Long,Integer> rankOrders=allRanks.stream().collect(Collectors.toMap(SszctopDimensionRank::getCareerId,SszctopDimensionRank::getRankOrder));
+  List<Long> expected=new ArrayList<>(actual); expected.sort(Comparator.comparing(rankOrders::get));
+  List<Long> presentedCareers=longs(room.getCareerIds());
+  List<SszctopDimensionRank> rankDetails=allRanks.stream().filter(rank->presentedCareers.contains(rank.getCareerId())).collect(Collectors.toList());
+  boolean passed=actual.equals(expected); room.setStatus(passed?"passed":"failed"); room.setFinishTime(DateUtils.getNowDate()); room.setUpdateTime(DateUtils.getNowDate()); roomMapper.updateById(room);
+  for(SszctopRoomMember m:members){
+   // 同一学生在同一活动只保留一份职场TOP个人报告；保留本次结算快照，清理历史遗留或测试重复记录。
+   reportMapper.delete(new QueryWrapper<SszctopStudentReport>().eq("instance_id",room.getInstanceId()).eq("user_id",m.getUserId()));
+   SszctopStudentReport r=new SszctopStudentReport(); r.setRoomId(room.getRoomId()); r.setInstanceId(room.getInstanceId()); r.setGameId(room.getGameId()); r.setUserId(m.getUserId()); r.setStudentId(m.getStudentId());
+   r.setDimensionSnapshot(JSON.toJSONString(dimensionMapper.selectById(room.getDimensionId()))); r.setCareersSnapshot(JSON.toJSONString(careerMapper.selectBatchIds(presentedCareers))); r.setSharedOrderSnapshot(room.getSharedOrderIds()); r.setStandardOrderSnapshot(csv(expected)); r.setResult(passed?"passed":"failed");
+   Map<String,Object> reportSnapshot=new LinkedHashMap<>(); reportSnapshot.put("roomCode",room.getRoomCode()); reportSnapshot.put("rankDetails",rankDetails); r.setReportJson(JSON.toJSONString(reportSnapshot)); r.setCreateTime(DateUtils.getNowDate()); reportMapper.insert(r); updateParticipation(room,m,passed);
+  }
+  log(room,null,null,passed?"room.passed":"room.failed",passed?"全员确认，排序正确":"全员确认，排序错误");
+ }
+ private void updateParticipation(SszctopRoom room,SszctopRoomMember member,boolean pass){GkzhGameParticipation p=weekService.getLatestParticipation(room.getGameId(),member.getUserId());if(p==null){GkzhActivityGame g=weekService.getGame(room.getGameId());p=new GkzhGameParticipation();p.setInstanceId(g.getInstanceId());p.setGameId(g.getGameId());p.setAreaId(g.getAreaId());for(GkzhActivityArea area:weekService.listAreas(g.getInstanceId(),null))if(Objects.equals(area.getAreaId(),g.getAreaId())){p.setSchoolId(area.getSchoolId());break;}p.setUserId(member.getUserId());p.setStudentId(member.getStudentId());p.setScanTime(DateUtils.getNowDate());p.setStartTime(DateUtils.getNowDate());weekService.recordGameEnter(p);}p.setFinishTime(DateUtils.getNowDate());p.setStatus(pass?"1":"2");p.setResultJson(JSON.toJSONString(Collections.singletonMap("roomCode",room.getRoomCode())));weekService.updateGameParticipation(p);}
+ /** 空房属于未完成会话：直接删除房间、成员及该房间全部日志，不留下无效游玩记录。 */
+ private boolean transferOrDestroy(SszctopRoom r){List<SszctopRoomMember> list=active(r.getRoomId());if(list.isEmpty()){destroyEmptyRoom(r);return true;}if(!list.stream().anyMatch(m->m.getUserId().equals(r.getOwnerUserId()))){r.setOwnerUserId(list.get(0).getUserId());log(r,r.getOwnerUserId(),list.get(0).getStudentId(),"owner.transferred","房主已转移给 "+list.get(0).getStudentName());}r.setUpdateTime(DateUtils.getNowDate());roomMapper.updateById(r);return false;}
+ /**
+  * 无成员房间不是一次有效游玩，物理删除成员、日志与房间主数据。
+  */
+ private void destroyEmptyRoom(SszctopRoom room){memberMapper.delete(new QueryWrapper<SszctopRoomMember>().eq("room_id",room.getRoomId()));logMapper.delete(new QueryWrapper<SszctopRoomLog>().eq("room_id",room.getRoomId()));roomMapper.deleteById(room.getRoomId());}
+ /** 同一用户在同一活动内只能保留一次职场TOP终局记录，避免多房间或多游戏配置产生重复报告。 */
+ private void ensureNotFinal(Long gameId,Long user){GkzhActivityGame game=weekService.getGame(gameId);if(game!=null&&reportMapper.selectCount(new QueryWrapper<SszctopStudentReport>().eq("instance_id",game.getInstanceId()).eq("user_id",user))>0)throw new ServiceException("本活动的谁是职场TOP已结束，不能重新游玩");GkzhGameParticipation p=weekService.getLatestParticipation(gameId,user);if(p!=null&&("1".equals(p.getStatus())||"2".equals(p.getStatus())))throw new ServiceException("本游戏已结束，不能重新游玩");}
+ private void validPlayer(SszctopRoom r,Long user){SszctopRoomMember m=member(r.getRoomId(),user);if(m==null||m.getRemovedTime()!=null)throw new ServiceException("你不在当前房间");}
+ private void addMember(SszctopRoom r,Long u,Long s,String n,String no){SszctopRoomMember m=new SszctopRoomMember();m.setRoomId(r.getRoomId());m.setUserId(u);m.setStudentId(s);m.setStudentName(n);m.setStudentNo(no);m.setConfirmStatus("waiting");m.setCreateTime(DateUtils.getNowDate());memberMapper.insert(m);}
+ /** 恢复已退出成员，重置本局准备/确认状态，并保留原记录 ID 以保证日志可追溯。 */
+ /** 恢复退出成员；显式 SET NULL，避免 MyBatis-Plus 默认忽略 null 导致 removed_time 仍保持退出状态。 */
+ private void restoreMember(SszctopRoomMember m,Long student,String name,String no){UpdateWrapper<SszctopRoomMember> update=new UpdateWrapper<>();update.eq("member_id",m.getMemberId()).set("student_id",student).set("student_name",name).set("student_no",no).set("confirm_status","waiting").set("confirm_version",null).set("confirmed_at",null).set("removed_reason",null).set("removed_time",null);memberMapper.update(null,update);}
+ private void remove(SszctopRoomMember m,String reason){m.setRemovedReason(reason);m.setRemovedTime(DateUtils.getNowDate());memberMapper.updateById(m);}public SszctopRoom room(String c){SszctopRoom r=roomMapper.selectOne(new QueryWrapper<SszctopRoom>().eq("room_code",c));if(r==null)throw new ServiceException("房间不存在");return r;}public List<SszctopRoomMember> active(Long room){return memberMapper.selectList(new QueryWrapper<SszctopRoomMember>().eq("room_id",room).isNull("removed_time").orderByAsc("member_id"));}public SszctopRoomMember member(Long r,Long u){return memberMapper.selectOne(new QueryWrapper<SszctopRoomMember>().eq("room_id",r).eq("user_id",u));}
+ public void log(SszctopRoom r,Long user,Long student,String event,String content){SszctopRoomLog l=new SszctopRoomLog();l.setRoomId(r.getRoomId());l.setRoomCode(r.getRoomCode());l.setRoomStatus(r.getStatus());l.setInstanceId(r.getInstanceId());l.setGameId(r.getGameId());l.setUserId(user);l.setStudentId(student);if(user!=null){SszctopRoomMember member=member(r.getRoomId(),user);if(member!=null){l.setStudentName(member.getStudentName());l.setStudentNo(member.getStudentNo());}}l.setEventType(event);l.setContent(content);l.setCreateTime(DateUtils.getNowDate());logMapper.insert(l);}private String code(){for(int i=0;i<10;i++){String c=String.valueOf(100000+(int)(Math.random()*900000));if(roomMapper.selectCount(new QueryWrapper<SszctopRoom>().eq("room_code",c))==0)return c;}throw new ServiceException("生成房间号失败");}private static List<Long> longs(String s){if(s==null||s.isEmpty())return new ArrayList<>();return Arrays.stream(s.split(",")).map(Long::valueOf).collect(Collectors.toList());}private static String csv(List<Long> x){return x.stream().map(String::valueOf).collect(Collectors.joining(","));}
+}

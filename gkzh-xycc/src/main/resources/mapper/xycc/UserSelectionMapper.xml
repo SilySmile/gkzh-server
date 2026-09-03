@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.xycc.mapper.UserSelectionMapper">
+    
+    <resultMap type="UserSelection" id="UserSelectionResult">
+        <result property="userSelectionId"    column="user_selection_id"    />
+        <result property="userId"    column="user_id"    />
+        <result property="gameId"    column="game_id"    />
+        <result property="userName"    column="user_name"    />
+        <result property="patternComboCode"    column="pattern_combo_code"    />
+        <result property="careerTitles"    column="career_titles"    />
+        <result property="envTitles"    column="env_titles"    />
+        <result property="createdAt"    column="created_at"    />
+    </resultMap>
+
+    <sql id="selectUserSelectionVo">
+        SELECT 
+            us.user_selection_id, 
+            us.user_id, 
+            us.game_id,
+            u.user_name,
+            u.nick_name,
+            us.pattern_combo_code,
+            (
+                SELECT GROUP_CONCAT(DISTINCT c2.title)
+                FROM xycc_pattern_combo pc2
+                LEFT JOIN xycc_pattern_combo_career pcc2 ON pc2.pattern_combo_id = pcc2.combo_id
+                LEFT JOIN xycc_career c2 ON pcc2.career_id = c2.career_id
+                WHERE pc2.code = us.pattern_combo_code
+            ) as career_titles,
+            (
+                SELECT GROUP_CONCAT(DISTINCT e2.title)
+                FROM xycc_pattern_combo pc2
+                LEFT JOIN xycc_pattern_combo_env pce2 ON pc2.pattern_combo_id = pce2.combo_id
+                LEFT JOIN xycc_work_env e2 ON pce2.env_id = e2.work_env_id
+                WHERE pc2.code = us.pattern_combo_code
+            ) as env_titles,
+            us.created_at
+        FROM xycc_user_selection us
+        LEFT JOIN sys_user u ON us.user_id = u.user_id
+        LEFT JOIN xycc_pattern_combo pc ON us.pattern_combo_code = pc.code
+        LEFT JOIN xycc_pattern_combo_career pcc ON pc.pattern_combo_id = pcc.combo_id
+        LEFT JOIN xycc_career c ON pcc.career_id = c.career_id
+        LEFT JOIN xycc_pattern_combo_env pce ON pc.pattern_combo_id = pce.combo_id
+        LEFT JOIN xycc_work_env e ON pce.env_id = e.work_env_id
+    </sql>
+
+    <select id="selectUserSelectionList" parameterType="UserSelection" resultMap="UserSelectionResult">
+        SELECT DISTINCT
+            t.user_selection_id,
+            t.user_id,
+            t.user_name,
+            t.nick_name,
+            t.pattern_combo_code,
+            t.career_titles,
+            t.env_titles,
+            t.created_at
+        FROM (
+            <include refid="selectUserSelectionVo"/>
+        ) t
+        <where>  
+            <if test="userId != null "> and t.user_id = #{userId}</if>
+            <if test="userName != null  and userName != ''"> and t.user_name like concat('%', #{userName}, '%')</if>
+            <if test="patternComboCode != null  and patternComboCode != ''"> and t.pattern_combo_code = #{patternComboCode}</if>
+            <if test="careerTitles != null and careerTitles != ''"> and EXISTS (
+                SELECT 1 FROM xycc_pattern_combo pc2
+                LEFT JOIN xycc_pattern_combo_career pcc2 ON pc2.pattern_combo_id = pcc2.combo_id
+                LEFT JOIN xycc_career c2 ON pcc2.career_id = c2.career_id
+                WHERE pc2.code = t.pattern_combo_code AND c2.title like concat('%', #{careerTitles}, '%')
+            )</if>
+            <if test="envTitles != null and envTitles != ''"> and EXISTS (
+                SELECT 1 FROM xycc_pattern_combo pc2
+                LEFT JOIN xycc_pattern_combo_env pce2 ON pc2.pattern_combo_id = pce2.combo_id
+                LEFT JOIN xycc_work_env e2 ON pce2.env_id = e2.work_env_id
+                WHERE pc2.code = t.pattern_combo_code AND e2.title like concat('%', #{envTitles}, '%')
+            )</if>
+            <if test="params.beginCreatedAt != null and params.beginCreatedAt != '' and params.endCreatedAt != null and params.endCreatedAt != ''"> and t.created_at between #{params.beginCreatedAt} and #{params.endCreatedAt}</if>
+        </where>
+    </select>
+
+    <select id="getUserSelectionByActivityIdAndUserId" parameterType="Long" resultMap="UserSelectionResult">
+        SELECT s.*
+            FROM gkzh_activity_participation_record r
+            LEFT JOIN xycc_user_selection s ON r.module_id = s.user_selection_id
+            WHERE r.activity_id = #{activityId} and r.user_id = #{userId}
+            ORDER BY s.created_at DESC LIMIT 1
+    </select>
+    <select id="selectUserSelectionByUserSelectionId" parameterType="Long" resultMap="UserSelectionResult">
+        SELECT DISTINCT
+            t.user_selection_id,
+            t.user_id,
+            t.user_name,
+            t.pattern_combo_code,
+            t.career_titles,
+            t.env_titles,
+            t.created_at
+        FROM (
+            <include refid="selectUserSelectionVo"/>
+        ) t
+        where t.user_selection_id = #{userSelectionId}
+    </select>
+
+    <insert id="insertUserSelection" parameterType="UserSelection" useGeneratedKeys="true" keyProperty="userSelectionId">
+        insert into xycc_user_selection
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="userId != null">user_id,</if>
+            <if test="gameId != null">game_id,</if>
+            <if test="patternIds != null">pattern_ids,</if>
+            <if test="patternComboCode != null">pattern_combo_code,</if>
+            <if test="createdAt != null">created_at,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="userId != null">#{userId},</if>
+            <if test="gameId != null">#{gameId},</if>
+            <if test="patternIds != null">#{patternIds},</if>
+            <if test="patternComboCode != null">#{patternComboCode},</if>
+            <if test="createdAt != null">#{createdAt},</if>
+         </trim>
+    </insert>
+
+    <update id="updateUserSelection" parameterType="UserSelection">
+        update xycc_user_selection
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="userId != null">user_id = #{userId},</if>
+            <if test="gameId != null">game_id = #{gameId},</if>
+            <if test="patternComboCode != null">pattern_combo_code = #{patternComboCode},</if>
+            <if test="createdAt != null">created_at = #{createdAt},</if>
+        </trim>
+        where user_selection_id = #{userSelectionId}
+    </update>
+
+    <delete id="deleteUserSelectionByUserSelectionId" parameterType="Long">
+        delete from xycc_user_selection where user_selection_id = #{userSelectionId}
+    </delete>
+
+    <delete id="deleteUserSelectionByUserSelectionIds" parameterType="String">
+        delete from xycc_user_selection where user_selection_id in 
+        <foreach item="userSelectionId" collection="array" open="(" separator="," close=")">
+            #{userSelectionId}
+        </foreach>
+    </delete>
+</mapper>

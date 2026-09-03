@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.lottery.mapper.GkzhMbtiProductMapper">
+    
+    <resultMap type="GkzhMbtiProduct" id="GkzhMbtiProductResult">
+        <result property="productId"    column="product_id"    />
+        <result property="productName"    column="product_name"    />
+        <result property="productImage"    column="product_image"    />
+        <result property="mbtiDimension"    column="mbti_dimension"    />
+        <result property="columnIndex"    column="column_index"    />
+        <result property="sortOrder"    column="sort_order"    />
+        <result property="status"    column="status"    />
+        <result property="remark"    column="remark"    />
+        <result property="createBy"    column="create_by"    />
+        <result property="createTime"    column="create_time"    />
+        <result property="updateBy"    column="update_by"    />
+        <result property="updateTime"    column="update_time"    />
+    </resultMap>
+
+    <sql id="selectGkzhMbtiProductVo">
+        select product_id, product_name, product_image, mbti_dimension, column_index, sort_order, status, remark, create_by, create_time, update_by, update_time from gkzh_mbti_product
+    </sql>
+
+    <select id="selectGkzhMbtiProductList" parameterType="GkzhMbtiProduct" resultMap="GkzhMbtiProductResult">
+        <include refid="selectGkzhMbtiProductVo"/>
+        <where>  
+            <if test="productName != null  and productName != ''"> and product_name like concat('%', #{productName}, '%')</if>
+            <if test="productImage != null  and productImage != ''"> and product_image = #{productImage}</if>
+            <if test="mbtiDimension != null  and mbtiDimension != ''"> and mbti_dimension = #{mbtiDimension}</if>
+            <if test="columnIndex != null "> and column_index = #{columnIndex}</if>
+            <if test="sortOrder != null "> and sort_order = #{sortOrder}</if>
+            <if test="status != null  and status != ''"> and status = #{status}</if>
+        </where>
+    </select>
+    
+    <select id="selectGkzhMbtiProductByProductId" parameterType="Long" resultMap="GkzhMbtiProductResult">
+        <include refid="selectGkzhMbtiProductVo"/>
+        where product_id = #{productId}
+    </select>
+
+    <insert id="insertGkzhMbtiProduct" parameterType="GkzhMbtiProduct" useGeneratedKeys="true" keyProperty="productId">
+        insert into gkzh_mbti_product
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="productName != null and productName != ''">product_name,</if>
+            <if test="productImage != null">product_image,</if>
+            <if test="mbtiDimension != null and mbtiDimension != ''">mbti_dimension,</if>
+            <if test="columnIndex != null">column_index,</if>
+            <if test="sortOrder != null">sort_order,</if>
+            <if test="status != null">status,</if>
+            <if test="remark != null">remark,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updateBy != null">update_by,</if>
+            <if test="updateTime != null">update_time,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="productName != null and productName != ''">#{productName},</if>
+            <if test="productImage != null">#{productImage},</if>
+            <if test="mbtiDimension != null and mbtiDimension != ''">#{mbtiDimension},</if>
+            <if test="columnIndex != null">#{columnIndex},</if>
+            <if test="sortOrder != null">#{sortOrder},</if>
+            <if test="status != null">#{status},</if>
+            <if test="remark != null">#{remark},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updateBy != null">#{updateBy},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+         </trim>
+    </insert>
+
+    <update id="updateGkzhMbtiProduct" parameterType="GkzhMbtiProduct">
+        update gkzh_mbti_product
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="productName != null and productName != ''">product_name = #{productName},</if>
+            <if test="productImage != null">product_image = #{productImage},</if>
+            <if test="mbtiDimension != null and mbtiDimension != ''">mbti_dimension = #{mbtiDimension},</if>
+            <if test="columnIndex != null">column_index = #{columnIndex},</if>
+            <if test="sortOrder != null">sort_order = #{sortOrder},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            <if test="createBy != null">create_by = #{createBy},</if>
+            <if test="createTime != null">create_time = #{createTime},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+        </trim>
+        where product_id = #{productId}
+    </update>
+
+    <delete id="deleteGkzhMbtiProductByProductId" parameterType="Long">
+        delete from gkzh_mbti_product where product_id = #{productId}
+    </delete>
+
+    <delete id="deleteGkzhMbtiProductByProductIds" parameterType="String">
+        delete from gkzh_mbti_product where product_id in 
+        <foreach item="productId" collection="array" open="(" separator="," close=")">
+            #{productId}
+        </foreach>
+    </delete>
+</mapper>

@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.wjdc.mapper.WjdcSurveyStatisticsMapper">
+    
+    <resultMap type="WjdcSurveyStatistics" id="WjdcSurveyStatisticsResult">
+        <result property="surveyId"    column="survey_id"    />
+        <result property="surveyTitle"    column="survey_title"    />
+        <result property="totalResponses"    column="total_responses"    />
+        <result property="questionId"    column="question_id"    />
+        <result property="questionTitle"    column="question_title"    />
+        <result property="questionType"    column="question_type"    />
+        <result property="optionId"    column="option_id"    />
+        <result property="optionText"    column="option_text"    />
+        <result property="selectCount"    column="select_count"    />
+        <result property="selectPercentage"    column="select_percentage"    />
+        <result property="answerText"    column="answer_text"    />
+        <result property="answerCount"    column="answer_count"    />
+        <!-- 新增字段映射 -->
+        <result property="averageScore"    column="average_score"    />
+        <result property="standardDeviation"    column="standard_deviation"    />
+    </resultMap>
+
+    <!-- 查询问卷答卷统计 -->
+    <select id="selectSurveyResponseStatistics" parameterType="Long" resultMap="WjdcSurveyStatisticsResult">
+        SELECT
+            s.id as survey_id,
+            s.title as survey_title,
+            q.id as question_id,
+            q.question_title,
+            q.question_type,
+            COALESCE(a.total_responses, 0) as total_responses
+        FROM wjdc_survey s
+                 LEFT JOIN wjdc_survey_question q ON s.id = q.survey_id
+                 LEFT JOIN (
+            -- 预先聚合答案数据
+            SELECT question_id, COUNT(DISTINCT response_id) as total_responses
+            FROM wjdc_survey_answer
+            WHERE question_id IN (
+                SELECT id FROM wjdc_survey_question WHERE survey_id = #{surveyId}
+            )
+            GROUP BY question_id
+        ) a ON q.id = a.question_id
+        WHERE s.id = #{surveyId}
+        ORDER BY q.sort_order;
+    </select>
+
+    <!-- 查询问题选项统计 -->
+    <select id="selectQuestionOptionStatistics" parameterType="Long" resultMap="WjdcSurveyStatisticsResult">
+        select q.id as question_id, q.question_title, q.question_type,
+               o.id as option_id, o.option_text,
+               count(case when a.answer_text like concat('%,', o.id, ',%') or a.answer_text like concat(o.id, ',%') or a.answer_text like concat('%,', o.id) or a.answer_text = o.id then 1 end) as select_count,
+               concat(round(count(case when a.answer_text like concat('%,', o.id, ',%') or a.answer_text like concat(o.id, ',%') or a.answer_text like concat('%,', o.id) or a.answer_text = o.id then 1 end) * 100.0 / 
+                      (select count(distinct a2.response_id) from wjdc_survey_answer a2 where a2.question_id = #{questionId}), 2), '%') as select_percentage
+        from wjdc_survey_question q
+        left join wjdc_survey_option o on q.id = o.question_id
+        left join wjdc_survey_answer a on q.id = a.question_id
+        where q.id = #{questionId}
+        group by q.id, q.question_title, q.question_type, o.id, o.option_text
+        order by o.sort_order
+    </select>
+
+    <!-- 查询填空题答案统计 -->
+    <select id="selectQuestionAnswerStatistics" parameterType="Long" resultMap="WjdcSurveyStatisticsResult">
+        select q.id as question_id, q.question_title, q.question_type,
+               a.answer_text, count(*) as answer_count
+        from wjdc_survey_question q
+        left join wjdc_survey_answer a on q.id = a.question_id
+        where q.id = #{questionId} and (q.question_type = '3' or q.question_type = '4') and a.answer_text is not null and a.answer_text != ''
+        group by q.id, q.question_title, q.question_type, a.answer_text
+        order by answer_count desc
+        limit 20
+    </select>
+    
+    <!-- 查询选项打分题统计 -->
+    <select id="selectQuestionOptionScoreStatistics" parameterType="Long" resultMap="WjdcSurveyStatisticsResult">
+        SELECT 
+            q.id AS question_id,
+            q.question_title,
+            q.question_type,
+            o.id AS option_id,
+            o.option_text,
+            AVG(CAST(JSON_UNQUOTE(JSON_EXTRACT(a.answer_text, CONCAT('$."', o.id, '"'))) AS DECIMAL(10,2))) AS average_score,
+            STDDEV_POP(CAST(JSON_UNQUOTE(JSON_EXTRACT(a.answer_text, CONCAT('$."', o.id, '"'))) AS DECIMAL(10,2))) AS standard_deviation
+        FROM wjdc_survey_question q
+        LEFT JOIN wjdc_survey_option o ON q.id = o.question_id
+        LEFT JOIN wjdc_survey_answer a ON q.id = a.question_id 
+            AND JSON_EXTRACT(a.answer_text, CONCAT('$."', o.id, '"')) IS NOT NULL
+        WHERE q.id = #{questionId}
+        GROUP BY q.id, q.question_title, q.question_type, o.id, o.option_text
+        ORDER BY o.sort_order
+    </select>
+
+    <!-- 查询所有问卷的答卷数量统计 -->
+    <select id="selectAllSurveyResponseCount" resultMap="WjdcSurveyStatisticsResult">
+        select s.id as survey_id, s.title as survey_title, count(r.response_id) as total_responses
+        from wjdc_survey s
+        left join wjdc_survey_response r on s.id = r.survey_id
+        group by s.id, s.title
+        order by total_responses desc
+    </select>
+
+    <!-- 查询指定问卷的所有问题统计 -->
+    <select id="selectSurveyQuestionStatistics" parameterType="Long" resultMap="WjdcSurveyStatisticsResult">
+        select s.id as survey_id, s.title as survey_title,
+               q.id as question_id, q.question_title, q.question_type,
+               count(distinct a.response_id) as total_responses
+        from wjdc_survey s
+        left join wjdc_survey_question q on s.id = q.survey_id
+        left join wjdc_survey_answer a on q.id = a.question_id
+        where s.id = #{surveyId}
+        group by s.id, s.title, q.id, q.question_title, q.question_type
+        order by q.sort_order
+    </select>
+</mapper>

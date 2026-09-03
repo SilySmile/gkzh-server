@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.lottery.mapper.LotteryPrizeMapper">
+    
+    <resultMap type="LotteryPrize" id="LotteryPrizeResult">
+        <result property="prizeId"    column="prize_id"    />
+        <result property="lotteryId"    column="lottery_id"    />
+        <result property="activityTitle"    column="activity_title"    />
+        <result property="title"    column="title"    />
+        <result property="imageUrl"    column="image_url"    />
+        <result property="stock"    column="stock"    />
+        <result property="weight"    column="weight"    />
+        <result property="prizeType"    column="prize_type"    />
+        <result property="isEnabled"    column="is_enabled"    />
+        <result property="sortOrder"    column="sort_order"    />
+    </resultMap>
+
+    <sql id="selectLotteryPrizeVo">
+        select p.prize_id, p.lottery_id, a.title as activity_title, p.title, p.image_url, p.stock, p.weight, p.prize_type, p.is_enabled, p.sort_order
+        from lottery_prize p
+        left join lottery a on p.lottery_id = a.lottery_id
+    </sql>
+
+    <select id="selectLotteryPrizeList" parameterType="LotteryPrize" resultMap="LotteryPrizeResult">
+        <include refid="selectLotteryPrizeVo"/>
+        <where>  
+            <if test="lotteryId != null "> and p.lottery_id = #{lotteryId}</if>
+            <if test="activityTitle != null and activityTitle != ''"> and a.title like concat('%', #{activityTitle}, '%')</if>
+            <if test="title != null  and title != ''"> and p.title like concat('%', #{title}, '%')</if>
+            <if test="imageUrl != null  and imageUrl != ''"> and p.image_url = #{imageUrl}</if>
+            <if test="stock != null "> and p.stock = #{stock}</if>
+            <if test="weight != null "> and p.weight = #{weight}</if>
+            <if test="prizeType != null "> and p.prize_type = #{prizeType}</if>
+            <if test="isEnabled != null "> and p.is_enabled = #{isEnabled}</if>
+            <if test="sortOrder != null "> and p.sort_order = #{sortOrder}</if>
+        </where>
+    </select>
+    
+    <select id="selectLotteryPrizeByPrizeId" parameterType="Long" resultMap="LotteryPrizeResult">
+        <include refid="selectLotteryPrizeVo"/>
+        where p.prize_id = #{prizeId}
+    </select>
+
+    <insert id="insertLotteryPrize" parameterType="LotteryPrize" useGeneratedKeys="true" keyProperty="prizeId">
+        insert into lottery_prize
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="lotteryId != null">lottery_id,</if>
+            <if test="title != null and title != ''">title,</if>
+            <if test="imageUrl != null">image_url,</if>
+            <if test="stock != null">stock,</if>
+            <if test="weight != null">weight,</if>
+            <if test="prizeType != null">prize_type,</if>
+            <if test="isEnabled != null">is_enabled,</if>
+            <if test="sortOrder != null">sort_order,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="lotteryId != null">#{lotteryId},</if>
+            <if test="title != null and title != ''">#{title},</if>
+            <if test="imageUrl != null">#{imageUrl},</if>
+            <if test="stock != null">#{stock},</if>
+            <if test="weight != null">#{weight},</if>
+            <if test="prizeType != null">#{prizeType},</if>
+            <if test="isEnabled != null">#{isEnabled},</if>
+            <if test="sortOrder != null">#{sortOrder},</if>
+         </trim>
+    </insert>
+
+    <update id="updateLotteryPrize" parameterType="LotteryPrize">
+        update lottery_prize
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="lotteryId != null">lottery_id = #{lotteryId},</if>
+            <if test="title != null and title != ''">title = #{title},</if>
+            <if test="imageUrl != null">image_url = #{imageUrl},</if>
+            <if test="stock != null">stock = #{stock},</if>
+            <if test="weight != null">weight = #{weight},</if>
+            <if test="prizeType != null">prize_type = #{prizeType},</if>
+            <if test="isEnabled != null">is_enabled = #{isEnabled},</if>
+            <if test="sortOrder != null">sort_order = #{sortOrder},</if>
+        </trim>
+        where prize_id = #{prizeId}
+    </update>
+
+    <delete id="deleteLotteryPrizeByPrizeId" parameterType="Long">
+        delete from lottery_prize where prize_id = #{prizeId}
+    </delete>
+
+    <delete id="deleteLotteryPrizeByPrizeIds" parameterType="String">
+        delete from lottery_prize where prize_id in 
+        <foreach item="prizeId" collection="array" open="(" separator="," close=")">
+            #{prizeId}
+        </foreach>
+    </delete>
+</mapper>

@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.school.mapper.GkzhSchoolMapper">
+    
+    <resultMap type="GkzhSchool" id="GkzhSchoolResult">
+        <result property="schoolId"    column="school_id"    />
+        <result property="title"    column="title"    />
+        <result property="orderNum"    column="order_num"    />
+        <result property="status"    column="status"    />
+        <result property="delFlag"    column="del_flag"    />
+        <result property="createBy"    column="create_by"    />
+        <result property="createTime"    column="create_time"    />
+        <result property="updateBy"    column="update_by"    />
+        <result property="updateTime"    column="update_time"    />
+        <result property="remark"    column="remark"    />
+        
+    </resultMap>
+
+    <sql id="selectGkzhSchoolVo">
+        select school_id, title, order_num, status, del_flag, create_by, create_time, update_by, update_time, remark from gkzh_school
+    </sql>
+
+    <select id="selectGkzhSchoolList" parameterType="GkzhSchool" resultMap="GkzhSchoolResult">
+        <include refid="selectGkzhSchoolVo"/>
+        <where>  
+            <if test="title != null  and title != ''"> and title like concat('%',#{title},'%') </if>
+            <if test="orderNum != null "> and order_num = #{orderNum}</if>
+            <if test="status != null  and status != ''"> and status = #{status}</if>
+            <if test="schoolId != null  and schoolId != ''"> and school_id = #{schoolId}</if>
+        </where>
+    </select>
+    
+    <select id="selectGkzhSchoolBySchoolId" parameterType="Long" resultMap="GkzhSchoolResult">
+        <include refid="selectGkzhSchoolVo"/>
+        where school_id = #{schoolId}
+    </select>
+    <select id="selectSchoolNamesByDepartmentIds"
+            parameterType="java.util.List"
+            resultType="com.gkzh.school.domain.GkzhSchool">
+        /*和gkzh_school_department表联查*/
+        select s.* from gkzh_school s
+        left join gkzh_school_department sd on s.school_id = sd.school_id
+        where sd.department_id in
+        <foreach collection="departmentIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+    <insert id="insertGkzhSchool" parameterType="GkzhSchool" useGeneratedKeys="true" keyProperty="schoolId">
+        insert into gkzh_school
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="title != null and title != ''">title,</if>
+            <if test="orderNum != null">order_num,</if>
+            <if test="status != null">status,</if>
+            <if test="delFlag != null">del_flag,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updateBy != null">update_by,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="remark != null">remark,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="title != null and title != ''">#{title},</if>
+            <if test="orderNum != null">#{orderNum},</if>
+            <if test="status != null">#{status},</if>
+            <if test="delFlag != null">#{delFlag},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updateBy != null">#{updateBy},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="remark != null">#{remark},</if>
+         </trim>
+    </insert>
+
+    <update id="updateGkzhSchool" parameterType="GkzhSchool">
+        update gkzh_school
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="title != null and title != ''">title = #{title},</if>
+            <if test="orderNum != null">order_num = #{orderNum},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="delFlag != null">del_flag = #{delFlag},</if>
+            <if test="createBy != null">create_by = #{createBy},</if>
+            <if test="createTime != null">create_time = #{createTime},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </trim>
+        where school_id = #{schoolId}
+    </update>
+
+    <delete id="deleteGkzhSchoolBySchoolId" parameterType="Long">
+        delete from gkzh_school where school_id = #{schoolId}
+    </delete>
+
+    <delete id="deleteGkzhSchoolBySchoolIds" parameterType="String">
+        delete from gkzh_school where school_id in 
+        <foreach item="schoolId" collection="array" open="(" separator="," close=")">
+            #{schoolId}
+        </foreach>
+    </delete>
+</mapper>

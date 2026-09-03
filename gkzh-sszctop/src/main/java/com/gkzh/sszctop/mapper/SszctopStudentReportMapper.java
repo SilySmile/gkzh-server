@@ -1,0 +1,1 @@
+package com.gkzh.sszctop.mapper; import com.baomidou.mybatisplus.core.mapper.BaseMapper; import com.gkzh.sszctop.domain.SszctopStudentReport; import org.apache.ibatis.annotations.Mapper; /** 学生独立报告 Mapper。 */ @Mapper public interface SszctopStudentReportMapper extends BaseMapper<SszctopStudentReport>{}

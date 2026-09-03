@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.xycc.mapper.PatternComboMapper">
+    
+    <resultMap type="PatternCombo" id="PatternComboResult">
+        <result property="patternComboId"    column="pattern_combo_id"    />
+        <result property="code"    column="code"    />
+        <result property="careerTitles"    column="career_titles"    />
+        <result property="envTitles"    column="env_titles"    />
+    </resultMap>
+
+    <resultMap type="PatternComboCareer" id="PatternComboCareerResult">
+        <result property="careerId"    column="career_id"    />
+    </resultMap>
+
+    <resultMap type="PatternComboEnv" id="PatternComboEnvResult">
+        <result property="envId"    column="env_id"    />
+    </resultMap>
+
+    <sql id="selectPatternComboVo">
+        SELECT 
+            pc.pattern_combo_id, 
+            pc.code,
+            GROUP_CONCAT(DISTINCT c.title ORDER BY pcc.id) as career_titles,
+            GROUP_CONCAT(DISTINCT e.title ORDER BY pce.id) as env_titles
+        FROM xycc_pattern_combo pc
+        LEFT JOIN xycc_pattern_combo_career pcc ON pc.pattern_combo_id = pcc.combo_id
+        LEFT JOIN xycc_career c ON pcc.career_id = c.career_id
+        LEFT JOIN xycc_pattern_combo_env pce ON pc.pattern_combo_id = pce.combo_id
+        LEFT JOIN xycc_work_env e ON pce.env_id = e.work_env_id
+    </sql>
+
+    <select id="selectPatternComboList" parameterType="PatternCombo" resultMap="PatternComboResult">
+        <include refid="selectPatternComboVo"/>
+        <where>  
+            <if test="code != null  and code != ''"> and pc.code like concat('%', #{code}, '%')</if>
+        </where>
+        GROUP BY pc.pattern_combo_id, pc.code
+    </select>
+
+    <select id="selectPatternComboByPatternComboId" parameterType="Long" resultMap="PatternComboResult">
+        <include refid="selectPatternComboVo"/>
+        where pc.pattern_combo_id = #{patternComboId}
+        GROUP BY pc.pattern_combo_id, pc.code
+    </select>
+
+    <select id="selectCareerIdsByComboId" resultType="Long">
+        select career_id
+        from xycc_pattern_combo_career
+        where combo_id = #{comboId}
+    </select>
+
+    <select id="selectEnvIdsByComboId" resultType="Long">
+        select env_id
+        from xycc_pattern_combo_env
+        where combo_id = #{comboId}
+    </select>
+
+    <insert id="insertPatternCombo" parameterType="PatternCombo" useGeneratedKeys="true" keyProperty="patternComboId">
+        insert into xycc_pattern_combo
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="code != null and code != ''">code,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="code != null and code != ''">#{code},</if>
+         </trim>
+    </insert>
+
+    <update id="updatePatternCombo" parameterType="PatternCombo">
+        update xycc_pattern_combo
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="code != null and code != ''">code = #{code},</if>
+        </trim>
+        where pattern_combo_id = #{patternComboId}
+    </update>
+
+    <delete id="deletePatternComboByPatternComboId" parameterType="Long">
+        delete from xycc_pattern_combo where pattern_combo_id = #{patternComboId}
+    </delete>
+
+    <delete id="deletePatternComboByPatternComboIds" parameterType="String">
+        delete from xycc_pattern_combo where pattern_combo_id in 
+        <foreach item="patternComboId" collection="array" open="(" separator="," close=")">
+            #{patternComboId}
+        </foreach>
+    </delete>
+    
+    <delete id="deletePatternComboCareerByComboIds" parameterType="String">
+        delete from xycc_pattern_combo_career where combo_id in 
+        <foreach item="comboId" collection="array" open="(" separator="," close=")">
+            #{comboId}
+        </foreach>
+    </delete>
+
+    <delete id="deletePatternComboCareerByComboId" parameterType="Long">
+        delete from xycc_pattern_combo_career where combo_id = #{comboId}
+    </delete>
+
+    <insert id="batchPatternComboCareer">
+        insert into xycc_pattern_combo_career(combo_id, career_id) values
+        <foreach item="item" index="index" collection="list" separator=",">
+            (#{item.comboId}, #{item.careerId})
+        </foreach>
+    </insert>
+
+    <insert id="batchPatternComboEnv">
+        insert into xycc_pattern_combo_env(combo_id, env_id) values
+        <foreach item="item" index="index" collection="list" separator=",">
+            (#{item.comboId}, #{item.envId})
+        </foreach>
+    </insert>
+
+    <delete id="deletePatternComboEnvByComboId" parameterType="Long">
+        delete from xycc_pattern_combo_env where combo_id = #{comboId}
+    </delete>
+
+    <delete id="deletePatternComboEnvByComboIds" parameterType="String">
+        delete from xycc_pattern_combo_env where combo_id in 
+        <foreach item="comboId" collection="array" open="(" separator="," close=")">
+            #{comboId}
+        </foreach>
+    </delete>
+
+    <select id="selectCareersByCodeGroup" parameterType="String">
+        SELECT c.career_id, c.title
+        FROM xycc_pattern_combo pc
+                 LEFT JOIN xycc_pattern_combo_career pcc ON pc.pattern_combo_id = pcc.combo_id
+                 LEFT JOIN xycc_career c ON pcc.career_id = c.career_id
+        WHERE pc.code = #{code}
+    </select>
+    <select id="selectWorkEnvsByCodeGroup" parameterType="String">
+        SELECT e.work_env_id, e.title
+        FROM xycc_pattern_combo pc
+                 LEFT JOIN xycc_pattern_combo_env pce ON pc.pattern_combo_id = pce.combo_id
+                 LEFT JOIN xycc_work_env e ON pce.env_id = e.work_env_id
+        WHERE pc.code =  #{code}
+    </select>
+</mapper>

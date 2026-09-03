@@ -1,0 +1,1 @@
+package com.gkzh.sszctop.mapper; import com.baomidou.mybatisplus.core.mapper.BaseMapper; import com.gkzh.sszctop.domain.SszctopCareer; import org.apache.ibatis.annotations.Mapper; /** 职业配置表 Mapper。 */ @Mapper public interface SszctopCareerMapper extends BaseMapper<SszctopCareer>{}

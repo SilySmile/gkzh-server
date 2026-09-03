@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.school.mapper.GkzhStudentCheckinMapper">
+    
+    <resultMap type="GkzhStudentCheckin" id="GkzhStudentCheckinResult">
+        <result property="checkinId"       column="checkin_id"       />
+        <result property="studentId"       column="student_id"       />
+        <result property="schoolId"        column="school_id"        />
+        <result property="departmentId"    column="department_id"    />
+        <result property="studentNo"       column="student_no"       />
+        <result property="studentName"     column="student_name"     />
+        <result property="checkinTime"     column="checkin_time"     />
+        <result property="checkinIp"       column="checkin_ip"       />
+        <result property="checkinLocation" column="checkin_location" />
+        <result property="checkinDevice"   column="checkin_device"   />
+        <result property="status"          column="status"           />
+        <result property="delFlag"         column="del_flag"         />
+        <result property="createBy"        column="create_by"        />
+        <result property="createTime"      column="create_time"      />
+        <result property="updateBy"        column="update_by"        />
+        <result property="updateTime"      column="update_time"      />
+        <result property="remark"          column="remark"           />
+        <result property="schoolName"      column="school_name"      />
+        <result property="departmentName"  column="department_name"  />
+    </resultMap>
+
+    <sql id="selectGkzhStudentCheckinVo">
+        select c.checkin_id, c.student_id, c.school_id, c.department_id, c.student_no, c.student_name, c.checkin_time, c.checkin_ip, c.checkin_location, c.checkin_device, c.status, c.del_flag, c.create_by, c.create_time, c.update_by, c.update_time, c.remark,
+               sch.title as school_name, d.title as department_name
+        from gkzh_student_checkin c
+        left join gkzh_school sch on c.school_id = sch.school_id
+        left join gkzh_school_departments d on c.department_id = d.department_id
+    </sql>
+
+    <select id="selectGkzhStudentCheckinList" parameterType="GkzhStudentCheckin" resultMap="GkzhStudentCheckinResult">
+        <include refid="selectGkzhStudentCheckinVo"/>
+        <where>  
+            <if test="studentId != null "> and c.student_id = #{studentId}</if>
+            <if test="schoolId != null "> and c.school_id = #{schoolId}</if>
+            <if test="departmentId != null "> and c.department_id = #{departmentId}</if>
+            <if test="studentNo != null  and studentNo != ''"> and c.student_no like concat('%', #{studentNo}, '%')</if>
+            <if test="studentName != null  and studentName != ''"> and c.student_name like concat('%', #{studentName}, '%')</if>
+            <if test="checkinTime != null "> and date_format(c.checkin_time,'%y-%m-%d') = date_format(#{checkinTime},'%y-%m-%d')</if>
+            <if test="status != null  and status != ''"> and c.status = #{status}</if>
+            and c.del_flag = '0'
+        </where>
+        order by c.checkin_time desc
+    </select>
+    
+    <select id="selectGkzhStudentCheckinByCheckinId" parameterType="Long" resultMap="GkzhStudentCheckinResult">
+        <include refid="selectGkzhStudentCheckinVo"/>
+        where c.checkin_id = #{checkinId} and c.del_flag = '0'
+    </select>
+
+    <select id="selectTodayCheckinCount" parameterType="Long" resultType="Integer">
+        select count(1) from gkzh_student_checkin 
+        where student_id = #{studentId} 
+          and date_format(checkin_time,'%y-%m-%d') = date_format(now(),'%y-%m-%d')
+          and del_flag = '0'
+    </select>
+        
+    <insert id="insertGkzhStudentCheckin" parameterType="GkzhStudentCheckin" useGeneratedKeys="true" keyProperty="checkinId">
+        insert into gkzh_student_checkin
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="studentId != null">student_id,</if>
+            <if test="schoolId != null">school_id,</if>
+            <if test="departmentId != null">department_id,</if>
+            <if test="studentNo != null and studentNo != ''">student_no,</if>
+            <if test="studentName != null and studentName != ''">student_name,</if>
+            <if test="checkinTime != null">checkin_time,</if>
+            <if test="checkinIp != null">checkin_ip,</if>
+            <if test="checkinLocation != null">checkin_location,</if>
+            <if test="checkinDevice != null">checkin_device,</if>
+            <if test="status != null">status,</if>
+            <if test="delFlag != null">del_flag,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updateBy != null">update_by,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="remark != null">remark,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="studentId != null">#{studentId},</if>
+            <if test="schoolId != null">#{schoolId},</if>
+            <if test="departmentId != null">#{departmentId},</if>
+            <if test="studentNo != null and studentNo != ''">#{studentNo},</if>
+            <if test="studentName != null and studentName != ''">#{studentName},</if>
+            <if test="checkinTime != null">#{checkinTime},</if>
+            <if test="checkinIp != null">#{checkinIp},</if>
+            <if test="checkinLocation != null">#{checkinLocation},</if>
+            <if test="checkinDevice != null">#{checkinDevice},</if>
+            <if test="status != null">#{status},</if>
+            <if test="delFlag != null">#{delFlag},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updateBy != null">#{updateBy},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="remark != null">#{remark},</if>
+         </trim>
+    </insert>
+
+    <update id="updateGkzhStudentCheckin" parameterType="GkzhStudentCheckin">
+        update gkzh_student_checkin
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="studentId != null">student_id = #{studentId},</if>
+            <if test="schoolId != null">school_id = #{schoolId},</if>
+            <if test="departmentId != null">department_id = #{departmentId},</if>
+            <if test="studentNo != null and studentNo != ''">student_no = #{studentNo},</if>
+            <if test="studentName != null and studentName != ''">student_name = #{studentName},</if>
+            <if test="checkinTime != null">checkin_time = #{checkinTime},</if>
+            <if test="checkinIp != null">checkin_ip = #{checkinIp},</if>
+            <if test="checkinLocation != null">checkin_location = #{checkinLocation},</if>
+            <if test="checkinDevice != null">checkin_device = #{checkinDevice},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="delFlag != null">del_flag = #{delFlag},</if>
+            <if test="createBy != null">create_by = #{createBy},</if>
+            <if test="createTime != null">create_time = #{createTime},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </trim>
+        where checkin_id = #{checkinId}
+    </update>
+
+    <delete id="deleteGkzhStudentCheckinByCheckinId" parameterType="Long">
+        delete from gkzh_student_checkin where checkin_id = #{checkinId}
+    </delete>
+
+    <delete id="deleteGkzhStudentCheckinByCheckinIds" parameterType="String">
+        delete from gkzh_student_checkin where checkin_id in 
+        <foreach item="checkinId" collection="array" open="(" separator="," close=")">
+            #{checkinId}
+        </foreach>
+    </delete>
+</mapper> 

@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.lottery.mapper.LotteryTaskMapper">
+    
+    <resultMap type="LotteryTask" id="LotteryTaskResult">
+        <result property="taskId"    column="task_id"    />
+        <result property="activityId"    column="activity_id"    />
+        <result property="activityTitle"    column="activity_title"    />
+        <result property="stepOrder"    column="step_order"    />
+        <result property="taskKey"    column="task_key"    />
+        <result property="title"    column="title"    />
+        <result property="description"    column="description"    />
+        <result property="isRequired"    column="is_required"    />
+    </resultMap>
+
+    <sql id="selectLotteryTaskVo">
+        select t.task_id, t.activity_id, a.title as activity_title, t.step_order, t.task_key, t.title, t.description, t.is_required 
+        from lottery_task t
+        left join lottery_activity a on t.activity_id = a.activity_id
+    </sql>
+
+    <select id="selectLotteryTaskList" parameterType="LotteryTask" resultMap="LotteryTaskResult">
+        <include refid="selectLotteryTaskVo"/>
+        <where>  
+            <if test="title != null and title != ''">and t.title like concat('%', #{title}, '%')</if>
+            <if test="activityTitle != null and activityTitle != ''">and a.title like concat('%', #{activityTitle}, '%')</if>
+        </where>
+        order by t.activity_id, t.step_order
+    </select>
+    
+    <select id="selectLotteryTaskByTaskId" parameterType="Long" resultMap="LotteryTaskResult">
+        <include refid="selectLotteryTaskVo"/>
+        where t.task_id = #{taskId}
+    </select>
+
+    <insert id="insertLotteryTask" parameterType="LotteryTask" useGeneratedKeys="true" keyProperty="taskId">
+        insert into lottery_task
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="activityId != null">activity_id,</if>
+            <if test="stepOrder != null">step_order,</if>
+            <if test="taskKey != null">task_key,</if>
+            <if test="title != null">title,</if>
+            <if test="description != null">description,</if>
+            <if test="isRequired != null">is_required,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="activityId != null">#{activityId},</if>
+            <if test="stepOrder != null">#{stepOrder},</if>
+            <if test="taskKey != null">#{taskKey},</if>
+            <if test="title != null">#{title},</if>
+            <if test="description != null">#{description},</if>
+            <if test="isRequired != null">#{isRequired},</if>
+         </trim>
+    </insert>
+
+    <update id="updateLotteryTask" parameterType="LotteryTask">
+        update lottery_task
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="activityId != null">activity_id = #{activityId},</if>
+            <if test="stepOrder != null">step_order = #{stepOrder},</if>
+            <if test="taskKey != null">task_key = #{taskKey},</if>
+            <if test="title != null">title = #{title},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="isRequired != null">is_required = #{isRequired},</if>
+        </trim>
+        where task_id = #{taskId}
+    </update>
+
+    <delete id="deleteLotteryTaskByTaskId" parameterType="Long">
+        delete from lottery_task where task_id = #{taskId}
+    </delete>
+
+    <delete id="deleteLotteryTaskByTaskIds" parameterType="String">
+        delete from lottery_task where task_id in 
+        <foreach item="taskId" collection="array" open="(" separator="," close=")">
+            #{taskId}
+        </foreach>
+    </delete>
+</mapper>

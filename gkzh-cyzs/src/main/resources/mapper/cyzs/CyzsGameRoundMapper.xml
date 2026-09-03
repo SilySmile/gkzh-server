@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.cyzs.mapper.CyzsGameRoundMapper">
+
+    <resultMap type="CyzsGameRound" id="CyzsGameRoundResult">
+        <result property="id"    column="id"    />
+        <result property="userId"    column="user_id"    />
+        <result property="isSuccess"    column="is_success"    />
+        <result property="startTime"    column="start_time"    />
+        <result property="endTime"    column="end_time"    />
+        <result property="createTime"    column="create_time"    />
+        <result property="username"    column="username"    />
+        <result property="nickname"    column="nickname"    />
+    </resultMap>
+
+    <sql id="selectCyzsGameRoundVo">
+        SELECT
+            r.id,
+            r.user_id,
+            r.is_success,
+            r.start_time,
+            r.end_time,
+            r.create_time,
+            u.user_name as username,
+            u.nick_name as nickname
+        FROM cyzs_game_round r
+        LEFT JOIN sys_user u on u.user_id = r.user_id
+    </sql>
+
+    <select id="selectCyzsGameRoundList" parameterType="CyzsGameRound" resultMap="CyzsGameRoundResult">
+        <include refid="selectCyzsGameRoundVo"/>
+        <where>
+            <if test="userId != null "> and r.user_id = #{userId}</if>
+            <if test="isSuccess != null "> and r.is_success = #{isSuccess}</if>
+            <if test="username != null  and username != ''"> and u.user_name like concat('%', #{username}, '%')</if>
+            <if test="nickname != null  and nickname != ''"> and u.nick_name like concat('%', #{nickname}, '%')</if>
+        </where>
+        order by r.create_time desc
+    </select>
+
+</mapper>

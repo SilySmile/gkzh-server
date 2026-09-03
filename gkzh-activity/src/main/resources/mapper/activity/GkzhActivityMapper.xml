@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.activity.mapper.GkzhActivityMapper">
+    
+    <resultMap type="GkzhActivity" id="GkzhActivityResult">
+        <result property="activityId"    column="activity_id"    />
+        <result property="title"    column="title"    />
+        <result property="description"    column="description"    />
+        <result property="startTime"    column="start_time"    />
+        <result property="endTime"    column="end_time"    />
+        <result property="status"    column="status"    />
+        <result property="activityType"    column="activity_type"    />
+        <result property="location"    column="location"    />
+        <result property="organizer"    column="organizer"    />
+        <result property="coOrganizer"    column="co_organizer"    />
+        <result property="contactPerson"    column="contact_person"    />
+        <result property="contactPhone"    column="contact_phone"    />
+        <result property="qrCode"    column="qr_code"    />
+        <result property="poster"    column="poster"    />
+        <result property="moduleConfig"    column="module_config"    />
+        <result property="participantConfig"    column="participant_config"    />
+        <result property="createBy"    column="create_by"    />
+        <result property="createTime"    column="create_time"    />
+        <result property="updateBy"    column="update_by"    />
+        <result property="updateTime"    column="update_time"    />
+        <result property="remark"    column="remark"    />
+    </resultMap>
+
+    <sql id="selectGkzhActivityVo">
+        select activity_id, title, description, start_time, end_time, status, activity_type, location, organizer, co_organizer, contact_person, contact_phone, qr_code, poster, module_config, participant_config, create_by, create_time, update_by, update_time, remark from gkzh_activity
+    </sql>
+
+    <select id="selectGkzhActivityList" parameterType="GkzhActivity" resultMap="GkzhActivityResult">
+        <include refid="selectGkzhActivityVo"/>
+        <where>  
+            <if test="title != null  and title != ''"> and title like concat('%', #{title}, '%')</if>
+            <if test="description != null  and description != ''"> and description = #{description}</if>
+            <if test="startTime != null "> and start_time = #{startTime}</if>
+            <if test="endTime != null "> and end_time = #{endTime}</if>
+            <if test="status != null "> and status = #{status}</if>
+            <if test="activityType != null "> and activity_type = #{activityType}</if>
+            <if test="location != null  and location != ''"> and location = #{location}</if>
+            <if test="organizer != null  and organizer != ''"> and organizer = #{organizer}</if>
+            <if test="coOrganizer != null  and coOrganizer != ''"> and co_organizer = #{coOrganizer}</if>
+            <if test="contactPerson != null  and contactPerson != ''"> and contact_person = #{contactPerson}</if>
+            <if test="contactPhone != null  and contactPhone != ''"> and contact_phone = #{contactPhone}</if>
+            <if test="qrCode != null  and qrCode != ''"> and qr_code = #{qrCode}</if>
+            <if test="poster != null  and poster != ''"> and poster = #{poster}</if>
+            <if test="moduleConfig != null  and moduleConfig != ''"> and module_config = #{moduleConfig}</if>
+            <if test="participantConfig != null  and participantConfig != ''"> and participant_config = #{participantConfig}</if>
+        </where>
+    </select>
+    
+    <select id="selectGkzhActivityByActivityId" parameterType="Long" resultMap="GkzhActivityResult">
+        <include refid="selectGkzhActivityVo"/>
+        where activity_id = #{activityId}
+    </select>
+
+    <insert id="insertGkzhActivity" parameterType="GkzhActivity" useGeneratedKeys="true" keyProperty="activityId">
+        insert into gkzh_activity
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="title != null and title != ''">title,</if>
+            <if test="description != null">description,</if>
+            <if test="startTime != null">start_time,</if>
+            <if test="endTime != null">end_time,</if>
+            <if test="status != null">status,</if>
+            <if test="activityType != null">activity_type,</if>
+            <if test="location != null">location,</if>
+            <if test="organizer != null">organizer,</if>
+            <if test="coOrganizer != null">co_organizer,</if>
+            <if test="contactPerson != null">contact_person,</if>
+            <if test="contactPhone != null">contact_phone,</if>
+            <if test="qrCode != null">qr_code,</if>
+            <if test="poster != null">poster,</if>
+            <if test="moduleConfig != null">module_config,</if>
+            <if test="participantConfig != null">participant_config,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updateBy != null">update_by,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="remark != null">remark,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="title != null and title != ''">#{title},</if>
+            <if test="description != null">#{description},</if>
+            <if test="startTime != null">#{startTime},</if>
+            <if test="endTime != null">#{endTime},</if>
+            <if test="status != null">#{status},</if>
+            <if test="activityType != null">#{activityType},</if>
+            <if test="location != null">#{location},</if>
+            <if test="organizer != null">#{organizer},</if>
+            <if test="coOrganizer != null">#{coOrganizer},</if>
+            <if test="contactPerson != null">#{contactPerson},</if>
+            <if test="contactPhone != null">#{contactPhone},</if>
+            <if test="qrCode != null">#{qrCode},</if>
+            <if test="poster != null">#{poster},</if>
+            <if test="moduleConfig != null">#{moduleConfig},</if>
+            <if test="participantConfig != null">#{participantConfig},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updateBy != null">#{updateBy},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="remark != null">#{remark},</if>
+         </trim>
+    </insert>
+
+    <update id="updateGkzhActivity" parameterType="GkzhActivity">
+        update gkzh_activity
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="title != null and title != ''">title = #{title},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="startTime != null">start_time = #{startTime},</if>
+            <if test="endTime != null">end_time = #{endTime},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="activityType != null">activity_type = #{activityType},</if>
+            <if test="location != null">location = #{location},</if>
+            <if test="organizer != null">organizer = #{organizer},</if>
+            <if test="coOrganizer != null">co_organizer = #{coOrganizer},</if>
+            <if test="contactPerson != null">contact_person = #{contactPerson},</if>
+            <if test="contactPhone != null">contact_phone = #{contactPhone},</if>
+            <if test="qrCode != null">qr_code = #{qrCode},</if>
+            <if test="poster != null">poster = #{poster},</if>
+            <if test="moduleConfig != null">module_config = #{moduleConfig},</if>
+            <if test="participantConfig != null">participant_config = #{participantConfig},</if>
+            <if test="createBy != null">create_by = #{createBy},</if>
+            <if test="createTime != null">create_time = #{createTime},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </trim>
+        where activity_id = #{activityId}
+    </update>
+
+    <delete id="deleteGkzhActivityByActivityId" parameterType="Long">
+        delete from gkzh_activity where activity_id = #{activityId}
+    </delete>
+
+    <delete id="deleteGkzhActivityByActivityIds" parameterType="String">
+        delete from gkzh_activity where activity_id in 
+        <foreach item="activityId" collection="array" open="(" separator="," close=")">
+            #{activityId}
+        </foreach>
+    </delete>
+</mapper>

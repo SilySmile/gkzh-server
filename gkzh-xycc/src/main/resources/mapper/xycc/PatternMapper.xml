@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.xycc.mapper.PatternMapper">
+    
+    <resultMap type="Pattern" id="PatternResult">
+        <result property="patternId"    column="pattern_id"    />
+        <result property="rowIndex"    column="row_index"    />
+        <result property="rowCode"    column="row_code"    />
+        <result property="colIndex"    column="col_index"    />
+        <result property="description"    column="description"    />
+        <result property="imgUrl"    column="img_url"    />
+        <result property="materialUrl" column="material_url" />
+    </resultMap>
+
+    <sql id="selectPatternVo">
+        select pattern_id, row_index, row_code, col_index, description, img_url, material_url from xycc_pattern
+    </sql>
+
+    <select id="selectPatternList" parameterType="Pattern" resultMap="PatternResult">
+        <include refid="selectPatternVo"/>
+        <where>  
+            <if test="rowIndex != null "> and row_index = #{rowIndex}</if>
+            <if test="rowCode != null  and rowCode != ''"> and row_code = #{rowCode}</if>
+            <if test="colIndex != null "> and col_index = #{colIndex}</if>
+            <if test="description != null  and description != ''"> and description = #{description}</if>
+            <if test="imgUrl != null  and imgUrl != ''"> and img_url = #{imgUrl}</if>
+            <if test="materialUrl != null  and materialUrl != ''"> and material_url = #{materialUrl}</if>
+        </where>
+    </select>
+    
+    <select id="selectPatternByPatternId" parameterType="Long" resultMap="PatternResult">
+        <include refid="selectPatternVo"/>
+        where pattern_id = #{patternId}
+    </select>
+
+    <insert id="insertPattern" parameterType="Pattern" useGeneratedKeys="true" keyProperty="patternId">
+        insert into xycc_pattern
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="rowIndex != null">row_index,</if>
+            <if test="rowCode != null">row_code,</if>
+            <if test="colIndex != null">col_index,</if>
+            <if test="description != null">description,</if>
+            <if test="imgUrl != null">img_url,</if>
+            <if test="materialUrl != null">material_url,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="rowIndex != null">#{rowIndex},</if>
+            <if test="rowCode != null">#{rowCode},</if>
+            <if test="colIndex != null">#{colIndex},</if>
+            <if test="description != null">#{description},</if>
+            <if test="imgUrl != null">#{imgUrl},</if>
+            <if test="materialUrl != null">#{materialUrl},</if>
+         </trim>
+    </insert>
+
+    <update id="updatePattern" parameterType="Pattern">
+        update xycc_pattern
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="rowIndex != null">row_index = #{rowIndex},</if>
+            <if test="rowCode != null">row_code = #{rowCode},</if>
+            <if test="colIndex != null">col_index = #{colIndex},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="imgUrl != null">img_url = #{imgUrl},</if>
+            <if test="materialUrl != null">material_url = #{materialUrl},</if>
+        </trim>
+        where pattern_id = #{patternId}
+    </update>
+
+    <delete id="deletePatternByPatternId" parameterType="Long">
+        delete from xycc_pattern where pattern_id = #{patternId}
+    </delete>
+
+    <delete id="deletePatternByPatternIds" parameterType="String">
+        delete from xycc_pattern where pattern_id in 
+        <foreach item="patternId" collection="array" open="(" separator="," close=")">
+            #{patternId}
+        </foreach>
+    </delete>
+</mapper>

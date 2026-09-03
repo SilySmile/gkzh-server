@@ -1,0 +1,8 @@
+package com.gkzh.app.websocket;
+import org.springframework.beans.factory.annotation.Autowired; import org.springframework.context.annotation.Configuration; import org.springframework.http.server.ServerHttpRequest; import org.springframework.http.server.ServerHttpResponse; import org.springframework.web.socket.WebSocketHandler; import org.springframework.web.socket.config.annotation.*; import org.springframework.web.socket.server.HandshakeInterceptor; import java.net.URI; import java.util.*;
+@Configuration @EnableWebSocket public class GameRoomWebSocketConfig implements WebSocketConfigurer {
+ // 使用一次性短票据握手，避免把学生登录令牌放入 WebSocket URL。
+ @Autowired private GameRoomSocketHandler handler;
+ @Override public void registerWebSocketHandlers(WebSocketHandlerRegistry r){r.addHandler(handler,"/ws/games/{gameType}/{gameId}/rooms/{roomCode}").addInterceptors(new TicketInterceptor(handler)).setAllowedOriginPatterns("*");}
+ static class TicketInterceptor implements HandshakeInterceptor {private final GameRoomSocketHandler h;TicketInterceptor(GameRoomSocketHandler h){this.h=h;}public boolean beforeHandshake(ServerHttpRequest req,ServerHttpResponse res,WebSocketHandler wh,Map<String,Object>a){String q=req.getURI().getQuery();String ticket=null;if(q!=null)for(String p:q.split("&")){String[] kv=p.split("=",2);if(kv.length==2&&"ticket".equals(kv[0]))ticket=kv[1];}GameRoomSocketHandler.Ticket t=ticket==null?null:h.consume(ticket);if(t==null)return false;String[] c=t.channel.split("/",3);String expected=c.length==3?"/ws/games/"+c[0]+"/"+c[1]+"/rooms/"+c[2]:"";if(!expected.equals(req.getURI().getPath()))return false;a.put("ticket",t);return true;}public void afterHandshake(ServerHttpRequest req,ServerHttpResponse res,WebSocketHandler wh,Exception ex){}}
+}

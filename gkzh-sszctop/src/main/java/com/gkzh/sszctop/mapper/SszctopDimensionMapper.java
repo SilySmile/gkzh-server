@@ -1,0 +1,1 @@
+package com.gkzh.sszctop.mapper; import com.baomidou.mybatisplus.core.mapper.BaseMapper; import com.gkzh.sszctop.domain.SszctopDimension; import org.apache.ibatis.annotations.Mapper; /** 维度配置表 Mapper。 */ @Mapper public interface SszctopDimensionMapper extends BaseMapper<SszctopDimension>{}

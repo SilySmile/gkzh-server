@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.wjdc.mapper.WjdcSurveyAnswerMapper">
+    
+    <resultMap type="WjdcSurveyAnswer" id="WjdcSurveyAnswerResult">
+        <result property="answerId"    column="answer_id"    />
+        <result property="responseId"    column="response_id"    />
+        <result property="questionId"    column="question_id"    />
+        <result property="answerText"    column="answer_text"    />
+        <result property="questionTitle"    column="question_title"    />
+        <result property="questionType"    column="question_type"    />
+        <result property="optionText"    column="option_text"    />
+    </resultMap>
+
+    <sql id="selectWjdcSurveyAnswerVo">
+        select a.answer_id, a.response_id, a.question_id, a.answer_text,
+               q.question_title, q.question_type,
+               o.option_text
+        from wjdc_survey_answer a
+                 left join wjdc_survey_question q on a.question_id = q.id
+                 left join wjdc_survey_option o on (
+                -- 匹配单选/多选题的选项ID
+                (a.answer_text like concat('%,', o.id, ',%') or a.answer_text like concat(o.id, ',%') or a.answer_text like concat('%,', o.id) or a.answer_text = o.id)
+                -- 或者匹配打分题的 JSON 中的 optionId
+                or JSON_CONTAINS(a.answer_text, CONCAT('{"optionId":', o.id, '}'))
+            )
+    </sql>
+
+    <select id="selectWjdcSurveyAnswerList" parameterType="WjdcSurveyAnswer" resultMap="WjdcSurveyAnswerResult">
+        <include refid="selectWjdcSurveyAnswerVo"/>
+        <where>  
+            <if test="responseId != null "> and a.response_id = #{responseId}</if>
+            <if test="questionId != null "> and a.question_id = #{questionId}</if>
+            <if test="answerText != null  and answerText != ''"> and a.answer_text = #{answerText}</if>
+        </where>
+        order by q.sort_order, o.sort_order
+    </select>
+    
+    <select id="selectWjdcSurveyAnswerByAnswerId" parameterType="Long" resultMap="WjdcSurveyAnswerResult">
+        <include refid="selectWjdcSurveyAnswerVo"/>
+        where a.answer_id = #{answerId}
+    </select>
+
+    <select id="selectWjdcSurveyAnswerByResponseId" parameterType="Long" resultMap="WjdcSurveyAnswerResult">
+        <include refid="selectWjdcSurveyAnswerVo"/>
+        where a.response_id = #{responseId}
+        order by q.sort_order, o.sort_order
+    </select>
+        
+    <insert id="insertWjdcSurveyAnswer" parameterType="WjdcSurveyAnswer" useGeneratedKeys="true" keyProperty="answerId">
+        insert into wjdc_survey_answer
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="responseId != null">response_id,</if>
+            <if test="questionId != null">question_id,</if>
+            <if test="answerText != null and answerText != ''">answer_text,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="responseId != null">#{responseId},</if>
+            <if test="questionId != null">#{questionId},</if>
+            <if test="answerText != null and answerText != ''">#{answerText},</if>
+         </trim>
+    </insert>
+
+    <update id="updateWjdcSurveyAnswer" parameterType="WjdcSurveyAnswer">
+        update wjdc_survey_answer
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="responseId != null">response_id = #{responseId},</if>
+            <if test="questionId != null">question_id = #{questionId},</if>
+            <if test="answerText != null and answerText != ''">answer_text = #{answerText},</if>
+        </trim>
+        where answer_id = #{answerId}
+    </update>
+
+    <delete id="deleteWjdcSurveyAnswerByAnswerId" parameterType="Long">
+        delete from wjdc_survey_answer where answer_id = #{answerId}
+    </delete>
+
+    <delete id="deleteWjdcSurveyAnswerByAnswerIds" parameterType="String">
+        delete from wjdc_survey_answer where answer_id in 
+        <foreach item="answerId" collection="array" open="(" separator="," close=")">
+            #{answerId}
+        </foreach>
+    </delete>
+
+    <delete id="deleteWjdcSurveyAnswerByResponseId" parameterType="Long">
+        delete from wjdc_survey_answer where response_id = #{responseId}
+    </delete>
+</mapper> 

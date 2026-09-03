@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.wjdc.mapper.WjdcSurveyOptionMapper">
+    
+    <resultMap type="WjdcSurveyOption" id="WjdcSurveyOptionResult">
+        <result property="id"    column="id"    />
+        <result property="questionId"    column="question_id"    />
+        <result property="optionText"    column="option_text"    />
+        <result property="sortOrder"    column="sort_order"    />
+    </resultMap>
+
+    <sql id="selectWjdcSurveyOptionVo">
+        select id, question_id, option_text, sort_order from wjdc_survey_option
+    </sql>
+
+    <select id="selectWjdcSurveyOptionList" parameterType="WjdcSurveyOption" resultMap="WjdcSurveyOptionResult">
+        <include refid="selectWjdcSurveyOptionVo"/>
+        <where>  
+            <if test="questionId != null "> and question_id = #{questionId}</if>
+            <if test="optionText != null  and optionText != ''"> and option_text like concat('%', #{optionText}, '%')</if>
+        </where>
+        order by sort_order asc
+    </select>
+    
+    <select id="selectWjdcSurveyOptionById" parameterType="Integer" resultMap="WjdcSurveyOptionResult">
+        <include refid="selectWjdcSurveyOptionVo"/>
+        where id = #{id}
+    </select>
+
+    <select id="selectWjdcSurveyOptionByQuestionId" parameterType="Integer" resultMap="WjdcSurveyOptionResult">
+        <include refid="selectWjdcSurveyOptionVo"/>
+        where question_id = #{questionId}
+        order by sort_order asc
+    </select>
+
+    <insert id="insertWjdcSurveyOption" parameterType="WjdcSurveyOption" useGeneratedKeys="true" keyProperty="id">
+        insert into wjdc_survey_option
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="questionId != null">question_id,</if>
+            <if test="optionText != null and optionText != ''">option_text,</if>
+            <if test="sortOrder != null">sort_order,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="questionId != null">#{questionId},</if>
+            <if test="optionText != null and optionText != ''">#{optionText},</if>
+            <if test="sortOrder != null">#{sortOrder},</if>
+         </trim>
+    </insert>
+
+    <update id="updateWjdcSurveyOption" parameterType="WjdcSurveyOption">
+        update wjdc_survey_option
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="questionId != null">question_id = #{questionId},</if>
+            <if test="optionText != null and optionText != ''">option_text = #{optionText},</if>
+            <if test="sortOrder != null">sort_order = #{sortOrder},</if>
+        </trim>
+        where id = #{id}
+    </update>
+
+    <delete id="deleteWjdcSurveyOptionById" parameterType="Integer">
+        delete from wjdc_survey_option where id = #{id}
+    </delete>
+
+    <delete id="deleteWjdcSurveyOptionByIds" parameterType="String">
+        delete from wjdc_survey_option where id in 
+        <foreach item="id" collection="array" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+    <delete id="deleteWjdcSurveyOptionByQuestionId" parameterType="Integer">
+        delete from wjdc_survey_option where question_id = #{questionId}
+    </delete>
+</mapper> 

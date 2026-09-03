@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <artifactId>gkzh</artifactId>
+        <groupId>com.gkzh</groupId>
+        <version>3.9.0</version>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+
+    <artifactId>gkzh-qdqt</artifactId>
+
+    <description>
+        签到签退模块
+    </description>
+
+    <dependencies>
+        <!-- 通用工具-->
+        <dependency>
+            <groupId>com.gkzh</groupId>
+            <artifactId>gkzh-common</artifactId>
+        </dependency>
+
+        <!-- 学校 -->
+        <dependency>
+            <groupId>com.gkzh</groupId>
+            <artifactId>gkzh-school</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.gkzh</groupId>
+            <artifactId>gkzh-activity</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+
+</project>

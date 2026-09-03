@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.lottery.mapper.LotteryRecordMapper">
+    
+    <resultMap type="LotteryRecord" id="LotteryRecordResult">
+        <result property="recordId"    column="record_id"    />
+        <result property="userId"    column="user_id"    />
+        <result property="userName"    column="user_name"    />
+        <result property="nickName"    column="nick_name"    />
+        <result property="lotteryId"    column="lottery_id"    />
+        <result property="activityId"    column="activity_id"    />
+        <result property="bizType"    column="biz_type"    />
+        <result property="activityTitle"    column="activity_title"    />
+        <result property="prizeId"    column="prize_id"    />
+        <result property="prizeTitle"    column="prize_title"    />
+        <result property="resultName"    column="result_name"    />
+        <result property="createTime"    column="create_time"    />
+        <result property="redemptionStatus" column="redemption_status" />
+        <result property="redeemTime" column="redeem_time" />
+        <result property="redemptionStaffName" column="redemption_staff_name" />
+        <result property="redemptionStaffAccount" column="redemption_staff_account" />
+        <result property="redemptionOperatorType" column="redemption_operator_type" />
+        <result property="redemptionCode" column="redemption_code" />
+    </resultMap>
+
+    <sql id="selectLotteryRecordVo">
+        select r.record_id, r.user_id, u.user_name, u.nick_name, r.lottery_id, r.biz_type, a.title as activity_title,
+               r.prize_id, p.title as prize_title, r.result_name,r.create_time, r.redemption_code, r.activity_id,
+               coalesce(pr.status, '0') as redemption_status, pr.redeem_time,
+               case when pr.staff_id is not null then coalesce(ss.staff_name, ss.user_name, concat('工作人员#', pr.staff_id))
+                    when pr.admin_user_id is not null then coalesce(su.nick_name, su.user_name, concat('管理员#', pr.admin_user_id))
+                    when pr.status = '1' then '后台管理员（历史记录）' else null end as redemption_staff_name,
+               case when pr.staff_id is not null then ss.user_name when pr.admin_user_id is not null then su.user_name else null end as redemption_staff_account,
+               case when pr.staff_id is not null then 'STAFF' when pr.admin_user_id is not null or pr.status = '1' then 'ADMIN' else null end as redemption_operator_type
+        from lottery_record r
+        left join sys_user u on r.user_id = u.user_id
+        left join lottery a on r.lottery_id = a.lottery_id
+        left join lottery_prize p on r.prize_id = p.prize_id
+        left join gkzh_prize_redemption pr on pr.lottery_record_id = r.record_id
+        left join gkzh_school_staff ss on ss.staff_id = pr.staff_id
+        left join sys_user su on su.user_id = pr.admin_user_id
+    </sql>
+
+    <select id="selectLotteryRecordList" parameterType="LotteryRecord" resultMap="LotteryRecordResult">
+        <include refid="selectLotteryRecordVo"/>
+        <where>  
+            <if test="userId != null "> and r.user_id = #{userId}</if>
+            <if test="userName != null and userName != ''"> and u.user_name like concat('%', #{userName}, '%')</if>
+            <if test="nickName != null and nickName != ''"> and u.nick_name like concat('%', #{nickName}, '%')</if>
+            <if test="lotteryId != null "> and r.lottery_id = #{lotteryId}</if>
+            <if test="activityId != null "> and r.activity_id = #{activityId}</if>
+            <if test="bizType != null and bizType != ''"> and r.biz_type = #{bizType}</if>
+            <if test="activityTitle != null and activityTitle != ''"> and a.title like concat('%', #{activityTitle}, '%')</if>
+            <if test="prizeId != null "> and r.prize_id = #{prizeId}</if>
+            <if test="prizeTitle != null and prizeTitle != ''"> and p.title like concat('%', #{prizeTitle}, '%')</if>
+            <if test="resultName != null  and resultName != ''"> and r.result_name like concat('%', #{resultName}, '%')</if>
+        </where>
+    </select>
+    
+    <select id="selectLotteryRecordByRecordId" parameterType="Long" resultMap="LotteryRecordResult">
+        <include refid="selectLotteryRecordVo"/>
+        where r.record_id = #{recordId}
+    </select>
+
+    <insert id="insertLotteryRecord" parameterType="LotteryRecord" useGeneratedKeys="true" keyProperty="recordId">
+        insert into lottery_record
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="lotteryId != null">lottery_id,</if>
+            <if test="activityId != null">activity_id,</if>
+            <if test="bizType != null and bizType != ''">biz_type,</if>
+            <if test="prizeId != null">prize_id,</if>
+            <if test="userId != null">user_id,</if>
+            <if test="userName != null and userName != ''">user_name,</if>
+            <if test="prizeTitle != null and prizeTitle != ''">prize_title,</if>
+            <if test="drawTime != null">draw_time,</if>
+            <if test="status != null">status,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="redemptionCode != null and redemptionCode != ''">redemption_code,</if>
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="lotteryId != null">#{lotteryId},</if>
+            <if test="activityId != null">#{activityId},</if>
+            <if test="bizType != null and bizType != ''">#{bizType},</if>
+            <if test="prizeId != null">#{prizeId},</if>
+            <if test="userId != null">#{userId},</if>
+            <if test="userName != null and userName != ''">#{userName},</if>
+            <if test="prizeTitle != null and prizeTitle != ''">#{prizeTitle},</if>
+            <if test="drawTime != null">#{drawTime},</if>
+            <if test="status != null">#{status},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="redemptionCode != null and redemptionCode != ''">#{redemptionCode},</if>
+        </trim>
+    </insert>
+
+    <update id="updateLotteryRecord" parameterType="LotteryRecord">
+        update lottery_record
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="userId != null">user_id = #{userId},</if>
+            <if test="lotteryId != null">lottery_id = #{lotteryId},</if>
+            <if test="activityId != null">activity_id = #{activityId},</if>
+            <if test="prizeId != null">prize_id = #{prizeId},</if>
+            <if test="resultName != null">result_name = #{resultName},</if>
+            <if test="createdAt != null">created_at = #{createdAt},</if>
+            <if test="ip != null">ip = #{ip},</if>
+        </trim>
+        where record_id = #{recordId}
+    </update>
+
+    <delete id="deleteLotteryRecordByRecordId" parameterType="Long">
+        delete from lottery_record where record_id = #{recordId}
+    </delete>
+
+    <delete id="deleteLotteryRecordByRecordIds" parameterType="String">
+        delete from lottery_record where record_id in 
+        <foreach item="recordId" collection="array" open="(" separator="," close=")">
+            #{recordId}
+        </foreach>
+    </delete>
+</mapper>

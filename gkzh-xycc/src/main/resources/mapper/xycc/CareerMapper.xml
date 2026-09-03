@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.xycc.mapper.CareerMapper">
+    
+    <resultMap type="Career" id="CareerResult">
+        <result property="careerId"    column="career_id"    />
+        <result property="title"    column="title"    />
+    </resultMap>
+
+    <sql id="selectCareerVo">
+        select career_id, title from xycc_career
+    </sql>
+
+    <select id="selectCareerList" parameterType="Career" resultMap="CareerResult">
+        <include refid="selectCareerVo"/>
+        <where>  
+            <if test="title != null  and title != ''"> and title = #{title}</if>
+        </where>
+    </select>
+    
+    <select id="selectCareerByCareerId" parameterType="Long" resultMap="CareerResult">
+        <include refid="selectCareerVo"/>
+        where career_id = #{careerId}
+    </select>
+
+    <insert id="insertCareer" parameterType="Career" useGeneratedKeys="true" keyProperty="careerId">
+        insert into xycc_career
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="title != null">title,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="title != null">#{title},</if>
+         </trim>
+    </insert>
+
+    <update id="updateCareer" parameterType="Career">
+        update xycc_career
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="title != null">title = #{title},</if>
+        </trim>
+        where career_id = #{careerId}
+    </update>
+
+    <delete id="deleteCareerByCareerId" parameterType="Long">
+        delete from xycc_career where career_id = #{careerId}
+    </delete>
+
+    <delete id="deleteCareerByCareerIds" parameterType="String">
+        delete from xycc_career where career_id in 
+        <foreach item="careerId" collection="array" open="(" separator="," close=")">
+            #{careerId}
+        </foreach>
+    </delete>
+</mapper>

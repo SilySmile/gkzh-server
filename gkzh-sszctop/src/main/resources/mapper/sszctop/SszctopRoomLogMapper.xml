@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 日志保存房间号、用户姓名/学号和状态快照，房间销毁后仍可查询。 -->
+<mapper namespace="com.gkzh.sszctop.mapper.SszctopRoomLogMapper">
+    <select id="selectUserActivitySummaries" resultType="com.gkzh.sszctop.domain.SszctopRoomLog">
+        SELECT latest.log_id AS log_id, latest.instance_id, i.title AS activity_title, latest.game_id, latest.room_id, latest.room_code,
+               MAX(l.create_time) AS create_time, COUNT(l.log_id) AS log_count, 1 AS member_count, latest.user_id,
+               latest.student_name, latest.student_no,
+               SUBSTRING_INDEX(GROUP_CONCAT(l.room_status ORDER BY l.log_id DESC), ',', 1) AS room_status
+        FROM (
+            SELECT current_log.*
+            FROM gkzh_sszctop_room_log current_log
+            INNER JOIN (
+                SELECT instance_id, user_id, MAX(log_id) AS latest_log_id
+                FROM gkzh_sszctop_room_log
+                WHERE user_id IS NOT NULL
+                <if test="roomCode != null and roomCode != ''">AND room_code = #{roomCode}</if>
+                <if test="keyword != null and keyword != ''">AND (student_name LIKE CONCAT('%', #{keyword}, '%') OR student_no LIKE CONCAT('%', #{keyword}, '%'))</if>
+                GROUP BY instance_id, user_id
+            ) latest_id ON latest_id.latest_log_id = current_log.log_id
+        ) latest
+        INNER JOIN gkzh_activity_week_instance i ON i.instance_id = latest.instance_id
+        LEFT JOIN gkzh_sszctop_room_log l ON l.room_id = latest.room_id
+        <where><if test="activityName != null and activityName != ''">i.title LIKE CONCAT('%', #{activityName}, '%')</if></where>
+        GROUP BY latest.log_id, latest.instance_id, i.title, latest.game_id, latest.room_id, latest.room_code,
+                 latest.user_id, latest.student_name, latest.student_no
+        ORDER BY latest.log_id DESC
+    </select>
+    <select id="selectRoomDetails" resultType="com.gkzh.sszctop.domain.SszctopRoomLog">
+        SELECT l.* FROM gkzh_sszctop_room_log l
+        WHERE l.room_id = #{roomId} AND l.event_type NOT IN ('order.updated', 'member.ready', 'member.unready')
+        ORDER BY l.log_id ASC
+    </select>
+</mapper>

@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.school.mapper.GkzhStudentMapper">
+    
+    <resultMap type="GkzhStudent" id="GkzhStudentResult">
+        <result property="studentId"       column="student_id"       />
+        <result property="schoolId"        column="school_id"        />
+        <result property="departmentId"    column="department_id"    />
+        <result property="studentNo"       column="student_no"       />
+        <result property="studentName"     column="student_name"     />
+        <result property="gender"          column="gender"           />
+        <result property="phone"           column="phone"            />
+        <result property="email"           column="email"            />
+        <result property="status"          column="status"           />
+        <result property="syd"              column="syd"           />
+        <result property="lqfs"             column="lqfs"           />
+        <result property="grade"             column="grade"           />
+        <result property="delFlag"         column="del_flag"         />
+        <result property="createBy"        column="create_by"        />
+        <result property="createTime"      column="create_time"      />
+        <result property="updateBy"        column="update_by"        />
+        <result property="updateTime"      column="update_time"      />
+        <result property="remark"          column="remark"           />
+        <result property="schoolName"      column="school_name"      />
+        <result property="collegeName"  column="college_name"  />
+        <result property="collegeId"  column="college_id"  />
+        <result property="departmentName"  column="department_name"  />
+        <result property="userId"  column="user_id"  />
+        <result property="userId"  column="user_id"  />
+        <result property="password"       column="password"        />
+        <result property="registered"     column="registered"      />
+        <result property="className"      column="class_name"      />
+        <result property="enrollmentYear" column="enrollment_year" />
+</resultMap>
+
+    <sql id="selectGkzhStudentVo">
+        select s.student_id, s.school_id,s.syd, s.grade,s.lqfs,s.department_id, s.student_no, s.student_name, s.gender, s.phone, s.email, s.status, s.del_flag, s.create_by, s.create_time, s.update_by, s.update_time, s.remark,s.user_id,s.password,s.class_name,s.enrollment_year, case when s.password is null or s.password = '' then 0 else 1 end as registered,
+               sch.title as school_name, d.title as department_name, college.title as college_name,college.department_id as college_id
+        from gkzh_student s
+        left join gkzh_school sch on s.school_id = sch.school_id
+        left join gkzh_school_department d on s.department_id = d.department_id
+        left join gkzh_school_department college on d.parent_id = college.department_id
+    </sql>
+
+    <select id="selectGkzhStudentList" parameterType="GkzhStudent" resultMap="GkzhStudentResult">
+        <include refid="selectGkzhStudentVo"/>
+        <where>  
+            <if test="schoolId != null "> and s.school_id = #{schoolId}</if>
+            <if test="departmentId != null "> and s.department_id = #{departmentId}</if>
+            <if test="departmentIds != null and departmentIds.size() > 0">
+                and s.department_id in
+                <foreach collection="departmentIds" item="deptId" open="(" separator="," close=")">
+                    #{deptId}
+                </foreach>
+            </if>
+            <if test="studentNo != null  and studentNo != ''"> and s.student_no like concat('%', #{studentNo}, '%')</if>
+            <if test="studentName != null  and studentName != ''"> and s.student_name like concat('%', #{studentName}, '%')</if>
+            <if test="registered != null and registered == 1"> and s.password is not null and s.password != ''</if>
+            <if test="registered != null and registered == 0"> and (s.password is null or s.password = '')</if>
+            <if test="gender != null  and gender != ''"> and s.gender = #{gender}</if>
+            <if test="phone != null  and phone != ''"> and s.phone like concat('%', #{phone}, '%')</if>
+            <if test="email != null  and email != ''"> and s.email like concat('%', #{email}, '%')</if>
+            <if test="status != null  and status != ''"> and s.status = #{status}</if>
+            <if test="grade != null  and grade != ''"> and s.grade = #{grade}</if>
+            <if test="syd != null  and syd != ''"> and s.syd = #{syd}</if>
+            <if test="lqfs != null  and lqfs != ''"> and s.lqfs = #{lqfs}</if>
+            and s.del_flag = '0'
+        </where>
+        order by s.create_time desc
+    </select>
+    
+    <select id="selectGkzhStudentByStudentId" parameterType="Long" resultMap="GkzhStudentResult">
+        <include refid="selectGkzhStudentVo"/>
+        where s.student_id = #{studentId} and s.del_flag = '0'
+    </select>
+
+    <select id="selectGkzhStudentByCheckinInfo" parameterType="GkzhStudent" resultMap="GkzhStudentResult">
+        <include refid="selectGkzhStudentVo"/>
+        where s.school_id = #{schoolId} 
+          and s.department_id = #{departmentId}
+          and s.student_no = #{studentNo}
+          and s.student_name = #{studentName}
+          and s.status = '0'
+          and s.del_flag = '0'
+    </select>
+        
+    <insert id="insertGkzhStudent" parameterType="GkzhStudent" useGeneratedKeys="true" keyProperty="studentId">
+        insert into gkzh_student
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="schoolId != null">school_id,</if>
+            <if test="departmentId != null">department_id,</if>
+            <if test="studentNo != null and studentNo != ''">student_no,</if>
+            <if test="studentName != null and studentName != ''">student_name,</if>
+            <if test="gender != null">gender,</if>
+            <if test="grade != null">grade,</if>
+            <if test="lqfs != null">lqfs,</if>
+            <if test="syd != null">syd,</if>
+            <if test="className != null">class_name,</if>
+            <if test="enrollmentYear != null">enrollment_year,</if>
+            <if test="password != null">password,</if>
+            <if test="phone != null">phone,</if>
+            <if test="email != null">email,</if>
+            <if test="status != null">status,</if>
+            <if test="delFlag != null">del_flag,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updateBy != null">update_by,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="remark != null">remark,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="schoolId != null">#{schoolId},</if>
+            <if test="departmentId != null">#{departmentId},</if>
+            <if test="studentNo != null and studentNo != ''">#{studentNo},</if>
+            <if test="studentName != null and studentName != ''">#{studentName},</if>
+            <if test="gender != null">#{gender},</if>
+            <if test="grade != null">#{grade},</if>
+            <if test="lqfs != null">#{lqfs},</if>
+            <if test="syd != null">#{syd},</if>
+            <if test="className != null">#{className},</if>
+            <if test="enrollmentYear != null">#{enrollmentYear},</if>
+            <if test="password != null">#{password},</if>
+            <if test="phone != null">#{phone},</if>
+            <if test="email != null">#{email},</if>
+            <if test="status != null">#{status},</if>
+            <if test="delFlag != null">#{delFlag},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updateBy != null">#{updateBy},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="remark != null">#{remark},</if>
+         </trim>
+    </insert>
+
+    <update id="updateGkzhStudent" parameterType="GkzhStudent">
+        update gkzh_student
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="schoolId != null">school_id = #{schoolId},</if>
+            <if test="departmentId != null">department_id = #{departmentId},</if>
+            <if test="studentNo != null and studentNo != ''">student_no = #{studentNo},</if>
+            <if test="studentName != null and studentName != ''">student_name = #{studentName},</if>
+            <if test="gender != null">gender = #{gender},</if>
+            <if test="phone != null">phone = #{phone},</if>
+            <if test="email != null">email = #{email},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="delFlag != null">del_flag = #{delFlag},</if>
+            <if test="createBy != null">create_by = #{createBy},</if>
+            <if test="createTime != null">create_time = #{createTime},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            <if test="userId != null">user_id = #{userId},</if>
+            <if test="userId != null">user_id = #{userId},</if>
+            <if test="password != null">password = #{password},</if>
+            <if test="className != null">class_name = #{className},</if>
+            <if test="enrollmentYear != null">enrollment_year = #{enrollmentYear},</if>
+        
+
+    </trim>
+        where student_id = #{studentId}
+    </update>
+
+    <delete id="deleteGkzhStudentByStudentId" parameterType="Long">
+        delete from gkzh_student where student_id = #{studentId}
+    </delete>
+
+    <delete id="deleteGkzhStudentByStudentIds" parameterType="String">
+        delete from gkzh_student where student_id in 
+        <foreach item="studentId" collection="array" open="(" separator="," close=")">
+            #{studentId}
+        </foreach>
+    </delete>
+
+    <select id="findByDetails" resultMap="GkzhStudentResult">
+        <include refid="selectGkzhStudentVo"/>
+          where s.department_id = #{deptId}
+          and s.student_no = #{no}
+          and s.student_name = #{name}
+          and s.status = '0'
+          and s.del_flag = '0'
+      </select>
+    <!-- 根据学校、院系、专业查询部门信息 -->
+    <select id="selectDepartmentBySchoolAndCollegeAndDepartment" resultMap="GkzhSchoolDepartmentResult">
+        <!-- 三级结构：学校 -> 院系 -> 专业 -->
+        SELECT d.*
+        FROM gkzh_school_department d
+        LEFT JOIN gkzh_school_department college ON d.parent_id = college.department_id
+        LEFT JOIN gkzh_school sch ON college.school_id = sch.school_id
+        WHERE sch.title = #{schoolName}
+        AND college.title = #{collegeName}
+        AND d.title = #{departmentName}
+        AND #{collegeName} IS NOT NULL AND #{collegeName} != ''
+
+        UNION
+
+        <!-- 二级结构：学校 -> 专业 -->
+        SELECT d.*
+        FROM gkzh_school_department d
+        LEFT JOIN gkzh_school sch ON d.school_id = sch.school_id
+        WHERE sch.title = #{schoolName}
+        AND d.title = #{departmentName}
+        AND (#{collegeName} IS NULL OR #{collegeName} = '')
+
+        LIMIT 1
+    </select>
+
+    <!-- 根据学号和部门ID查询学生 -->
+    <select id="selectGkzhStudentByStudentNoAndDepartmentId" resultMap="GkzhStudentResult">
+        <include refid="selectGkzhStudentVo"/>
+        WHERE s.student_no = #{studentNo}
+        AND s.department_id = #{departmentId}
+        AND s.del_flag = '0'
+        LIMIT 1
+    </select>
+
+    <resultMap id="GkzhSchoolDepartmentResult" type="com.gkzh.school.domain.GkzhSchoolDepartment">
+        <id property="departmentId" column="department_id"/>
+        <result property="schoolId" column="school_id"/>
+        <result property="parentId" column="parent_id"/>
+        <result property="ancestors" column="ancestors"/>
+        <result property="title" column="title"/>
+        <result property="sortNum" column="sort_num"/>
+        <result property="status" column="status"/>
+        <result property="delFlag" column="del_flag"/>
+        <result property="createBy" column="create_by"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateBy" column="update_by"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="parentName" column="parent_name"/>
+    </resultMap>
+</mapper>

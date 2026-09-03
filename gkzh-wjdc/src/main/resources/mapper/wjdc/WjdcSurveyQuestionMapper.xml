@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.wjdc.mapper.WjdcSurveyQuestionMapper">
+    
+    <resultMap type="WjdcSurveyQuestion" id="WjdcSurveyQuestionResult">
+        <result property="id"    column="id"    />
+        <result property="surveyId"    column="survey_id"    />
+        <result property="questionTitle"    column="question_title"    />
+        <result property="questionType"    column="question_type"    />
+        <result property="required"    column="required"    />
+        <result property="sortOrder"    column="sort_order"    />
+        <result property="scoreRange"    column="score_range"    />
+    </resultMap>
+
+    <sql id="selectWjdcSurveyQuestionVo">
+        select id, survey_id, question_title, question_type, required, sort_order,score_range from wjdc_survey_question
+    </sql>
+
+    <select id="selectWjdcSurveyQuestionList" parameterType="WjdcSurveyQuestion" resultMap="WjdcSurveyQuestionResult">
+        <include refid="selectWjdcSurveyQuestionVo"/>
+        <where>  
+            <if test="surveyId != null "> and survey_id = #{surveyId}</if>
+            <if test="questionTitle != null  and questionTitle != ''"> and question_title like concat('%', #{questionTitle}, '%')</if>
+            <if test="questionType != null  and questionType != ''"> and question_type = #{questionType}</if>
+            <if test="required != null  and required != ''"> and required = #{required}</if>
+        </where>
+        order by sort_order asc
+    </select>
+    
+    <select id="selectWjdcSurveyQuestionById" parameterType="Integer" resultMap="WjdcSurveyQuestionResult">
+        <include refid="selectWjdcSurveyQuestionVo"/>
+        where id = #{id}
+    </select>
+
+    <select id="selectWjdcSurveyQuestionBySurveyId" parameterType="Integer" resultMap="WjdcSurveyQuestionResult">
+        <include refid="selectWjdcSurveyQuestionVo"/>
+        where survey_id = #{surveyId}
+        order by sort_order asc
+    </select>
+
+    <insert id="insertWjdcSurveyQuestion" parameterType="WjdcSurveyQuestion" useGeneratedKeys="true" keyProperty="id">
+        insert into wjdc_survey_question
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="surveyId != null">survey_id,</if>
+            <if test="questionTitle != null and questionTitle != ''">question_title,</if>
+            <if test="questionType != null and questionType != ''">question_type,</if>
+            <if test="required != null and required != ''">required,</if>
+            <if test="sortOrder != null">sort_order,</if>
+            <if test="scoreRange != null and scoreRange != ''">score_range,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="surveyId != null">#{surveyId},</if>
+            <if test="questionTitle != null and questionTitle != ''">#{questionTitle},</if>
+            <if test="questionType != null and questionType != ''">#{questionType},</if>
+            <if test="required != null and required != ''">#{required},</if>
+            <if test="sortOrder != null">#{sortOrder},</if>
+            <if test="scoreRange != null and scoreRange != ''">#{scoreRange},</if>
+         </trim>
+    </insert>
+
+    <update id="updateWjdcSurveyQuestion" parameterType="WjdcSurveyQuestion">
+        update wjdc_survey_question
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="surveyId != null">survey_id = #{surveyId},</if>
+            <if test="questionTitle != null and questionTitle != ''">question_title = #{questionTitle},</if>
+            <if test="questionType != null and questionType != ''">question_type = #{questionType},</if>
+            <if test="required != null and required != ''">required = #{required},</if>
+            <if test="sortOrder != null">sort_order = #{sortOrder},</if>
+            <if test="scoreRange != null and scoreRange != ''">score_range = #{scoreRange},</if>
+        </trim>
+        where id = #{id}
+    </update>
+
+    <delete id="deleteWjdcSurveyQuestionById" parameterType="Integer">
+        delete from wjdc_survey_question where id = #{id}
+    </delete>
+
+    <delete id="deleteWjdcSurveyQuestionByIds" parameterType="String">
+        delete from wjdc_survey_question where id in 
+        <foreach item="id" collection="array" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+    <delete id="deleteWjdcSurveyQuestionBySurveyId" parameterType="Integer">
+        delete from wjdc_survey_question where survey_id = #{surveyId}
+    </delete>
+</mapper>

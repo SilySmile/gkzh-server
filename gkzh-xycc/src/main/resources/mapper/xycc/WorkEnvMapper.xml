@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.xycc.mapper.WorkEnvMapper">
+    
+    <resultMap type="WorkEnv" id="WorkEnvResult">
+        <result property="workEnvId"    column="work_env_id"    />
+        <result property="title"    column="title"    />
+    </resultMap>
+
+    <sql id="selectWorkEnvVo">
+        select work_env_id, title from xycc_work_env
+    </sql>
+
+    <select id="selectWorkEnvList" parameterType="WorkEnv" resultMap="WorkEnvResult">
+        <include refid="selectWorkEnvVo"/>
+        <where>  
+            <if test="title != null  and title != ''"> and title = #{title}</if>
+        </where>
+    </select>
+    
+    <select id="selectWorkEnvByWorkEnvId" parameterType="Long" resultMap="WorkEnvResult">
+        <include refid="selectWorkEnvVo"/>
+        where work_env_id = #{workEnvId}
+    </select>
+
+    <insert id="insertWorkEnv" parameterType="WorkEnv" useGeneratedKeys="true" keyProperty="workEnvId">
+        insert into xycc_work_env
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="title != null">title,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="title != null">#{title},</if>
+         </trim>
+    </insert>
+
+    <update id="updateWorkEnv" parameterType="WorkEnv">
+        update xycc_work_env
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="title != null">title = #{title},</if>
+        </trim>
+        where work_env_id = #{workEnvId}
+    </update>
+
+    <delete id="deleteWorkEnvByWorkEnvId" parameterType="Long">
+        delete from xycc_work_env where work_env_id = #{workEnvId}
+    </delete>
+
+    <delete id="deleteWorkEnvByWorkEnvIds" parameterType="String">
+        delete from xycc_work_env where work_env_id in 
+        <foreach item="workEnvId" collection="array" open="(" separator="," close=")">
+            #{workEnvId}
+        </foreach>
+    </delete>
+</mapper>

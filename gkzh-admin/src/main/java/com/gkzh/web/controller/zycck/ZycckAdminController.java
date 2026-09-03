@@ -40,7 +40,7 @@ public class ZycckAdminController extends BaseController {
     public AjaxResult deleteCategory(@PathVariable Long id) { return toAjax(categoryMapper.deleteById(id)); }
 
     @GetMapping("/career-questions")
-    public TableDataInfo questions(@RequestParam(required = false) Long categoryId) { startPage(); QueryWrapper<ZycckCareerQuestion> q = new QueryWrapper<ZycckCareerQuestion>().orderByAsc("category_id", "question_id"); if (categoryId != null) q.eq("category_id", categoryId); return getDataTable(questionMapper.selectList(q)); }
+    public TableDataInfo questions(@RequestParam(required = false) Long categoryId) { startPage(); QueryWrapper<ZycckCareerQuestion> q = new QueryWrapper<ZycckCareerQuestion>().orderByAsc("category_id", "career_question_id"); if (categoryId != null) q.eq("category_id", categoryId); return getDataTable(questionMapper.selectList(q)); }
 
     @PostMapping("/career-questions")
     public AjaxResult saveQuestion(@RequestBody ZycckCareerQuestion question) { return toAjax(question.getCareerQuestionId() == null ? questionMapper.insert(question) : questionMapper.updateById(question)); }

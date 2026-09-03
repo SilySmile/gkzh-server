@@ -269,6 +269,11 @@
             </dependency>
             <dependency>
                 <groupId>com.gkzh</groupId>
+                <artifactId>gkzh-zycck</artifactId>
+                <version>${gkzh.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.gkzh</groupId>
                 <artifactId>gkzh-wjyd</artifactId>
                 <version>${gkzh.version}</version>
             </dependency>
@@ -325,6 +330,7 @@
         <module>gkzh-cyzs</module>
         <module>gkzh-zytj</module>
         <module>gkzh-sszctop</module>
+        <module>gkzh-zycck</module>
         <module>gkzh-zyxxz</module>
     </modules>
     <packaging>pom</packaging>

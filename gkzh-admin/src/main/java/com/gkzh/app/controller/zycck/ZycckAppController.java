@@ -42,7 +42,7 @@ public class ZycckAppController extends FrontBaseController {
     public AjaxResult start(@PathVariable Long id) { return AjaxResult.success(recordService.start(id, getCurrentStudent().getUserId())); }
 
     @GetMapping("/records/{id}")
-    public AjaxResult record(@PathVariable Long id) { return AjaxResult.success(recordService.get(id, getCurrentStudent().getUserId())); }
+    public AjaxResult record(@PathVariable Long id) { ZycckRecord record = recordService.get(id, getCurrentStudent().getUserId()); Map<String,Object> result = new java.util.LinkedHashMap<>(); result.put("record", record); result.put("currentQuestionNo", record.getCurrentQuestionNo()); result.put("stage", record.getStage()); result.put("status", record.getStatus()); if (record.getOptionSnapshotJson() != null) { try { java.util.List<?> questions = com.alibaba.fastjson2.JSON.parseArray(record.getOptionSnapshotJson()); int index = Math.max(0, (record.getCurrentQuestionNo() == null ? 1 : record.getCurrentQuestionNo()) - 1); if (index < questions.size()) result.put("question", questions.get(index)); } catch (Exception ignored) {} } return AjaxResult.success(result); }
 
     @PostMapping("/records/{id}/answers")
     public AjaxResult answer(@PathVariable Long id, @RequestBody Map<String,Object> body) { return AjaxResult.success(recordService.answer(id, getCurrentStudent().getUserId(), body)); }

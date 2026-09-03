@@ -40,6 +40,11 @@ public class ZycckRecordService {
 
     @Transactional
     public ZycckRecord enter(Long schoolId, Long instanceId, Long gameId, Long userId, Long studentId) {
+        return enter(schoolId, instanceId, gameId, userId, studentId, null, null, null);
+    }
+
+    @Transactional
+    public ZycckRecord enter(Long schoolId, Long instanceId, Long gameId, Long userId, Long studentId, Long departmentId, String major, String gender) {
         if (schoolId == null || instanceId == null || gameId == null || userId == null) {
             throw new ServiceException("缺少活动或学校信息");
         }
@@ -56,6 +61,7 @@ public class ZycckRecordService {
         record.setGameType("zycck"); record.setStatus("participating"); record.setStage("scanned");
         record.setCurrentQuestionNo(0); record.setScanTime(now); record.setCreateTime(now); record.setUpdateTime(now);
         record.setStudentId(studentId);
+        record.setDepartmentId(departmentId); record.setMajor(major); record.setGender(gender);
         recordMapper.insert(record);
         // 扫码即参与统计：与 zycck 业务记录在同一事务内写入活动参与表，且按活动实例隔离。
         GkzhGameParticipation participation = new GkzhGameParticipation();
@@ -81,9 +87,13 @@ public class ZycckRecordService {
             record.setStartTime(DateUtils.getNowDate());
             prepareQuestionSnapshot(record);
         }
-        record.setStage("question"); record.setCurrentQuestionNo(record.getCurrentQuestionNo() == null || record.getCurrentQuestionNo() < 1 ? 1 : record.getCurrentQuestionNo()); record.setQuestionStartTime(DateUtils.getNowDate()); record.setUpdateTime(DateUtils.getNowDate());
+        record.setStage("question"); record.setCurrentQuestionNo(record.getCurrentQuestionNo() == null || record.getCurrentQuestionNo() < 1 ? 1 : record.getCurrentQuestionNo());
+        if (record.getQuestionStartTime() == null && record.getCurrentQuestionNo() > 1) record.setQuestionStartTime(DateUtils.getNowDate());
         recordMapper.updateById(record); return record;
     }
+
+    @Transactional
+    public ZycckRecord openQuestion(Long recordId, Long userId) { ZycckRecord record = get(recordId, userId); if ("finished".equals(record.getStatus())) throw new ServiceException("本次游戏已完成"); if (record.getQuestionStartTime() == null) { record.setStage("question"); record.setQuestionStartTime(DateUtils.getNowDate()); record.setUpdateTime(DateUtils.getNowDate()); recordMapper.updateById(record); } return record; }
 
     private void prepareQuestionSnapshot(ZycckRecord record) {
         java.util.List<ZycckCategory> categories = categoryMapper.selectList(new QueryWrapper<ZycckCategory>().eq("status", "0").orderByAsc("sort_order"));
@@ -105,12 +115,16 @@ public class ZycckRecordService {
     public Map<String,Object> answer(Long recordId, Long userId, Map<String,Object> answer) {
         ZycckRecord record = get(recordId, userId);
         if ("finished".equals(record.getStatus())) throw new ServiceException("本次游戏已完成");
+        if (!"question".equals(record.getStage())) throw new ServiceException("当前不在答题阶段");
         int no = record.getCurrentQuestionNo() == null || record.getCurrentQuestionNo() < 1 ? 1 : record.getCurrentQuestionNo();
         boolean timeout = Boolean.parseBoolean(String.valueOf(answer.getOrDefault("timeoutFlag", false)));
         java.util.List<JSONObject> snapshots = record.getOptionSnapshotJson() == null ? java.util.Collections.emptyList() : JSON.parseArray(record.getOptionSnapshotJson(), JSONObject.class);
         JSONObject current = no <= snapshots.size() ? snapshots.get(no - 1) : null;
         if (current == null) throw new ServiceException("题目已失效，请重新进入游戏");
         String optionKey = answer.get("optionKey") == null ? null : String.valueOf(answer.get("optionKey")).toUpperCase();
+        Integer requestedNo = answer.get("questionNo") == null ? null : Integer.valueOf(String.valueOf(answer.get("questionNo"))); if (requestedNo != null && requestedNo != no) throw new ServiceException("这道题已经提交过了");
+        String requestedQuestionId = answer.get("questionId") == null ? null : String.valueOf(answer.get("questionId")); if (requestedQuestionId != null && !requestedQuestionId.equals(String.valueOf(current.getLong("questionId")))) throw new ServiceException("题目已更新，请按当前题目作答");
+        if (record.getAnswerJson() != null && JSON.parseArray(record.getAnswerJson(), JSONObject.class).stream().anyMatch(v -> no == v.getIntValue("questionNo"))) throw new ServiceException("这道题已经提交过了");
         long elapsed = record.getQuestionStartTime() == null ? 0 : Math.max(0, (System.currentTimeMillis() - record.getQuestionStartTime().getTime()) / 1000);
         if (elapsed > 60) timeout = true;
         Map<String,Object> result = new LinkedHashMap<>();
@@ -169,7 +183,9 @@ public class ZycckRecordService {
     }
 
     public Map<String,Object> exploration(Long recordId, Long userId) {
-        ZycckRecord record = get(recordId, userId); Map<String,Object> out = new LinkedHashMap<>(); out.put("record", record); out.put("viewedCareerIds", record.getViewedCareerIds() == null ? java.util.Collections.emptyList() : JSON.parseArray(record.getViewedCareerIds(), Long.class)); out.put("explorationCareerIds", record.getExplorationCareerIds() == null ? java.util.Collections.emptyList() : JSON.parseArray(record.getExplorationCareerIds(), Long.class)); out.put("readOnly", "finished".equals(record.getStatus())); return out;
+        ZycckRecord record = get(recordId, userId); Map<String,Object> out = new LinkedHashMap<>(); out.put("record", record); out.put("viewedCareerIds", record.getViewedCareerIds() == null ? java.util.Collections.emptyList() : JSON.parseArray(record.getViewedCareerIds(), Long.class));
+        java.util.List<Long> ids = record.getExplorationCareerIds() == null ? new java.util.ArrayList<>() : JSON.parseArray(record.getExplorationCareerIds(), Long.class); out.put("explorationCareerIds", ids);
+        java.util.List<Map<String,Object>> items = new java.util.ArrayList<>(); if (!ids.isEmpty()) for (ZycckCareerQuestion q : questionMapper.selectBatchIds(ids)) { Map<String,Object> item = new LinkedHashMap<>(); item.put("careerId", q.getCareerQuestionId()); item.put("careerName", q.getCareerName()); item.put("careerImageUrl", q.getCareerImageUrl()); items.add(item); } out.put("items", items); out.put("count", items.size()); out.put("limit", 6); out.put("readOnly", "finished".equals(record.getStatus())); return out;
     }
 
     @Transactional

@@ -28,21 +28,28 @@ public class ZycckAppController extends FrontBaseController {
     public AjaxResult catalog() {
         Map<String,Object> result = new java.util.LinkedHashMap<>();
         result.put("categories", categoryMapper.selectList(new QueryWrapper<ZycckCategory>().eq("status", "0").orderByAsc("sort_order")));
-        result.put("questions", questionMapper.selectList(new QueryWrapper<com.gkzh.zycck.domain.ZycckCareerQuestion>().eq("status", "0").orderByAsc("category_id","question_id")));
+        java.util.List<Map<String,Object>> questions = new java.util.ArrayList<>();
+        for (com.gkzh.zycck.domain.ZycckCareerQuestion q : questionMapper.selectList(new QueryWrapper<com.gkzh.zycck.domain.ZycckCareerQuestion>().eq("status", "0").orderByAsc("category_id","question_id"))) {
+            Map<String,Object> safe = new java.util.LinkedHashMap<>(); safe.put("careerQuestionId", q.getCareerQuestionId()); safe.put("categoryId", q.getCategoryId()); safe.put("careerName", q.getCareerName()); safe.put("oneLineIntro", q.getOneLineIntro()); safe.put("mainWork", q.getMainWork()); safe.put("dayExample", q.getDayExample()); safe.put("whyExists", q.getWhyExists()); safe.put("careerImageUrl", q.getCareerImageUrl()); safe.put("questionImageUrl", q.getQuestionImageUrl()); safe.put("optionA", q.getOptionA()); safe.put("optionB", q.getOptionB()); safe.put("optionC", q.getOptionC()); safe.put("optionD", q.getOptionD()); safe.put("drawCandidate", q.getDrawCandidate()); questions.add(safe);
+        }
+        result.put("questions", questions);
         return AjaxResult.success(result);
     }
 
     @PostMapping("/records/enter")
     public AjaxResult enter(@RequestBody Map<String,Object> body) {
         StudentCheckin student = getCurrentStudent();
-        return AjaxResult.success(recordService.enter(id(body.get("schoolId")), id(body.get("instanceId")), id(body.get("gameId")), student.getUserId(), student.getStuId()));
+        return AjaxResult.success(recordService.enter(id(body.get("schoolId")), id(body.get("instanceId")), id(body.get("gameId")), student.getUserId(), student.getStuId(), id(body.get("departmentId")), text(body.get("major")), text(body.get("gender"))));
     }
 
     @PostMapping("/records/{id}/start")
     public AjaxResult start(@PathVariable Long id) { return AjaxResult.success(recordService.start(id, getCurrentStudent().getUserId())); }
 
+    @PostMapping("/records/{id}/question-start")
+    public AjaxResult questionStart(@PathVariable Long id) { return AjaxResult.success(recordService.openQuestion(id, getCurrentStudent().getUserId())); }
+
     @GetMapping("/records/{id}")
-    public AjaxResult record(@PathVariable Long id) { ZycckRecord record = recordService.get(id, getCurrentStudent().getUserId()); Map<String,Object> result = new java.util.LinkedHashMap<>(); result.put("record", record); result.put("currentQuestionNo", record.getCurrentQuestionNo()); result.put("stage", record.getStage()); result.put("status", record.getStatus()); if (record.getOptionSnapshotJson() != null) { try { java.util.List<?> questions = com.alibaba.fastjson2.JSON.parseArray(record.getOptionSnapshotJson()); int index = Math.max(0, (record.getCurrentQuestionNo() == null ? 1 : record.getCurrentQuestionNo()) - 1); if (index < questions.size()) result.put("question", questions.get(index)); } catch (Exception ignored) {} } return AjaxResult.success(result); }
+    public AjaxResult record(@PathVariable Long id, @RequestParam(required = false) Long careerId) { ZycckRecord record = recordService.get(id, getCurrentStudent().getUserId()); Map<String,Object> result = new java.util.LinkedHashMap<>(); result.put("record", record); result.put("currentQuestionNo", record.getCurrentQuestionNo()); result.put("stage", record.getStage()); result.put("status", record.getStatus()); if (record.getOptionSnapshotJson() != null) { try { java.util.List<?> questions = com.alibaba.fastjson2.JSON.parseArray(record.getOptionSnapshotJson()); int index = Math.max(0, (record.getCurrentQuestionNo() == null ? 1 : record.getCurrentQuestionNo()) - 1); if (index < questions.size()) result.put("question", questions.get(index)); } catch (Exception ignored) {} } if (careerId != null) { com.gkzh.zycck.domain.ZycckCareerQuestion career = questionMapper.selectById(careerId); if (career != null) result.put("career", career); } return AjaxResult.success(result); }
 
     @PostMapping("/records/{id}/answers")
     public AjaxResult answer(@PathVariable Long id, @RequestBody Map<String,Object> body) { return AjaxResult.success(recordService.answer(id, getCurrentStudent().getUserId(), body)); }
@@ -74,4 +81,5 @@ public class ZycckAppController extends FrontBaseController {
     }
 
     private static Long id(Object value) { return value == null ? null : Long.valueOf(String.valueOf(value)); }
+    private static String text(Object value) { return value == null ? null : String.valueOf(value); }
 }

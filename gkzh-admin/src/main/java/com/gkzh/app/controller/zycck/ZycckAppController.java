@@ -35,7 +35,7 @@ public class ZycckAppController extends FrontBaseController {
     @PostMapping("/records/enter")
     public AjaxResult enter(@RequestBody Map<String,Object> body) {
         StudentCheckin student = getCurrentStudent();
-        return AjaxResult.success(recordService.enter(id(body.get("schoolId")), id(body.get("instanceId")), id(body.get("gameId")), student.getUserId()));
+        return AjaxResult.success(recordService.enter(id(body.get("schoolId")), id(body.get("instanceId")), id(body.get("gameId")), student.getUserId(), student.getStuId()));
     }
 
     @PostMapping("/records/{id}/start")
@@ -46,6 +46,21 @@ public class ZycckAppController extends FrontBaseController {
 
     @PostMapping("/records/{id}/answers")
     public AjaxResult answer(@PathVariable Long id, @RequestBody Map<String,Object> body) { return AjaxResult.success(recordService.answer(id, getCurrentStudent().getUserId(), body)); }
+
+    @PostMapping("/records/{id}/awareness")
+    public AjaxResult awareness(@PathVariable Long id, @RequestBody Map<String,Object> body) { return AjaxResult.success(recordService.awareness(id, getCurrentStudent().getUserId(), body)); }
+
+    @PostMapping("/records/{id}/browse")
+    public AjaxResult browse(@PathVariable Long id, @RequestBody Map<String,Object> body) { return AjaxResult.success(recordService.browse(id, getCurrentStudent().getUserId(), id(body.get("careerId")))); }
+
+    @GetMapping("/records/{id}/exploration")
+    public AjaxResult exploration(@PathVariable Long id) { return AjaxResult.success(recordService.exploration(id, getCurrentStudent().getUserId())); }
+
+    @PostMapping("/records/{id}/exploration-items")
+    public AjaxResult addExploration(@PathVariable Long id, @RequestBody Map<String,Object> body) { return AjaxResult.success(recordService.updateExploration(id, getCurrentStudent().getUserId(), id(body.get("careerId")), false)); }
+
+    @DeleteMapping("/records/{id}/exploration-items/{careerId}")
+    public AjaxResult removeExploration(@PathVariable Long id, @PathVariable Long careerId) { return AjaxResult.success(recordService.updateExploration(id, getCurrentStudent().getUserId(), careerId, true)); }
 
     @PostMapping("/records/{id}/finish")
     public AjaxResult finish(@PathVariable Long id) { return AjaxResult.success(recordService.finish(id, getCurrentStudent().getUserId())); }

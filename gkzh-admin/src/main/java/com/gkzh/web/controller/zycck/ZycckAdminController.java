@@ -49,13 +49,13 @@ public class ZycckAdminController extends BaseController {
     public AjaxResult deleteQuestion(@PathVariable Long id) { return toAjax(questionMapper.deleteById(id)); }
 
     @GetMapping("/records")
-    public TableDataInfo records(@RequestParam(required = false) Long instanceId, @RequestParam(required = false) Long gameId, @RequestParam(required = false) Long schoolId) {
-        startPage(); QueryWrapper<ZycckRecord> q = new QueryWrapper<ZycckRecord>().orderByDesc("record_id"); if (instanceId != null) q.eq("instance_id", instanceId); if (gameId != null) q.eq("game_id", gameId); if (schoolId != null) q.eq("school_id", schoolId); return getDataTable(recordMapper.selectList(q));
+    public TableDataInfo records(@RequestParam(required = false) Long instanceId, @RequestParam(required = false) Long gameId, @RequestParam(required = false) Long schoolId, @RequestParam(required = false) Long departmentId, @RequestParam(required = false) String major, @RequestParam(required = false) String gender) {
+        startPage(); QueryWrapper<ZycckRecord> q = new QueryWrapper<ZycckRecord>().orderByDesc("record_id"); if (instanceId != null) q.eq("instance_id", instanceId); if (gameId != null) q.eq("game_id", gameId); if (schoolId != null) q.eq("school_id", schoolId); if (departmentId != null) q.eq("department_id", departmentId); if (major != null && !major.trim().isEmpty()) q.like("major", major.trim()); if (gender != null && !gender.trim().isEmpty()) q.eq("gender", gender.trim()); return getDataTable(recordMapper.selectList(q));
     }
 
     @GetMapping("/statistics")
-    public AjaxResult statistics(@RequestParam(required = false) Long instanceId, @RequestParam(required = false) Long gameId, @RequestParam(required = false) Long schoolId) {
-        QueryWrapper<ZycckRecord> q = new QueryWrapper<>(); if (instanceId != null) q.eq("instance_id", instanceId); if (gameId != null) q.eq("game_id", gameId); if (schoolId != null) q.eq("school_id", schoolId);
+    public AjaxResult statistics(@RequestParam(required = false) Long instanceId, @RequestParam(required = false) Long gameId, @RequestParam(required = false) Long schoolId, @RequestParam(required = false) Long departmentId, @RequestParam(required = false) String major, @RequestParam(required = false) String gender) {
+        QueryWrapper<ZycckRecord> q = new QueryWrapper<>(); if (instanceId != null) q.eq("instance_id", instanceId); if (gameId != null) q.eq("game_id", gameId); if (schoolId != null) q.eq("school_id", schoolId); if (departmentId != null) q.eq("department_id", departmentId); if (major != null && !major.trim().isEmpty()) q.like("major", major.trim()); if (gender != null && !gender.trim().isEmpty()) q.eq("gender", gender.trim());
         java.util.List<ZycckRecord> rows = recordMapper.selectList(q); Map<String,Object> result = new LinkedHashMap<>(); result.put("participating", rows.size()); result.put("finished", rows.stream().filter(x -> "finished".equals(x.getStatus())).count()); result.put("records", rows); return AjaxResult.success(result);
     }
 

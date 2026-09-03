@@ -3,12 +3,14 @@ package com.gkzh.zycck.domain;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.TableField;
 import lombok.Data;
 import java.util.Date;
 
 @Data
 @TableName("gkzh_zycck_record")
 public class ZycckRecord {
+    @TableField(exist = false) private String participatePortrait;
     @TableId(value = "record_id", type = IdType.AUTO) private Long recordId;
     private Long schoolId;
     private Long instanceId;

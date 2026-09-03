@@ -136,7 +136,7 @@ public class ZycckRecordService {
         if (!timeout && optionKey != null) {
             ZycckCareerQuestion detail = questionMapper.selectById(current.getLong("questionId"));
             if (detail != null) {
-                JSONObject feedback = new JSONObject(); feedback.put("selectedOptionKey", optionKey); feedback.put("correctOptionKey", detail.getCorrectOptionKey()); feedback.put("correct", optionKey.equalsIgnoreCase(detail.getCorrectOptionKey())); feedback.put("correctCareerId", careerId(detail, detail.getCorrectOptionKey())); feedback.put("correctCareerName", careerName(detail, detail.getCorrectOptionKey())); feedback.put("explanation", detail.getExplanation()); result.put("feedback", feedback); result.put("correctCareer", feedback.get("correctCareerName"));
+                JSONObject feedback = new JSONObject(); feedback.put("selectedOptionKey", optionKey); feedback.put("guessedCareer", careerName(detail, optionKey)); feedback.put("correctOptionKey", detail.getCorrectOptionKey()); feedback.put("correct", optionKey.equalsIgnoreCase(detail.getCorrectOptionKey())); feedback.put("correctCareerId", careerId(detail, detail.getCorrectOptionKey())); feedback.put("correctCareerName", careerName(detail, detail.getCorrectOptionKey())); feedback.put("explanation", detail.getExplanation()); result.put("feedback", feedback); result.put("guessedCareer", feedback.get("guessedCareer")); result.put("correctCareer", feedback.get("correctCareerName")); result.put("explanation", detail.getExplanation());
             }
         }
         int next = no + 1;
@@ -173,7 +173,10 @@ public class ZycckRecordService {
         }
         if (record.getViewedCareerIds() == null || JSON.parseArray(record.getViewedCareerIds(), Long.class).isEmpty()) throw new ServiceException("请先查看职业详情");
         record.setStatus("finished"); record.setStage("exploration"); record.setFinishTime(DateUtils.getNowDate()); record.setUpdateTime(DateUtils.getNowDate());
-        recordMapper.updateById(record); return record;
+        recordMapper.updateById(record);
+        GkzhGameParticipation participation = activityWeekService.getLatestParticipation(record.getGameId(), record.getUserId());
+        if (participation != null && record.getInstanceId().equals(participation.getInstanceId())) { participation.setFinishTime(record.getFinishTime()); participation.setStatus("1"); participation.setResultJson(JSON.toJSONString(java.util.Collections.singletonMap("recordId", record.getRecordId()))); activityWeekService.updateGameParticipation(participation); }
+        return record;
     }
 
     @Transactional

@@ -5,6 +5,10 @@ import com.gkzh.common.core.domain.AjaxResult;
 import com.gkzh.common.core.domain.model.StudentCheckin;
 import com.gkzh.zycck.domain.ZycckRecord;
 import com.gkzh.zycck.service.ZycckRecordService;
+import com.gkzh.zycck.mapper.ZycckCategoryMapper;
+import com.gkzh.zycck.mapper.ZycckCareerQuestionMapper;
+import com.gkzh.zycck.domain.ZycckCategory;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -16,7 +20,17 @@ import java.util.Map;
 @RequestMapping("/api/zycck")
 public class ZycckAppController extends FrontBaseController {
     private final ZycckRecordService recordService;
-    public ZycckAppController(ZycckRecordService recordService) { this.recordService = recordService; }
+    private final ZycckCategoryMapper categoryMapper;
+    private final ZycckCareerQuestionMapper questionMapper;
+    public ZycckAppController(ZycckRecordService recordService, ZycckCategoryMapper categoryMapper, ZycckCareerQuestionMapper questionMapper) { this.recordService = recordService; this.categoryMapper = categoryMapper; this.questionMapper = questionMapper; }
+
+    @GetMapping("/catalog")
+    public AjaxResult catalog() {
+        Map<String,Object> result = new java.util.LinkedHashMap<>();
+        result.put("categories", categoryMapper.selectList(new QueryWrapper<ZycckCategory>().eq("status", "0").orderByAsc("sort_order")));
+        result.put("questions", questionMapper.selectList(new QueryWrapper<com.gkzh.zycck.domain.ZycckCareerQuestion>().eq("status", "0").orderByAsc("category_id","question_id")));
+        return AjaxResult.success(result);
+    }
 
     @PostMapping("/records/enter")
     public AjaxResult enter(@RequestBody Map<String,Object> body) {

@@ -12,6 +12,7 @@ public class ZycckCategory {
     @TableId(value = "category_id", type = IdType.AUTO) private Long categoryId;
     private String code;
     private String name;
+    private String description;
     private String drawMode;
     private Integer sortOrder;
     private String status;

@@ -86,8 +86,15 @@ public class ZycckRecordService {
         if (record.getStartTime() == null) {
             record.setStartTime(DateUtils.getNowDate());
             prepareQuestionSnapshot(record);
+            record.setStage("question");
+            record.setCurrentQuestionNo(1);
+        } else if ("question".equals(record.getStage()) && findAnswer(record, currentQuestionNo(record)) != null) {
+            // 兼容旧逻辑曾将已答题记录错误重置为 question 的数据，恢复到反馈阶段。
+            record.setStage("feedback");
+        } else if (record.getStage() == null || "scanned".equals(record.getStage())) {
+            record.setStage("question");
+            record.setCurrentQuestionNo(currentQuestionNo(record));
         }
-        record.setStage("question"); record.setCurrentQuestionNo(record.getCurrentQuestionNo() == null || record.getCurrentQuestionNo() < 1 ? 1 : record.getCurrentQuestionNo());
         if (record.getQuestionStartTime() == null && record.getCurrentQuestionNo() > 1) record.setQuestionStartTime(DateUtils.getNowDate());
         recordMapper.updateById(record); return record;
     }
@@ -115,16 +122,22 @@ public class ZycckRecordService {
     public Map<String,Object> answer(Long recordId, Long userId, Map<String,Object> answer) {
         ZycckRecord record = get(recordId, userId);
         if ("finished".equals(record.getStatus())) throw new ServiceException("本次游戏已完成");
-        if (!"question".equals(record.getStage())) throw new ServiceException("当前不在答题阶段");
-        int no = record.getCurrentQuestionNo() == null || record.getCurrentQuestionNo() < 1 ? 1 : record.getCurrentQuestionNo();
+        int no = currentQuestionNo(record);
         boolean timeout = Boolean.parseBoolean(String.valueOf(answer.getOrDefault("timeoutFlag", false)));
         java.util.List<JSONObject> snapshots = record.getOptionSnapshotJson() == null ? java.util.Collections.emptyList() : JSON.parseArray(record.getOptionSnapshotJson(), JSONObject.class);
         JSONObject current = no <= snapshots.size() ? snapshots.get(no - 1) : null;
         if (current == null) throw new ServiceException("题目已失效，请重新进入游戏");
+        JSONObject submitted = findAnswer(record, no);
+        if (submitted != null && submitted.getString("optionKey") != null) {
+            // 网络重试或旧版本错误恢复时返回首次提交结果，避免让用户卡在第一题。
+            record.setStage("feedback"); record.setUpdateTime(DateUtils.getNowDate()); recordMapper.updateById(record);
+            return feedbackResult(no, current, submitted.getString("optionKey"));
+        }
+        if (!"question".equals(record.getStage())) throw new ServiceException("当前不在答题阶段");
         String optionKey = answer.get("optionKey") == null ? null : String.valueOf(answer.get("optionKey")).toUpperCase();
         Integer requestedNo = answer.get("questionNo") == null ? null : Integer.valueOf(String.valueOf(answer.get("questionNo"))); if (requestedNo != null && requestedNo != no) throw new ServiceException("这道题已经提交过了");
         String requestedQuestionId = answer.get("questionId") == null ? null : String.valueOf(answer.get("questionId")); if (requestedQuestionId != null && !requestedQuestionId.equals(String.valueOf(current.getLong("questionId")))) throw new ServiceException("题目已更新，请按当前题目作答");
-        if (record.getAnswerJson() != null && JSON.parseArray(record.getAnswerJson(), JSONObject.class).stream().anyMatch(v -> no == v.getIntValue("questionNo"))) throw new ServiceException("这道题已经提交过了");
+        if (submitted != null) throw new ServiceException("这道题已经提交过了");
         long elapsed = record.getQuestionStartTime() == null ? 0 : Math.max(0, (System.currentTimeMillis() - record.getQuestionStartTime().getTime()) / 1000);
         if (elapsed > 60) timeout = true;
         Map<String,Object> result = new LinkedHashMap<>();
@@ -134,10 +147,7 @@ public class ZycckRecordService {
         answers.removeIf(item -> no == item.getIntValue("questionNo")); answers.add(answerItem); record.setAnswerJson(JSON.toJSONString(answers));
         record.setQuestionElapsedSeconds(Math.min(60, (int) elapsed));
         if (!timeout && optionKey != null) {
-            ZycckCareerQuestion detail = questionMapper.selectById(current.getLong("questionId"));
-            if (detail != null) {
-                JSONObject feedback = new JSONObject(); feedback.put("questionNo", no); feedback.put("selectedOptionKey", optionKey); feedback.put("guessedCareer", careerName(detail, optionKey)); feedback.put("correctOptionKey", detail.getCorrectOptionKey()); feedback.put("correct", optionKey.equalsIgnoreCase(detail.getCorrectOptionKey())); feedback.put("correctCareerId", careerId(detail, detail.getCorrectOptionKey())); feedback.put("correctCareerName", careerName(detail, detail.getCorrectOptionKey())); feedback.put("oneLineIntro", detail.getOneLineIntro()); feedback.put("mainWork", detail.getMainWork()); feedback.put("dayExample", detail.getDayExample()); feedback.put("whyExists", detail.getWhyExists()); feedback.put("careerImageUrl", detail.getCareerImageUrl()); feedback.put("explanation", detail.getExplanation()); result.put("feedback", feedback); result.put("guessedCareer", feedback.get("guessedCareer")); result.put("correctCareer", feedback.get("correctCareerName")); result.put("explanation", detail.getExplanation());
-            }
+            appendFeedback(result, no, current, optionKey);
         }
         int next = no + 1;
         if (!timeout && optionKey != null) {
@@ -146,6 +156,32 @@ public class ZycckRecordService {
         } else if (next > 5) { record.setStage("summary"); record.setStatus("participating"); result.put("stage", "summary"); result.put("finishedFive", true); }
         else { record.setStage("question"); record.setCurrentQuestionNo(next); record.setQuestionStartTime(DateUtils.getNowDate()); result.put("currentQuestionNo", next); result.put("remainingSeconds", 60); result.put("nextQuestion", snapshots.get(next - 1)); }
         record.setUpdateTime(DateUtils.getNowDate()); recordMapper.updateById(record); return result;
+    }
+
+    public Map<String,Object> feedbackView(ZycckRecord record) {
+        if (record == null || !"feedback".equals(record.getStage())) return java.util.Collections.emptyMap();
+        int no = currentQuestionNo(record);
+        java.util.List<JSONObject> snapshots = record.getOptionSnapshotJson() == null ? java.util.Collections.emptyList() : JSON.parseArray(record.getOptionSnapshotJson(), JSONObject.class);
+        JSONObject submitted = findAnswer(record, no);
+        if (submitted == null || submitted.getString("optionKey") == null || no > snapshots.size()) return java.util.Collections.emptyMap();
+        return feedbackResult(no, snapshots.get(no - 1), submitted.getString("optionKey"));
+    }
+
+    private Map<String,Object> feedbackResult(int no, JSONObject current, String optionKey) {
+        Map<String,Object> result = new LinkedHashMap<>(); result.put("questionNo", no); result.put("timeout", false);
+        appendFeedback(result, no, current, optionKey); result.put("stage", "feedback"); result.put("currentQuestionNo", no); return result;
+    }
+
+    private void appendFeedback(Map<String,Object> result, int no, JSONObject current, String optionKey) {
+        ZycckCareerQuestion detail = questionMapper.selectById(current.getLong("questionId"));
+        if (detail == null) return;
+        JSONObject feedback = new JSONObject(); feedback.put("questionNo", no); feedback.put("selectedOptionKey", optionKey); feedback.put("guessedCareer", careerName(detail, optionKey)); feedback.put("correctOptionKey", detail.getCorrectOptionKey()); feedback.put("correct", optionKey.equalsIgnoreCase(detail.getCorrectOptionKey())); feedback.put("correctCareerId", careerId(detail, detail.getCorrectOptionKey())); feedback.put("correctCareerName", careerName(detail, detail.getCorrectOptionKey())); feedback.put("oneLineIntro", detail.getOneLineIntro()); feedback.put("mainWork", detail.getMainWork()); feedback.put("dayExample", detail.getDayExample()); feedback.put("whyExists", detail.getWhyExists()); feedback.put("careerImageUrl", detail.getCareerImageUrl()); feedback.put("explanation", detail.getExplanation()); result.put("feedback", feedback); result.put("guessedCareer", feedback.get("guessedCareer")); result.put("correctCareer", feedback.get("correctCareerName")); result.put("explanation", detail.getExplanation());
+    }
+
+    private static int currentQuestionNo(ZycckRecord record) { return record.getCurrentQuestionNo() == null || record.getCurrentQuestionNo() < 1 ? 1 : record.getCurrentQuestionNo(); }
+    private static JSONObject findAnswer(ZycckRecord record, int no) {
+        if (record.getAnswerJson() == null) return null;
+        return JSON.parseArray(record.getAnswerJson(), JSONObject.class).stream().filter(v -> no == v.getIntValue("questionNo")).findFirst().orElse(null);
     }
 
     private static Long careerId(ZycckCareerQuestion q, String key) { if ("A".equalsIgnoreCase(key)) return q.getOptionACareerId(); if ("B".equalsIgnoreCase(key)) return q.getOptionBCareerId(); if ("C".equalsIgnoreCase(key)) return q.getOptionCCareerId(); return q.getOptionDCareerId(); }

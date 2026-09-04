@@ -80,6 +80,13 @@ public class ZycckAdminController extends BaseController {
     @PostMapping("/career-questions")
     public AjaxResult saveQuestion(@RequestBody ZycckCareerQuestion question) {
         if (question.getHasQuestion() == null) question.setHasQuestion("1");
+        if (!"1".equals(question.getHasQuestion())) {
+            question.setHasQuestion("0");
+            question.setDrawCandidate("0");
+            question.setOptionA(null); question.setOptionB(null); question.setOptionC(null); question.setOptionD(null);
+            question.setOptionACareerId(null); question.setOptionBCareerId(null); question.setOptionCCareerId(null); question.setOptionDCareerId(null);
+            question.setCorrectOptionKey(null);
+        }
         return toAjax(question.getCareerQuestionId() == null ? questionMapper.insert(question) : questionMapper.updateById(question));
     }
 

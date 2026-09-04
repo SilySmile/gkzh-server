@@ -31,7 +31,19 @@ public class ZycckAdminController extends BaseController {
     }
 
     @GetMapping("/categories")
-    public TableDataInfo categories() { startPage(); return getDataTable(categoryMapper.selectList(new QueryWrapper<ZycckCategory>().orderByAsc("sort_order"))); }
+    public TableDataInfo categories() {
+        startPage();
+        java.util.List<Map<String,Object>> rows = new java.util.ArrayList<>();
+        for (ZycckCategory category : categoryMapper.selectList(new QueryWrapper<ZycckCategory>().orderByAsc("sort_order"))) {
+            Map<String,Object> row = new LinkedHashMap<>();
+            row.put("categoryId", category.getCategoryId()); row.put("code", category.getCode()); row.put("name", category.getName());
+            row.put("description", category.getDescription()); row.put("drawMode", category.getDrawMode()); row.put("sortOrder", category.getSortOrder()); row.put("status", category.getStatus());
+            QueryWrapper<ZycckCareerQuestion> all = new QueryWrapper<ZycckCareerQuestion>().eq("category_id", category.getCategoryId());
+            QueryWrapper<ZycckCareerQuestion> candidates = new QueryWrapper<ZycckCareerQuestion>().eq("category_id", category.getCategoryId()).eq("draw_candidate", "1");
+            row.put("questionCount", questionMapper.selectCount(all)); row.put("candidateCount", questionMapper.selectCount(candidates)); rows.add(row);
+        }
+        return getDataTable(rows);
+    }
 
     @PostMapping("/categories")
     public AjaxResult saveCategory(@RequestBody ZycckCategory category) { return toAjax(category.getCategoryId() == null ? categoryMapper.insert(category) : categoryMapper.updateById(category)); }

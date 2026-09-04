@@ -1,7 +1,21 @@
 -- zycck Excel 文本迁移第一步：导入前 50 条基础职业和缺失的干扰职业。
 -- 无 A-D 选项的职业类型与最终分类由 v26_zycck_excel_exploration.sql 统一修正。
 
-ALTER TABLE gkzh_zycck_career_question ADD COLUMN has_question CHAR(1) NOT NULL DEFAULT '1' AFTER career_name;
+-- 兼容已经执行过部分迁移的环境：字段存在时不重复添加。
+SET @zycck_has_question := (
+  SELECT COUNT(*) FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'gkzh_zycck_career_question'
+    AND column_name = 'has_question'
+);
+SET @zycck_sql := IF(
+  @zycck_has_question = 0,
+  'ALTER TABLE gkzh_zycck_career_question ADD COLUMN has_question CHAR(1) NOT NULL DEFAULT ''1'' AFTER career_name',
+  'SELECT 1'
+);
+PREPARE zycck_stmt FROM @zycck_sql;
+EXECUTE zycck_stmt;
+DEALLOCATE PREPARE zycck_stmt;
 ALTER TABLE gkzh_zycck_career_question MODIFY option_a VARCHAR(200) DEFAULT NULL, MODIFY option_b VARCHAR(200) DEFAULT NULL, MODIFY option_c VARCHAR(200) DEFAULT NULL, MODIFY option_d VARCHAR(200) DEFAULT NULL, MODIFY option_a_career_id BIGINT DEFAULT NULL, MODIFY option_b_career_id BIGINT DEFAULT NULL, MODIFY option_c_career_id BIGINT DEFAULT NULL, MODIFY option_d_career_id BIGINT DEFAULT NULL, MODIFY correct_option_key CHAR(1) DEFAULT NULL;
 UPDATE gkzh_zycck_career_question SET status='1', draw_candidate='0' WHERE status='0';
 UPDATE gkzh_zycck_category SET draw_mode='fixed', status='0', update_time=NOW() WHERE code='digital_product';

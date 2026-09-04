@@ -40,7 +40,7 @@ SELECT c.category_id,'手工艺创作者','0','用双手把创意变成独特的
 FROM gkzh_zycck_category c WHERE c.code='freelance_skill'
 ON DUPLICATE KEY UPDATE has_question='0',one_line_intro=VALUES(one_line_intro),main_work=VALUES(main_work),day_example=VALUES(day_example),why_exists=VALUES(why_exists),draw_candidate='0',sort_order=12,status='0',update_time=NOW();
 
--- 补充职业插入后，按选项中文名称重新回填所有题目的职业引用；选项展示仍以中文为准。
+-- 按选项中文名称回填 Excel 正式职业的引用；选项仅有中文而没有正式职业行时允许 ID 为空。
 UPDATE gkzh_zycck_career_question q JOIN gkzh_zycck_career_question c ON c.career_name=q.option_a AND c.status='0'
 SET q.option_a_career_id=c.career_question_id WHERE q.has_question='1' AND q.option_a IS NOT NULL;
 UPDATE gkzh_zycck_career_question q JOIN gkzh_zycck_career_question c ON c.career_name=q.option_b AND c.status='0'
@@ -50,7 +50,7 @@ SET q.option_c_career_id=c.career_question_id WHERE q.has_question='1' AND q.opt
 UPDATE gkzh_zycck_career_question q JOIN gkzh_zycck_career_question c ON c.career_name=q.option_d AND c.status='0'
 SET q.option_d_career_id=c.career_question_id WHERE q.has_question='1' AND q.option_d IS NOT NULL;
 
--- 校验：Excel 内容行数量为 10、12、10、12、12；补充的选项职业另计；题目数量为 1、3、1、3、3。
+-- 删除仅选项职业并校验 56 条正式内容，需要继续执行 v29_zycck_keep_excel_careers_only.sql。
 SELECT c.code,
        SUM(q.status='0') AS career_count,
        SUM(q.status='0' AND q.has_question='1') AS question_count,

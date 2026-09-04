@@ -28,11 +28,12 @@ public class ZycckAppController extends FrontBaseController {
     public AjaxResult catalog() {
         Map<String,Object> result = new java.util.LinkedHashMap<>();
         result.put("categories", categoryMapper.selectList(new QueryWrapper<ZycckCategory>().eq("status", "0").orderByAsc("sort_order")));
+        java.util.List<Map<String,Object>> careers = new java.util.ArrayList<>();
         java.util.List<Map<String,Object>> questions = new java.util.ArrayList<>();
-        for (com.gkzh.zycck.domain.ZycckCareerQuestion q : questionMapper.selectList(new QueryWrapper<com.gkzh.zycck.domain.ZycckCareerQuestion>().eq("status", "0").orderByAsc("category_id","question_id"))) {
-            Map<String,Object> safe = new java.util.LinkedHashMap<>(); safe.put("careerQuestionId", q.getCareerQuestionId()); safe.put("categoryId", q.getCategoryId()); safe.put("careerName", q.getCareerName()); safe.put("oneLineIntro", q.getOneLineIntro()); safe.put("mainWork", q.getMainWork()); safe.put("dayExample", q.getDayExample()); safe.put("whyExists", q.getWhyExists()); safe.put("careerImageUrl", q.getCareerImageUrl()); safe.put("questionImageUrl", q.getQuestionImageUrl()); safe.put("optionA", q.getOptionA()); safe.put("optionB", q.getOptionB()); safe.put("optionC", q.getOptionC()); safe.put("optionD", q.getOptionD()); safe.put("drawCandidate", q.getDrawCandidate()); questions.add(safe);
+        for (com.gkzh.zycck.domain.ZycckCareerQuestion q : questionMapper.selectList(new QueryWrapper<com.gkzh.zycck.domain.ZycckCareerQuestion>().eq("status", "0").orderByAsc("category_id","sort_order","career_question_id"))) {
+            Map<String,Object> safe = new java.util.LinkedHashMap<>(); safe.put("careerQuestionId", q.getCareerQuestionId()); safe.put("careerId", q.getCareerQuestionId()); safe.put("categoryId", q.getCategoryId()); safe.put("careerName", q.getCareerName()); safe.put("hasQuestion", q.getHasQuestion()); safe.put("oneLineIntro", q.getOneLineIntro()); safe.put("mainWork", q.getMainWork()); safe.put("dayExample", q.getDayExample()); safe.put("whyExists", q.getWhyExists()); safe.put("careerImageUrl", q.getCareerImageUrl()); safe.put("questionImageUrl", q.getQuestionImageUrl()); safe.put("optionA", q.getOptionA()); safe.put("optionB", q.getOptionB()); safe.put("optionC", q.getOptionC()); safe.put("optionD", q.getOptionD()); safe.put("drawCandidate", q.getDrawCandidate()); careers.add(safe); if ("1".equals(q.getHasQuestion())) questions.add(safe);
         }
-        result.put("questions", questions);
+        result.put("careers", careers); result.put("questions", questions);
         return AjaxResult.success(result);
     }
 

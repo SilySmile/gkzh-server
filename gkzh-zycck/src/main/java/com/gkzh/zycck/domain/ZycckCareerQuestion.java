@@ -12,6 +12,8 @@ public class ZycckCareerQuestion {
     @TableId(value = "career_question_id", type = IdType.AUTO) private Long careerQuestionId;
     private Long categoryId;
     private String careerName;
+    /** 1=有对应竞猜题，0=仅作为选项职业维护，不生成题目。 */
+    private String hasQuestion;
     private String oneLineIntro;
     private String mainWork;
     private String dayExample;

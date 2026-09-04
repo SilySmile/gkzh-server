@@ -1,6 +1,7 @@
 package com.gkzh.web.controller.zycck;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.gkzh.common.core.controller.BaseController;
 import com.gkzh.common.core.domain.AjaxResult;
 import com.gkzh.common.core.page.TableDataInfo;
@@ -38,9 +39,10 @@ public class ZycckAdminController extends BaseController {
             Map<String,Object> row = new LinkedHashMap<>();
             row.put("categoryId", category.getCategoryId()); row.put("code", category.getCode()); row.put("name", category.getName());
             row.put("description", category.getDescription()); row.put("drawMode", category.getDrawMode()); row.put("sortOrder", category.getSortOrder()); row.put("status", category.getStatus());
-            QueryWrapper<ZycckCareerQuestion> all = new QueryWrapper<ZycckCareerQuestion>().eq("category_id", category.getCategoryId());
-            QueryWrapper<ZycckCareerQuestion> candidates = new QueryWrapper<ZycckCareerQuestion>().eq("category_id", category.getCategoryId()).eq("draw_candidate", "1");
-            row.put("questionCount", questionMapper.selectCount(all)); row.put("candidateCount", questionMapper.selectCount(candidates)); rows.add(row);
+            QueryWrapper<ZycckCareerQuestion> all = new QueryWrapper<ZycckCareerQuestion>().eq("category_id", category.getCategoryId()).eq("status", "0");
+            QueryWrapper<ZycckCareerQuestion> candidates = new QueryWrapper<ZycckCareerQuestion>().eq("category_id", category.getCategoryId()).eq("has_question", "1").eq("draw_candidate", "1").eq("status", "0");
+            QueryWrapper<ZycckCareerQuestion> questions = new QueryWrapper<ZycckCareerQuestion>().eq("category_id", category.getCategoryId()).eq("has_question", "1").eq("status", "0");
+            row.put("careerCount", questionMapper.selectCount(all)); row.put("questionCount", questionMapper.selectCount(questions)); row.put("candidateCount", questionMapper.selectCount(candidates)); rows.add(row);
         }
         return getDataTable(rows);
     }
@@ -67,13 +69,34 @@ public class ZycckAdminController extends BaseController {
     public AjaxResult deleteCategory(@PathVariable Long id) { return toAjax(categoryMapper.deleteById(id)); }
 
     @GetMapping("/career-questions")
-    public TableDataInfo questions(@RequestParam(required = false) Long categoryId) { startPage(); QueryWrapper<ZycckCareerQuestion> q = new QueryWrapper<ZycckCareerQuestion>().orderByAsc("category_id", "career_question_id"); if (categoryId != null) q.eq("category_id", categoryId); return getDataTable(questionMapper.selectList(q)); }
+    public TableDataInfo questions(@RequestParam(required = false) Long categoryId, @RequestParam(required = false) Integer hasQuestion) {
+        startPage();
+        QueryWrapper<ZycckCareerQuestion> q = new QueryWrapper<ZycckCareerQuestion>().orderByAsc("category_id", "sort_order", "career_question_id");
+        if (categoryId != null) q.eq("category_id", categoryId);
+        if (hasQuestion != null) q.eq("has_question", hasQuestion == 1 ? "1" : "0");
+        return getDataTable(questionMapper.selectList(q));
+    }
 
     @PostMapping("/career-questions")
-    public AjaxResult saveQuestion(@RequestBody ZycckCareerQuestion question) { return toAjax(question.getCareerQuestionId() == null ? questionMapper.insert(question) : questionMapper.updateById(question)); }
+    public AjaxResult saveQuestion(@RequestBody ZycckCareerQuestion question) {
+        if (question.getHasQuestion() == null) question.setHasQuestion("1");
+        return toAjax(question.getCareerQuestionId() == null ? questionMapper.insert(question) : questionMapper.updateById(question));
+    }
 
     @DeleteMapping("/career-questions/{id}")
-    public AjaxResult deleteQuestion(@PathVariable Long id) { return toAjax(questionMapper.deleteById(id)); }
+    public AjaxResult deleteQuestion(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean careerOnly) {
+        ZycckCareerQuestion question = questionMapper.selectById(id);
+        if (question == null) return AjaxResult.error("职业或题目不存在");
+        if (careerOnly) return toAjax(questionMapper.deleteById(id));
+        UpdateWrapper<ZycckCareerQuestion> update = new UpdateWrapper<ZycckCareerQuestion>()
+                .eq("career_question_id", id)
+                .set("has_question", "0")
+                .set("draw_candidate", "0")
+                .set("option_a", null).set("option_b", null).set("option_c", null).set("option_d", null)
+                .set("option_a_career_id", null).set("option_b_career_id", null).set("option_c_career_id", null).set("option_d_career_id", null)
+                .set("correct_option_key", null).set("update_time", new java.util.Date());
+        return toAjax(questionMapper.update(null, update));
+    }
 
     @GetMapping("/records")
     public TableDataInfo records(@RequestParam(required = false) Long instanceId, @RequestParam(required = false) Long schoolId, @RequestParam(required = false) Long departmentId, @RequestParam(required = false) String major, @RequestParam(required = false) String gender) {

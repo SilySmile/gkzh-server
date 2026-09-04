@@ -101,7 +101,7 @@ public class ZycckRecordService {
         java.util.List<Long> questionIds = new java.util.ArrayList<>(); java.util.List<Long> categoryIds = new java.util.ArrayList<>(); java.util.List<Long> careerIds = new java.util.ArrayList<>();
         java.util.List<JSONObject> snapshots = new java.util.ArrayList<>();
         for (ZycckCategory category : categories) {
-            java.util.List<ZycckCareerQuestion> candidates = questionMapper.selectList(new QueryWrapper<ZycckCareerQuestion>().eq("category_id", category.getCategoryId()).eq("status", "0").eq("draw_candidate", "1").orderByAsc("sort_order", "career_question_id"));
+            java.util.List<ZycckCareerQuestion> candidates = questionMapper.selectList(new QueryWrapper<ZycckCareerQuestion>().eq("category_id", category.getCategoryId()).eq("status", "0").eq("has_question", "1").eq("draw_candidate", "1").orderByAsc("sort_order", "career_question_id"));
             int required = "random".equalsIgnoreCase(category.getDrawMode()) ? 3 : 1;
             if (candidates.size() != required) throw new ServiceException(category.getName() + "的抽题候选数量不符合配置");
             ZycckCareerQuestion q = candidates.get("random".equalsIgnoreCase(category.getDrawMode()) ? new java.util.Random().nextInt(candidates.size()) : 0);
@@ -182,6 +182,8 @@ public class ZycckRecordService {
     @Transactional
     public ZycckRecord browse(Long recordId, Long userId, Long careerId) {
         ZycckRecord record = get(recordId, userId); if ("finished".equals(record.getStatus())) throw new ServiceException("本次游戏已完成");
+        ZycckCareerQuestion career = questionMapper.selectById(careerId);
+        if (career == null || !"0".equals(career.getStatus()) || "1".equals(career.getHasQuestion())) throw new ServiceException("该职业仅用于竞猜，暂不可探索");
         java.util.List<Long> ids = record.getViewedCareerIds() == null ? new java.util.ArrayList<>() : JSON.parseArray(record.getViewedCareerIds(), Long.class); if (careerId != null && !ids.contains(careerId)) ids.add(careerId); record.setViewedCareerIds(JSON.toJSONString(ids)); record.setUpdateTime(DateUtils.getNowDate()); recordMapper.updateById(record); return record;
     }
 
@@ -194,6 +196,8 @@ public class ZycckRecordService {
     @Transactional
     public ZycckRecord updateExploration(Long recordId, Long userId, Long careerId, boolean remove) {
         ZycckRecord record = get(recordId, userId); if ("finished".equals(record.getStatus())) throw new ServiceException("本次游戏已完成，结果仅可查看");
+        ZycckCareerQuestion career = questionMapper.selectById(careerId);
+        if (career == null || !"0".equals(career.getStatus()) || "1".equals(career.getHasQuestion())) throw new ServiceException("该职业仅用于竞猜，不能加入探索清单");
         java.util.List<Long> ids = record.getExplorationCareerIds() == null ? new java.util.ArrayList<>() : JSON.parseArray(record.getExplorationCareerIds(), Long.class); if (remove) ids.remove(careerId); else { if (!ids.contains(careerId) && ids.size() >= 6) throw new ServiceException("探索清单最多添加 6 个职业"); if (!ids.contains(careerId)) ids.add(careerId); } record.setExplorationCareerIds(JSON.toJSONString(ids)); record.setUpdateTime(DateUtils.getNowDate()); recordMapper.updateById(record); return record;
     }
 }

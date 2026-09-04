@@ -76,8 +76,15 @@ public class ActivityWeekServiceImpl implements IActivityWeekService {
 
     @Override
     public List<GkzhGameConfig> listGameConfigs(String gameType) {
+        return listGameConfigs(gameType, null);
+    }
+
+    @Override
+    public List<GkzhGameConfig> listGameConfigs(String gameType, String status) {
         QueryWrapper<GkzhGameConfig> query = new QueryWrapper<>();
-        query.eq("status", "0");
+        if (status != null && !status.trim().isEmpty()) {
+            query.eq("status", status.trim());
+        }
         if (gameType != null && !gameType.trim().isEmpty()) {
             if ("choice".equals(gameType) || "answer".equals(gameType) || "cooperation".equals(gameType)) {
                 query.eq("category", gameType);

@@ -95,8 +95,9 @@ public class GkzhActivityWeekController extends BaseController {
     }
 
     @GetMapping("/gameConfigs")
-    public AjaxResult gameConfigs(@RequestParam(required = false) String gameType) {
-        return AjaxResult.success(activityWeekService.listGameConfigs(gameType));
+    public AjaxResult gameConfigs(@RequestParam(required = false) String gameType,
+                                  @RequestParam(required = false) String status) {
+        return AjaxResult.success(activityWeekService.listGameConfigs(gameType, status));
     }
 
     @PostMapping("/gameConfig")

@@ -22,6 +22,8 @@ public interface IActivityWeekService {
 
     List<GkzhGameConfig> listGameConfigs(String gameType);
 
+    List<GkzhGameConfig> listGameConfigs(String gameType, String status);
+
     int saveGameConfig(GkzhGameConfig config);
 
     int deleteGameConfig(Long configId);

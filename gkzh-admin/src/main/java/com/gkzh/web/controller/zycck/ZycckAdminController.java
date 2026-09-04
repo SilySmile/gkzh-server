@@ -46,7 +46,22 @@ public class ZycckAdminController extends BaseController {
     }
 
     @PostMapping("/categories")
-    public AjaxResult saveCategory(@RequestBody ZycckCategory category) { return toAjax(category.getCategoryId() == null ? categoryMapper.insert(category) : categoryMapper.updateById(category)); }
+    public AjaxResult saveCategory(@RequestBody ZycckCategory category) {
+        if (category.getCode() == null || category.getCode().trim().isEmpty()) {
+            if (category.getCategoryId() != null) {
+                ZycckCategory current = categoryMapper.selectById(category.getCategoryId());
+                if (current != null && current.getCode() != null && !current.getCode().trim().isEmpty()) {
+                    category.setCode(current.getCode());
+                }
+            }
+            if (category.getCode() == null || category.getCode().trim().isEmpty()) {
+                category.setCode("category_" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 16));
+            }
+        } else {
+            category.setCode(category.getCode().trim());
+        }
+        return toAjax(category.getCategoryId() == null ? categoryMapper.insert(category) : categoryMapper.updateById(category));
+    }
 
     @DeleteMapping("/categories/{id}")
     public AjaxResult deleteCategory(@PathVariable Long id) { return toAjax(categoryMapper.deleteById(id)); }

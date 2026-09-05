@@ -73,9 +73,17 @@ public class ZycckRecordService {
         return record;
     }
 
+    @Transactional
     public ZycckRecord get(Long recordId, Long userId) {
         ZycckRecord record = recordMapper.selectById(recordId);
         if (record == null || !userId.equals(record.getUserId())) throw new ServiceException("记录不存在");
+        if ("question".equals(record.getStage())) {
+            JSONObject submitted = findAnswer(record, currentQuestionNo(record));
+            if (submitted != null && submitted.getString("optionKey") != null) {
+                // 自动修复旧版本留下的“答案已保存但仍停留在答题阶段”记录。
+                record.setStage("feedback"); record.setUpdateTime(DateUtils.getNowDate()); recordMapper.updateById(record);
+            }
+        }
         return record;
     }
 
@@ -135,7 +143,8 @@ public class ZycckRecordService {
         }
         if (!"question".equals(record.getStage())) throw new ServiceException("当前不在答题阶段");
         String optionKey = answer.get("optionKey") == null ? null : String.valueOf(answer.get("optionKey")).toUpperCase();
-        Integer requestedNo = answer.get("questionNo") == null ? null : Integer.valueOf(String.valueOf(answer.get("questionNo"))); if (requestedNo != null && requestedNo != no) throw new ServiceException("这道题已经提交过了");
+        Integer requestedNo = answer.get("questionNo") == null ? null : Integer.valueOf(String.valueOf(answer.get("questionNo")));
+        if (requestedNo != null && requestedNo != no) return currentProgress(record, snapshots);
         String requestedQuestionId = answer.get("questionId") == null ? null : String.valueOf(answer.get("questionId")); if (requestedQuestionId != null && !requestedQuestionId.equals(String.valueOf(current.getLong("questionId")))) throw new ServiceException("题目已更新，请按当前题目作答");
         if (submitted != null) throw new ServiceException("这道题已经提交过了");
         long elapsed = record.getQuestionStartTime() == null ? 0 : Math.max(0, (System.currentTimeMillis() - record.getQuestionStartTime().getTime()) / 1000);
@@ -170,6 +179,19 @@ public class ZycckRecordService {
     private Map<String,Object> feedbackResult(int no, JSONObject current, String optionKey) {
         Map<String,Object> result = new LinkedHashMap<>(); result.put("questionNo", no); result.put("timeout", false);
         appendFeedback(result, no, current, optionKey); result.put("stage", "feedback"); result.put("currentQuestionNo", no); return result;
+    }
+
+    private Map<String,Object> currentProgress(ZycckRecord record, java.util.List<JSONObject> snapshots) {
+        int no = currentQuestionNo(record);
+        JSONObject submitted = findAnswer(record, no);
+        if (submitted != null && submitted.getString("optionKey") != null && no <= snapshots.size()) {
+            return feedbackResult(no, snapshots.get(no - 1), submitted.getString("optionKey"));
+        }
+        Map<String,Object> result = new LinkedHashMap<>(); result.put("stage", record.getStage()); result.put("currentQuestionNo", no);
+        if ("question".equals(record.getStage()) && no <= snapshots.size()) {
+            result.put("nextQuestion", snapshots.get(no - 1)); result.put("remainingSeconds", 60);
+        }
+        return result;
     }
 
     private void appendFeedback(Map<String,Object> result, int no, JSONObject current, String optionKey) {

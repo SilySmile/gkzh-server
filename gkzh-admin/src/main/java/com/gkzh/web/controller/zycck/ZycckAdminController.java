@@ -19,6 +19,8 @@ import com.gkzh.school.mapper.GkzhSchoolMapper;
 import com.gkzh.school.mapper.GkzhStudentMapper;
 import com.gkzh.activity.domain.week.GkzhActivityWeekInstance;
 import com.gkzh.activity.service.IActivityWeekService;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -139,6 +141,52 @@ public class ZycckAdminController extends BaseController {
         java.util.List<ZycckRecord> rows = recordMapper.selectList(q); Map<String,Object> result = new LinkedHashMap<>();
         result.put("participating", rows.size()); result.put("enteredCount", rows.size()); result.put("finished", rows.stream().filter(x -> "finished".equals(x.getStatus())).count());
         result.put("finishedCount", rows.stream().filter(x -> "finished".equals(x.getStatus())).count()); result.put("records", enrichRecords(rows)); return AjaxResult.success(result);
+    }
+
+    /** 查询单个学生在本游戏中的题目选择、正确答案和职业了解程度。 */
+    @GetMapping("/statistics/{recordId}")
+    public AjaxResult statisticsRecord(@PathVariable Long recordId) {
+        ZycckRecord record = recordMapper.selectById(recordId);
+        if (record == null || !"zycck".equals(record.getGameType())) return AjaxResult.error("参与记录不存在");
+        Map<String,Object> result = enrichRecords(java.util.Collections.singletonList(record)).get(0);
+        java.util.List<JSONObject> snapshots = parseJsonArray(record.getOptionSnapshotJson());
+        java.util.Map<Integer, JSONObject> answers = indexByQuestionNo(parseJsonArray(record.getAnswerJson()));
+        java.util.Map<Integer, JSONObject> awareness = indexByQuestionNo(parseJsonArray(record.getAwarenessJson()));
+        java.util.List<Map<String,Object>> choices = new java.util.ArrayList<>();
+        for (JSONObject snapshot : snapshots) {
+            int no = snapshot.getIntValue("questionNo");
+            JSONObject answer = answers.get(no);
+            JSONObject aware = awareness.get(no);
+            String selectedKey = answer == null ? null : answer.getString("optionKey");
+            ZycckCareerQuestion question = snapshot.getLong("questionId") == null ? null : questionMapper.selectById(snapshot.getLong("questionId"));
+            String correctKey = question == null ? null : question.getCorrectOptionKey();
+            Map<String,Object> choice = new LinkedHashMap<>();
+            choice.put("questionNo", no); choice.put("scenarioCareerName", snapshot.getString("careerName"));
+            choice.put("selectedOptionKey", selectedKey); choice.put("selectedCareerName", optionText(snapshot, selectedKey));
+            choice.put("correctOptionKey", correctKey); choice.put("correctCareerName", optionText(snapshot, correctKey));
+            choice.put("correct", selectedKey != null && correctKey != null && selectedKey.equalsIgnoreCase(correctKey));
+            choice.put("timeout", answer != null && answer.getBooleanValue("timeout"));
+            choice.put("awareness", aware == null ? null : (aware.getString("level") != null ? aware.getString("level") : aware.getString("awareness")));
+            choices.add(choice);
+        }
+        result.put("choices", choices);
+        return AjaxResult.success(result);
+    }
+
+    private java.util.List<JSONObject> parseJsonArray(String value) {
+        if (value == null || value.trim().isEmpty()) return new java.util.ArrayList<>();
+        try { return JSON.parseArray(value, JSONObject.class); } catch (Exception e) { return new java.util.ArrayList<>(); }
+    }
+
+    private java.util.Map<Integer, JSONObject> indexByQuestionNo(java.util.List<JSONObject> values) {
+        java.util.Map<Integer, JSONObject> result = new java.util.HashMap<>();
+        for (JSONObject value : values) result.put(value.getIntValue("questionNo"), value);
+        return result;
+    }
+
+    private String optionText(JSONObject snapshot, String key) {
+        if (key == null || key.trim().isEmpty()) return null;
+        return snapshot.getString("option" + key.trim().toUpperCase());
     }
 
     private QueryWrapper<ZycckRecord> buildRecordQuery(Long instanceId, Long schoolId, Long departmentId, String major, String gender) {

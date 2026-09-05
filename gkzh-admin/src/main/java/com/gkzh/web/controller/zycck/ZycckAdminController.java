@@ -17,6 +17,8 @@ import com.gkzh.school.domain.GkzhStudent;
 import com.gkzh.school.mapper.GkzhSchoolDepartmentMapper;
 import com.gkzh.school.mapper.GkzhSchoolMapper;
 import com.gkzh.school.mapper.GkzhStudentMapper;
+import com.gkzh.activity.domain.week.GkzhActivityWeekInstance;
+import com.gkzh.activity.service.IActivityWeekService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -35,11 +37,13 @@ public class ZycckAdminController extends BaseController {
     private final GkzhSchoolMapper schoolMapper;
     private final GkzhSchoolDepartmentMapper departmentMapper;
     private final GkzhStudentMapper studentMapper;
+    private final IActivityWeekService activityWeekService;
 
     public ZycckAdminController(ZycckCategoryMapper categoryMapper, ZycckCareerQuestionMapper questionMapper, ZycckRecordMapper recordMapper,
-                                GkzhSchoolMapper schoolMapper, GkzhSchoolDepartmentMapper departmentMapper, GkzhStudentMapper studentMapper) {
+                                GkzhSchoolMapper schoolMapper, GkzhSchoolDepartmentMapper departmentMapper, GkzhStudentMapper studentMapper,
+                                IActivityWeekService activityWeekService) {
         this.categoryMapper = categoryMapper; this.questionMapper = questionMapper; this.recordMapper = recordMapper;
-        this.schoolMapper = schoolMapper; this.departmentMapper = departmentMapper; this.studentMapper = studentMapper;
+        this.schoolMapper = schoolMapper; this.departmentMapper = departmentMapper; this.studentMapper = studentMapper; this.activityWeekService = activityWeekService;
     }
 
     @GetMapping("/categories")
@@ -145,8 +149,10 @@ public class ZycckAdminController extends BaseController {
 
     private java.util.List<Map<String,Object>> enrichRecords(java.util.List<ZycckRecord> records) {
         java.util.List<Map<String,Object>> result = new java.util.ArrayList<>();
+        java.util.Map<Long, String> instanceNames = new java.util.HashMap<>();
+        for (GkzhActivityWeekInstance instance : activityWeekService.listInstances(null)) instanceNames.put(instance.getInstanceId(), instance.getTitle());
         for (ZycckRecord record : records) {
-            Map<String,Object> row = new LinkedHashMap<>(); row.put("recordId", record.getRecordId()); row.put("instanceId", record.getInstanceId()); row.put("gameId", record.getGameId()); row.put("userId", record.getUserId()); row.put("studentId", record.getStudentId()); row.put("schoolId", record.getSchoolId()); row.put("departmentId", record.getDepartmentId()); row.put("major", record.getMajor()); row.put("gender", record.getGender()); row.put("gameType", record.getGameType()); row.put("status", record.getStatus()); row.put("stage", record.getStage()); row.put("scanTime", record.getScanTime()); row.put("finishTime", record.getFinishTime()); row.put("createTime", record.getCreateTime()); row.put("updateTime", record.getUpdateTime());
+            Map<String,Object> row = new LinkedHashMap<>(); row.put("recordId", record.getRecordId()); row.put("instanceId", record.getInstanceId()); row.put("instanceName", instanceNames.get(record.getInstanceId())); row.put("gameId", record.getGameId()); row.put("userId", record.getUserId()); row.put("studentId", record.getStudentId()); row.put("schoolId", record.getSchoolId()); row.put("departmentId", record.getDepartmentId()); row.put("major", record.getMajor()); row.put("gender", record.getGender()); row.put("gameType", record.getGameType()); row.put("status", record.getStatus()); row.put("stage", record.getStage()); row.put("scanTime", record.getScanTime()); row.put("finishTime", record.getFinishTime()); row.put("createTime", record.getCreateTime()); row.put("updateTime", record.getUpdateTime());
             GkzhStudent student = record.getStudentId() == null ? null : studentMapper.selectGkzhStudentByStudentId(record.getStudentId());
             if (student == null && record.getUserId() != null) student = studentMapper.selectOne(new QueryWrapper<GkzhStudent>().eq("user_id", record.getUserId()).last("limit 1"));
             if (student != null) { row.put("studentName", student.getStudentName()); row.put("studentNo", student.getStudentNo()); if (row.get("major") == null) row.put("major", student.getDepartmentName()); if (row.get("gender") == null) row.put("gender", genderText(student.getGender())); }

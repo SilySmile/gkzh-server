@@ -11,6 +11,12 @@ import com.gkzh.zycck.domain.ZycckRecord;
 import com.gkzh.zycck.mapper.ZycckCareerQuestionMapper;
 import com.gkzh.zycck.mapper.ZycckCategoryMapper;
 import com.gkzh.zycck.mapper.ZycckRecordMapper;
+import com.gkzh.school.domain.GkzhSchool;
+import com.gkzh.school.domain.GkzhSchoolDepartment;
+import com.gkzh.school.domain.GkzhStudent;
+import com.gkzh.school.mapper.GkzhSchoolDepartmentMapper;
+import com.gkzh.school.mapper.GkzhSchoolMapper;
+import com.gkzh.school.mapper.GkzhStudentMapper;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -26,9 +32,14 @@ public class ZycckAdminController extends BaseController {
     private final ZycckCategoryMapper categoryMapper;
     private final ZycckCareerQuestionMapper questionMapper;
     private final ZycckRecordMapper recordMapper;
+    private final GkzhSchoolMapper schoolMapper;
+    private final GkzhSchoolDepartmentMapper departmentMapper;
+    private final GkzhStudentMapper studentMapper;
 
-    public ZycckAdminController(ZycckCategoryMapper categoryMapper, ZycckCareerQuestionMapper questionMapper, ZycckRecordMapper recordMapper) {
+    public ZycckAdminController(ZycckCategoryMapper categoryMapper, ZycckCareerQuestionMapper questionMapper, ZycckRecordMapper recordMapper,
+                                GkzhSchoolMapper schoolMapper, GkzhSchoolDepartmentMapper departmentMapper, GkzhStudentMapper studentMapper) {
         this.categoryMapper = categoryMapper; this.questionMapper = questionMapper; this.recordMapper = recordMapper;
+        this.schoolMapper = schoolMapper; this.departmentMapper = departmentMapper; this.studentMapper = studentMapper;
     }
 
     @GetMapping("/categories")
@@ -107,13 +118,49 @@ public class ZycckAdminController extends BaseController {
 
     @GetMapping("/records")
     public TableDataInfo records(@RequestParam(required = false) Long instanceId, @RequestParam(required = false) Long schoolId, @RequestParam(required = false) Long departmentId, @RequestParam(required = false) String major, @RequestParam(required = false) String gender) {
-        startPage(); QueryWrapper<ZycckRecord> q = new QueryWrapper<ZycckRecord>().eq("game_type", "zycck").orderByDesc("record_id"); if (instanceId != null) q.eq("instance_id", instanceId); if (schoolId != null) q.eq("school_id", schoolId); if (departmentId != null) q.eq("department_id", departmentId); if (major != null && !major.trim().isEmpty()) q.like("major", major.trim()); if (gender != null && !gender.trim().isEmpty()) q.eq("gender", gender.trim()); return getDataTable(recordMapper.selectList(q));
+        startPage(); QueryWrapper<ZycckRecord> q = buildRecordQuery(instanceId, schoolId, departmentId, major, gender).orderByDesc("record_id");
+        return getDataTable(enrichRecords(recordMapper.selectList(q)));
+    }
+
+    @DeleteMapping("/records/{id}")
+    public AjaxResult deleteRecord(@PathVariable Long id) {
+        ZycckRecord record = recordMapper.selectById(id);
+        if (record == null || !"zycck".equals(record.getGameType())) return AjaxResult.error("参与记录不存在");
+        return toAjax(recordMapper.deleteById(id));
     }
 
     @GetMapping("/statistics")
     public AjaxResult statistics(@RequestParam(required = false) Long instanceId, @RequestParam(required = false) Long schoolId, @RequestParam(required = false) Long departmentId, @RequestParam(required = false) String major, @RequestParam(required = false) String gender) {
-        QueryWrapper<ZycckRecord> q = new QueryWrapper<ZycckRecord>().eq("game_type", "zycck"); if (instanceId != null) q.eq("instance_id", instanceId); if (schoolId != null) q.eq("school_id", schoolId); if (departmentId != null) q.eq("department_id", departmentId); if (major != null && !major.trim().isEmpty()) q.like("major", major.trim()); if (gender != null && !gender.trim().isEmpty()) q.eq("gender", gender.trim());
-        java.util.List<ZycckRecord> rows = recordMapper.selectList(q); Map<String,Object> result = new LinkedHashMap<>(); result.put("participating", rows.size()); result.put("finished", rows.stream().filter(x -> "finished".equals(x.getStatus())).count()); result.put("records", rows); return AjaxResult.success(result);
+        QueryWrapper<ZycckRecord> q = buildRecordQuery(instanceId, schoolId, departmentId, major, gender);
+        java.util.List<ZycckRecord> rows = recordMapper.selectList(q); Map<String,Object> result = new LinkedHashMap<>();
+        result.put("participating", rows.size()); result.put("enteredCount", rows.size()); result.put("finished", rows.stream().filter(x -> "finished".equals(x.getStatus())).count());
+        result.put("finishedCount", rows.stream().filter(x -> "finished".equals(x.getStatus())).count()); result.put("records", enrichRecords(rows)); return AjaxResult.success(result);
+    }
+
+    private QueryWrapper<ZycckRecord> buildRecordQuery(Long instanceId, Long schoolId, Long departmentId, String major, String gender) {
+        QueryWrapper<ZycckRecord> q = new QueryWrapper<ZycckRecord>().eq("game_type", "zycck");
+        if (instanceId != null) q.eq("instance_id", instanceId); if (schoolId != null) q.eq("school_id", schoolId); if (departmentId != null) q.eq("department_id", departmentId);
+        if (major != null && !major.trim().isEmpty()) q.like("major", major.trim()); if (gender != null && !gender.trim().isEmpty()) q.eq("gender", gender.trim()); return q;
+    }
+
+    private java.util.List<Map<String,Object>> enrichRecords(java.util.List<ZycckRecord> records) {
+        java.util.List<Map<String,Object>> result = new java.util.ArrayList<>();
+        for (ZycckRecord record : records) {
+            Map<String,Object> row = new LinkedHashMap<>(); row.put("recordId", record.getRecordId()); row.put("instanceId", record.getInstanceId()); row.put("gameId", record.getGameId()); row.put("userId", record.getUserId()); row.put("studentId", record.getStudentId()); row.put("schoolId", record.getSchoolId()); row.put("departmentId", record.getDepartmentId()); row.put("major", record.getMajor()); row.put("gender", record.getGender()); row.put("gameType", record.getGameType()); row.put("status", record.getStatus()); row.put("stage", record.getStage()); row.put("scanTime", record.getScanTime()); row.put("finishTime", record.getFinishTime()); row.put("createTime", record.getCreateTime()); row.put("updateTime", record.getUpdateTime());
+            GkzhStudent student = record.getStudentId() == null ? null : studentMapper.selectById(record.getStudentId());
+            if (student == null && record.getUserId() != null) student = studentMapper.selectOne(new QueryWrapper<GkzhStudent>().eq("user_id", record.getUserId()).last("limit 1"));
+            if (student != null) { row.put("studentName", student.getStudentName()); row.put("studentNo", student.getStudentNo()); if (row.get("major") == null) row.put("major", student.getDepartmentName()); if (row.get("gender") == null) row.put("gender", genderText(student.getGender())); }
+            GkzhSchool school = record.getSchoolId() == null ? null : schoolMapper.selectById(record.getSchoolId()); if (school != null) row.put("schoolName", school.getTitle());
+            GkzhSchoolDepartment dept = record.getDepartmentId() == null ? null : departmentMapper.selectById(record.getDepartmentId()); if (dept != null) row.put("departmentName", dept.getTitle());
+            result.add(row);
+        }
+        return result;
+    }
+
+    private String genderText(String gender) {
+        if ("0".equals(gender)) return "男";
+        if ("1".equals(gender)) return "女";
+        return gender;
     }
 
     @GetMapping("/statistics/pdf")

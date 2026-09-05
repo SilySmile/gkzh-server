@@ -248,7 +248,7 @@ public class ZycckRecordService {
     public Map<String,Object> exploration(Long recordId, Long userId) {
         ZycckRecord record = get(recordId, userId); Map<String,Object> out = new LinkedHashMap<>(); out.put("record", record); out.put("viewedCareerIds", record.getViewedCareerIds() == null ? java.util.Collections.emptyList() : JSON.parseArray(record.getViewedCareerIds(), Long.class));
         java.util.List<Long> ids = record.getExplorationCareerIds() == null ? new java.util.ArrayList<>() : JSON.parseArray(record.getExplorationCareerIds(), Long.class); out.put("explorationCareerIds", ids);
-        java.util.List<Map<String,Object>> items = new java.util.ArrayList<>(); if (!ids.isEmpty()) for (ZycckCareerQuestion q : questionMapper.selectBatchIds(ids)) { Map<String,Object> item = new LinkedHashMap<>(); item.put("careerId", q.getCareerQuestionId()); item.put("careerName", q.getCareerName()); item.put("careerImageUrl", q.getCareerImageUrl()); items.add(item); } out.put("items", items); out.put("count", items.size()); out.put("limit", 6); out.put("readOnly", "finished".equals(record.getStatus())); return out;
+        java.util.List<Map<String,Object>> items = new java.util.ArrayList<>(); if (!ids.isEmpty()) for (ZycckCareerQuestion q : questionMapper.selectBatchIds(ids)) { Map<String,Object> item = new LinkedHashMap<>(); item.put("careerId", q.getCareerQuestionId()); item.put("careerName", q.getCareerName()); item.put("oneLineIntro", q.getOneLineIntro()); item.put("careerImageUrl", q.getCareerImageUrl()); items.add(item); } out.put("items", items); out.put("count", items.size()); out.put("limit", 6); out.put("readOnly", "finished".equals(record.getStatus())); return out;
     }
 
     @Transactional

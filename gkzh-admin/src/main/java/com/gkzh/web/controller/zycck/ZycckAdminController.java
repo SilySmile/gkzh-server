@@ -150,8 +150,8 @@ public class ZycckAdminController extends BaseController {
             GkzhStudent student = record.getStudentId() == null ? null : studentMapper.selectGkzhStudentByStudentId(record.getStudentId());
             if (student == null && record.getUserId() != null) student = studentMapper.selectOne(new QueryWrapper<GkzhStudent>().eq("user_id", record.getUserId()).last("limit 1"));
             if (student != null) { row.put("studentName", student.getStudentName()); row.put("studentNo", student.getStudentNo()); if (row.get("major") == null) row.put("major", student.getDepartmentName()); if (row.get("gender") == null) row.put("gender", genderText(student.getGender())); }
-            GkzhSchool school = record.getSchoolId() == null ? null : schoolMapper.selectById(record.getSchoolId()); if (school != null) row.put("schoolName", school.getTitle());
-            GkzhSchoolDepartment dept = record.getDepartmentId() == null ? null : departmentMapper.selectById(record.getDepartmentId()); if (dept != null) row.put("departmentName", dept.getTitle());
+            GkzhSchool school = record.getSchoolId() == null ? null : schoolMapper.selectGkzhSchoolBySchoolId(record.getSchoolId()); if (school != null) row.put("schoolName", school.getTitle());
+            GkzhSchoolDepartment dept = record.getDepartmentId() == null ? null : departmentMapper.selectDepartmentById(record.getDepartmentId()); if (dept != null) row.put("departmentName", dept.getTitle());
             result.add(row);
         }
         return result;

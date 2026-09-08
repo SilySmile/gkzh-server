@@ -8,7 +8,6 @@ import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.*;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -39,7 +38,6 @@ public final class ZycckReportPdfRenderer {
                 writer.text("我的未来职业探索报告", 44, true);
                 writer.text("这些是你主动关注、想进一步了解的职业", 28, false);
                 writer.text("我想进一步了解：" + careers.size() + " 个职业", 30, true);
-                if (record.getFinishTime() != null) writer.text("完成时间：" + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(record.getFinishTime()), 25, false);
                 if (careers.isEmpty()) {
                     writer.text("本次没有加入进一步了解的职业。", 32, true);
                     writer.text("你已经完成了未来职业探索，本次参与记录已保存。未来还可以继续探索更多可能。", 30, false);

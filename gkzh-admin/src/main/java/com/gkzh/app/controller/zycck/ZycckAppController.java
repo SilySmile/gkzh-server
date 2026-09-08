@@ -13,7 +13,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import java.nio.charset.StandardCharsets;
+import com.gkzh.app.service.ZycckReportPdfService;
+import java.io.IOException;
 import java.util.Map;
 
 @RestController
@@ -22,7 +23,8 @@ public class ZycckAppController extends FrontBaseController {
     private final ZycckRecordService recordService;
     private final ZycckCategoryMapper categoryMapper;
     private final ZycckCareerQuestionMapper questionMapper;
-    public ZycckAppController(ZycckRecordService recordService, ZycckCategoryMapper categoryMapper, ZycckCareerQuestionMapper questionMapper) { this.recordService = recordService; this.categoryMapper = categoryMapper; this.questionMapper = questionMapper; }
+    private final ZycckReportPdfService reportPdfService;
+    public ZycckAppController(ZycckRecordService recordService, ZycckCategoryMapper categoryMapper, ZycckCareerQuestionMapper questionMapper, ZycckReportPdfService reportPdfService) { this.recordService = recordService; this.categoryMapper = categoryMapper; this.questionMapper = questionMapper; this.reportPdfService = reportPdfService; }
 
     @GetMapping("/catalog")
     public AjaxResult catalog() {
@@ -74,9 +76,8 @@ public class ZycckAppController extends FrontBaseController {
     public AjaxResult finish(@PathVariable Long id) { return AjaxResult.success(recordService.finish(id, getCurrentStudent().getUserId())); }
 
     @GetMapping("/report/pdf")
-    public ResponseEntity<byte[]> pdf(@RequestParam Long recordId) {
-        recordService.get(recordId, getCurrentStudent().getUserId());
-        byte[] data = "%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << >> >>\nendobj\n4 0 obj\n<< /Length 0 >>\nstream\n\nendstream\nendobj\nxref\n0 5\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000252 00000 n \ntrailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n301\n%%EOF\n".getBytes(StandardCharsets.US_ASCII);
+    public ResponseEntity<byte[]> pdf(@RequestParam Long recordId) throws IOException {
+        byte[] data = reportPdfService.create(recordId, getCurrentStudent().getUserId());
         return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=zycck-report.pdf")
                 .contentType(MediaType.APPLICATION_PDF).body(data);
     }

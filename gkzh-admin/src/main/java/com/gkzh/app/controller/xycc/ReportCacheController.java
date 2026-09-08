@@ -21,6 +21,7 @@ import com.gkzh.sszctop.domain.SszctopDimension;
 import com.gkzh.sszctop.domain.SszctopDimensionRank;
 import com.gkzh.sszctop.domain.SszctopStudentReport;
 import com.gkzh.sszctop.mapper.SszctopStudentReportMapper;
+import com.gkzh.app.service.ZycckReportPdfService;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.web.bind.annotation.*;
 
@@ -60,16 +61,18 @@ public class ReportCacheController extends FrontBaseController {
     private final IActivityWeekService activityWeekService;
     private final IGkzhStudentService studentService;
     private final SszctopStudentReportMapper sszctopReportMapper;
+    private final ZycckReportPdfService zycckReportPdfService;
     private static final long CACHE_MILLIS = 24 * 60 * 60 * 1000L;
 
     public ReportCacheController(IPatternComboService patternComboService, IHollandCodeService hollandCodeService,
                                  IActivityWeekService activityWeekService, IGkzhStudentService studentService,
-                                 SszctopStudentReportMapper sszctopReportMapper) {
+                                 SszctopStudentReportMapper sszctopReportMapper, ZycckReportPdfService zycckReportPdfService) {
         this.patternComboService = patternComboService;
         this.hollandCodeService = hollandCodeService;
         this.activityWeekService = activityWeekService;
         this.studentService = studentService;
         this.sszctopReportMapper = sszctopReportMapper;
+        this.zycckReportPdfService = zycckReportPdfService;
     }
 
     @PostMapping("/cache")
@@ -102,9 +105,12 @@ public class ReportCacheController extends FrontBaseController {
                 for (GkzhActivityGame game : activityWeekService.listGames(area.getAreaId())) {
                     GkzhGameParticipation participation = activityWeekService.getLatestParticipation(game.getGameId(), userId);
                     if (participation == null || !("1".equals(participation.getStatus()) || "2".equals(participation.getStatus()))) continue;
+                    if (!Objects.equals(activityId, participation.getInstanceId())) continue;
                     byte[] pdf;
                     if ("mind-window".equals(game.getGameType())) {
                         pdf = createPdf(patternComboService.getXyccResult(activityId, userId));
+                    } else if ("zycck".equals(game.getGameType())) {
+                        pdf = zycckReportPdfService.createForActivity(student.getSchoolId(), activityId, game.getGameId(), userId);
                     } else if ("sszctop".equals(game.getGameType())) {
                         // 职场 TOP 使用结算时保存的个人快照，内容与游戏结束后查看的个人报告保持一致。
                         pdf = createSszctopPdf(activityId, game.getGameId(), userId);
@@ -121,7 +127,7 @@ public class ReportCacheController extends FrontBaseController {
             }
         }
         if (reportCount == 0) { zipFile.delete(); return AjaxResult.error("当前活动暂无可下载的游戏报告"); }
-        return AjaxResult.success("报告压缩包生成成功", "/profile/report-cache/" + token + ".zip");
+        return AjaxResult.success("报告压缩包生成成功", "/api/common/report-cache/" + token + ".zip");
     }
 
     /**

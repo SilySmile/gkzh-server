@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.*;
 import java.io.File;
 
 @RestController
-@RequestMapping("/profile/report-cache")
+@RequestMapping({"/profile/report-cache", "/api/common/report-cache"})
 public class ReportCachePublicController {
     @GetMapping("/{token}.{type}")
     public ResponseEntity<FileSystemResource> get(@PathVariable String token, @PathVariable String type) {
@@ -15,10 +15,12 @@ public class ReportCachePublicController {
         if (!type.matches("html|pdf|zip")) return ResponseEntity.badRequest().build();
         File file = new File(new File(GkzhConfig.getProfile(), "report-cache"), token + "." + type);
         if (!file.isFile()) return ResponseEntity.notFound().build();
+        if (System.currentTimeMillis() - file.lastModified() > 24 * 60 * 60 * 1000L) return ResponseEntity.status(HttpStatus.GONE).build();
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType("pdf".equals(type) ? MediaType.APPLICATION_PDF : ("zip".equals(type) ? MediaType.APPLICATION_OCTET_STREAM : MediaType.TEXT_HTML));
         if (!"html".equals(type)) headers.setContentDisposition(ContentDisposition.attachment().filename("职业兴趣测评报告." + type, java.nio.charset.StandardCharsets.UTF_8).build());
-        headers.setCacheControl(CacheControl.maxAge(24, java.util.concurrent.TimeUnit.HOURS).cachePublic());
+        headers.setCacheControl(CacheControl.noStore());
+        headers.setContentLength(file.length());
         return new ResponseEntity<>(new FileSystemResource(file), headers, HttpStatus.OK);
     }
 }

@@ -40,6 +40,7 @@ public final class ZycckReportPdfRenderer {
                 writer.newPage();
                 writer.text("我的未来职业探索报告", 44, true);
                 writer.text("今天了解的职业：" + careers.size() + " 个", 30, true);
+                writer.pie(careers, categoryNames);
                 if (careers.isEmpty()) {
                     writer.text("本次没有记录到职业信息。", 28, false);
                 }
@@ -48,7 +49,6 @@ public final class ZycckReportPdfRenderer {
                     writer.text((i + 1) + ". " + value(career.getCareerName()), 27, true);
                     writer.text(value(career.getOneLineIntro()), 22, false);
                 }
-                writer.pie(careers, categoryNames);
                 writer.flushPage();
                 document.getDocumentInformation().setTitle("我的未来职业探索报告");
                 document.save(out);

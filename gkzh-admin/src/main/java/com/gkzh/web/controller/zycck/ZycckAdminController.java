@@ -19,6 +19,7 @@ import com.gkzh.school.mapper.GkzhSchoolMapper;
 import com.gkzh.school.mapper.GkzhStudentMapper;
 import com.gkzh.activity.domain.week.GkzhActivityWeekInstance;
 import com.gkzh.activity.service.IActivityWeekService;
+import com.gkzh.app.service.ZycckCatalogCacheService;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import org.springframework.http.HttpHeaders;
@@ -40,12 +41,14 @@ public class ZycckAdminController extends BaseController {
     private final GkzhSchoolDepartmentMapper departmentMapper;
     private final GkzhStudentMapper studentMapper;
     private final IActivityWeekService activityWeekService;
+    private final ZycckCatalogCacheService catalogCacheService;
 
     public ZycckAdminController(ZycckCategoryMapper categoryMapper, ZycckCareerQuestionMapper questionMapper, ZycckRecordMapper recordMapper,
                                 GkzhSchoolMapper schoolMapper, GkzhSchoolDepartmentMapper departmentMapper, GkzhStudentMapper studentMapper,
-                                IActivityWeekService activityWeekService) {
+                                IActivityWeekService activityWeekService, ZycckCatalogCacheService catalogCacheService) {
         this.categoryMapper = categoryMapper; this.questionMapper = questionMapper; this.recordMapper = recordMapper;
         this.schoolMapper = schoolMapper; this.departmentMapper = departmentMapper; this.studentMapper = studentMapper; this.activityWeekService = activityWeekService;
+        this.catalogCacheService = catalogCacheService;
     }
 
     @GetMapping("/categories")
@@ -79,11 +82,13 @@ public class ZycckAdminController extends BaseController {
         } else {
             category.setCode(category.getCode().trim());
         }
-        return toAjax(category.getCategoryId() == null ? categoryMapper.insert(category) : categoryMapper.updateById(category));
+        int rows = category.getCategoryId() == null ? categoryMapper.insert(category) : categoryMapper.updateById(category);
+        if (rows > 0) catalogCacheService.evict();
+        return toAjax(rows);
     }
 
     @DeleteMapping("/categories/{id}")
-    public AjaxResult deleteCategory(@PathVariable Long id) { return toAjax(categoryMapper.deleteById(id)); }
+    public AjaxResult deleteCategory(@PathVariable Long id) { int rows = categoryMapper.deleteById(id); if (rows > 0) catalogCacheService.evict(); return toAjax(rows); }
 
     @GetMapping("/career-questions")
     public TableDataInfo questions(@RequestParam(required = false) Long categoryId, @RequestParam(required = false) Integer hasQuestion) {
@@ -103,15 +108,24 @@ public class ZycckAdminController extends BaseController {
             question.setOptionA(null); question.setOptionB(null); question.setOptionC(null); question.setOptionD(null);
             question.setOptionACareerId(null); question.setOptionBCareerId(null); question.setOptionCCareerId(null); question.setOptionDCareerId(null);
             question.setCorrectOptionKey(null);
+        } else {
+            // 题目选项均为文本，只有正确选项允许绑定本题职业。
+            String correct = question.getCorrectOptionKey();
+            question.setOptionACareerId("A".equalsIgnoreCase(correct) ? question.getCareerQuestionId() : null);
+            question.setOptionBCareerId("B".equalsIgnoreCase(correct) ? question.getCareerQuestionId() : null);
+            question.setOptionCCareerId("C".equalsIgnoreCase(correct) ? question.getCareerQuestionId() : null);
+            question.setOptionDCareerId("D".equalsIgnoreCase(correct) ? question.getCareerQuestionId() : null);
         }
-        return toAjax(question.getCareerQuestionId() == null ? questionMapper.insert(question) : questionMapper.updateById(question));
+        int rows = question.getCareerQuestionId() == null ? questionMapper.insert(question) : questionMapper.updateById(question);
+        if (rows > 0) catalogCacheService.evict();
+        return toAjax(rows);
     }
 
     @DeleteMapping("/career-questions/{id}")
     public AjaxResult deleteQuestion(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean careerOnly) {
         ZycckCareerQuestion question = questionMapper.selectById(id);
         if (question == null) return AjaxResult.error("职业或题目不存在");
-        if (careerOnly) return toAjax(questionMapper.deleteById(id));
+        if (careerOnly) { int rows = questionMapper.deleteById(id); if (rows > 0) catalogCacheService.evict(); return toAjax(rows); }
         UpdateWrapper<ZycckCareerQuestion> update = new UpdateWrapper<ZycckCareerQuestion>()
                 .eq("career_question_id", id)
                 .set("has_question", "0")
@@ -119,7 +133,7 @@ public class ZycckAdminController extends BaseController {
                 .set("option_a", null).set("option_b", null).set("option_c", null).set("option_d", null)
                 .set("option_a_career_id", null).set("option_b_career_id", null).set("option_c_career_id", null).set("option_d_career_id", null)
                 .set("correct_option_key", null).set("update_time", new java.util.Date());
-        return toAjax(questionMapper.update(null, update));
+        int rows = questionMapper.update(null, update); if (rows > 0) catalogCacheService.evict(); return toAjax(rows);
     }
 
     @GetMapping("/records")

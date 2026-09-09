@@ -14,6 +14,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import com.gkzh.app.service.ZycckReportPdfService;
+import com.gkzh.app.service.ZycckCatalogCacheService;
+
 import java.io.IOException;
 import java.util.Map;
 
@@ -24,56 +26,96 @@ public class ZycckAppController extends FrontBaseController {
     private final ZycckCategoryMapper categoryMapper;
     private final ZycckCareerQuestionMapper questionMapper;
     private final ZycckReportPdfService reportPdfService;
-    public ZycckAppController(ZycckRecordService recordService, ZycckCategoryMapper categoryMapper, ZycckCareerQuestionMapper questionMapper, ZycckReportPdfService reportPdfService) { this.recordService = recordService; this.categoryMapper = categoryMapper; this.questionMapper = questionMapper; this.reportPdfService = reportPdfService; }
+    private final ZycckCatalogCacheService catalogCacheService;
+
+    public ZycckAppController(ZycckRecordService recordService, ZycckCategoryMapper categoryMapper, ZycckCareerQuestionMapper questionMapper, ZycckReportPdfService reportPdfService, ZycckCatalogCacheService catalogCacheService) {
+        this.recordService = recordService;
+        this.categoryMapper = categoryMapper;
+        this.questionMapper = questionMapper;
+        this.reportPdfService = reportPdfService;
+        this.catalogCacheService = catalogCacheService;
+    }
 
     @GetMapping("/catalog")
     public AjaxResult catalog() {
-        Map<String,Object> result = new java.util.LinkedHashMap<>();
-        result.put("categories", categoryMapper.selectList(new QueryWrapper<ZycckCategory>().eq("status", "0").orderByAsc("sort_order")));
-        java.util.List<Map<String,Object>> careers = new java.util.ArrayList<>();
-        java.util.List<Map<String,Object>> questions = new java.util.ArrayList<>();
-        for (com.gkzh.zycck.domain.ZycckCareerQuestion q : questionMapper.selectList(new QueryWrapper<com.gkzh.zycck.domain.ZycckCareerQuestion>().eq("status", "0").orderByAsc("category_id","sort_order","career_question_id"))) {
-            Map<String,Object> safe = new java.util.LinkedHashMap<>(); safe.put("careerQuestionId", q.getCareerQuestionId()); safe.put("careerId", q.getCareerQuestionId()); safe.put("categoryId", q.getCategoryId()); safe.put("careerName", q.getCareerName()); safe.put("hasQuestion", q.getHasQuestion()); safe.put("oneLineIntro", q.getOneLineIntro()); safe.put("mainWork", q.getMainWork()); safe.put("dayExample", q.getDayExample()); safe.put("whyExists", q.getWhyExists()); safe.put("careerImageUrl", q.getCareerImageUrl()); safe.put("questionImageUrl", q.getQuestionImageUrl()); safe.put("optionA", q.getOptionA()); safe.put("optionB", q.getOptionB()); safe.put("optionC", q.getOptionC()); safe.put("optionD", q.getOptionD()); safe.put("drawCandidate", q.getDrawCandidate()); careers.add(safe); if ("1".equals(q.getHasQuestion())) questions.add(safe);
-        }
-        result.put("careers", careers); result.put("questions", questions);
-        return AjaxResult.success(result);
+        return AjaxResult.success(catalogCacheService.getCatalog());
     }
 
     @PostMapping("/records/enter")
-    public AjaxResult enter(@RequestBody Map<String,Object> body) {
+    public AjaxResult enter(@RequestBody Map<String, Object> body) {
         StudentCheckin student = getCurrentStudent();
         return AjaxResult.success(recordService.enter(id(body.get("schoolId")), id(body.get("instanceId")), id(body.get("gameId")), student.getUserId(), student.getStuId(), id(body.get("departmentId")), text(body.get("major")), text(body.get("gender"))));
     }
 
     @PostMapping("/records/{id}/start")
-    public AjaxResult start(@PathVariable Long id) { return AjaxResult.success(recordService.start(id, getCurrentStudent().getUserId())); }
+    public AjaxResult start(@PathVariable Long id) {
+        return AjaxResult.success(recordService.start(id, getCurrentStudent().getUserId()));
+    }
 
     @PostMapping("/records/{id}/question-start")
-    public AjaxResult questionStart(@PathVariable Long id) { return AjaxResult.success(recordService.openQuestion(id, getCurrentStudent().getUserId())); }
+    public AjaxResult questionStart(@PathVariable Long id) {
+        return AjaxResult.success(recordService.openQuestion(id, getCurrentStudent().getUserId()));
+    }
 
     @GetMapping("/records/{id}")
-    public AjaxResult record(@PathVariable Long id, @RequestParam(required = false) Long careerId) { ZycckRecord record = recordService.get(id, getCurrentStudent().getUserId()); Map<String,Object> result = new java.util.LinkedHashMap<>(); result.put("record", record); result.put("currentQuestionNo", record.getCurrentQuestionNo()); result.put("stage", record.getStage()); result.put("status", record.getStatus()); if (record.getOptionSnapshotJson() != null) { try { java.util.List<?> questions = com.alibaba.fastjson2.JSON.parseArray(record.getOptionSnapshotJson()); int index = Math.max(0, (record.getCurrentQuestionNo() == null ? 1 : record.getCurrentQuestionNo()) - 1); if (index < questions.size()) result.put("question", questions.get(index)); } catch (Exception ignored) {} } Map<String,Object> feedback = recordService.feedbackView(record); if (!feedback.isEmpty()) result.putAll(feedback); if (careerId != null) { com.gkzh.zycck.domain.ZycckCareerQuestion career = questionMapper.selectById(careerId); if (career != null) result.put("career", career); } return AjaxResult.success(result); }
+    public AjaxResult record(@PathVariable Long id, @RequestParam(required = false) Long careerId) {
+        ZycckRecord record = recordService.get(id, getCurrentStudent().getUserId());
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("record", record);
+        result.put("currentQuestionNo", record.getCurrentQuestionNo());
+        result.put("stage", record.getStage());
+        result.put("status", record.getStatus());
+        if (record.getOptionSnapshotJson() != null) {
+            try {
+                java.util.List<?> questions = com.alibaba.fastjson2.JSON.parseArray(record.getOptionSnapshotJson());
+                int index = Math.max(0, (record.getCurrentQuestionNo() == null ? 1 : record.getCurrentQuestionNo()) - 1);
+                if (index < questions.size()) result.put("question", questions.get(index));
+            } catch (Exception ignored) {
+            }
+        }
+        Map<String, Object> feedback = recordService.feedbackView(record);
+        if (!feedback.isEmpty()) result.putAll(feedback);
+        if (careerId != null) {
+            com.gkzh.zycck.domain.ZycckCareerQuestion career = questionMapper.selectById(careerId);
+            if (career != null) result.put("career", career);
+        }
+        return AjaxResult.success(result);
+    }
 
     @PostMapping("/records/{id}/answers")
-    public AjaxResult answer(@PathVariable Long id, @RequestBody Map<String,Object> body) { return AjaxResult.success(recordService.answer(id, getCurrentStudent().getUserId(), body)); }
+    public AjaxResult answer(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        return AjaxResult.success(recordService.answer(id, getCurrentStudent().getUserId(), body));
+    }
 
     @PostMapping("/records/{id}/awareness")
-    public AjaxResult awareness(@PathVariable Long id, @RequestBody Map<String,Object> body) { return AjaxResult.success(recordService.awareness(id, getCurrentStudent().getUserId(), body)); }
+    public AjaxResult awareness(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        return AjaxResult.success(recordService.awareness(id, getCurrentStudent().getUserId(), body));
+    }
 
     @PostMapping("/records/{id}/browse")
-    public AjaxResult browse(@PathVariable Long id, @RequestBody Map<String,Object> body) { return AjaxResult.success(recordService.browse(id, getCurrentStudent().getUserId(), id(body.get("careerId")))); }
+    public AjaxResult browse(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        return AjaxResult.success(recordService.browse(id, getCurrentStudent().getUserId(), id(body.get("careerId"))));
+    }
 
     @GetMapping("/records/{id}/exploration")
-    public AjaxResult exploration(@PathVariable Long id) { return AjaxResult.success(recordService.exploration(id, getCurrentStudent().getUserId())); }
+    public AjaxResult exploration(@PathVariable Long id) {
+        return AjaxResult.success(recordService.exploration(id, getCurrentStudent().getUserId()));
+    }
 
     @PostMapping("/records/{id}/exploration-items")
-    public AjaxResult addExploration(@PathVariable Long id, @RequestBody Map<String,Object> body) { return AjaxResult.success(recordService.updateExploration(id, getCurrentStudent().getUserId(), id(body.get("careerId")), false)); }
+    public AjaxResult addExploration(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        return AjaxResult.success(recordService.updateExploration(id, getCurrentStudent().getUserId(), id(body.get("careerId")), false));
+    }
 
     @DeleteMapping("/records/{id}/exploration-items/{careerId}")
-    public AjaxResult removeExploration(@PathVariable Long id, @PathVariable Long careerId) { return AjaxResult.success(recordService.updateExploration(id, getCurrentStudent().getUserId(), careerId, true)); }
+    public AjaxResult removeExploration(@PathVariable Long id, @PathVariable Long careerId) {
+        return AjaxResult.success(recordService.updateExploration(id, getCurrentStudent().getUserId(), careerId, true));
+    }
 
     @PostMapping("/records/{id}/finish")
-    public AjaxResult finish(@PathVariable Long id) { return AjaxResult.success(recordService.finish(id, getCurrentStudent().getUserId())); }
+    public AjaxResult finish(@PathVariable Long id) {
+        return AjaxResult.success(recordService.finish(id, getCurrentStudent().getUserId()));
+    }
 
     @GetMapping("/report/pdf")
     public ResponseEntity<byte[]> pdf(@RequestParam Long recordId) throws IOException {
@@ -82,6 +124,11 @@ public class ZycckAppController extends FrontBaseController {
                 .contentType(MediaType.APPLICATION_PDF).body(data);
     }
 
-    private static Long id(Object value) { return value == null ? null : Long.valueOf(String.valueOf(value)); }
-    private static String text(Object value) { return value == null ? null : String.valueOf(value); }
+    private static Long id(Object value) {
+        return value == null ? null : Long.valueOf(String.valueOf(value));
+    }
+
+    private static String text(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
 }

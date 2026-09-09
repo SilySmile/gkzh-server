@@ -47,7 +47,13 @@ public class ZycckReportPdfService {
         }
         Map<Long, String> categoryNames = new HashMap<>();
         for (com.gkzh.zycck.domain.ZycckCategory c : categoryMapper.selectList(new QueryWrapper<com.gkzh.zycck.domain.ZycckCategory>().eq("status", "0"))) categoryNames.put(c.getCategoryId(), c.getName());
-        return ZycckReportPdfRenderer.render(record, selected, categoryNames);
+        List<ZycckCareerQuestion> further = new ArrayList<>();
+        if (record.getExplorationCareerIds() != null) {
+            List<Long> furtherIds = JSON.parseArray(record.getExplorationCareerIds(), Long.class);
+            Map<Long, ZycckCareerQuestion> byId = new HashMap<>(); for (ZycckCareerQuestion career : careers.selectBatchIds(furtherIds)) byId.put(career.getCareerQuestionId(), career);
+            for (Long id : furtherIds) if (byId.containsKey(id)) further.add(byId.get(id));
+        }
+        return ZycckReportPdfRenderer.render(record, selected, further, categoryNames);
     }
 
     public byte[] createForActivity(Long schoolId, Long instanceId, Long gameId, Long userId) throws IOException {

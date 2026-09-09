@@ -10,6 +10,7 @@ import java.awt.image.BufferedImage;
 import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /** 按页绘制，先换行再分页；中文随页面嵌入，不依赖阅读器字体。 */
 public final class ZycckReportPdfRenderer {
@@ -33,6 +34,9 @@ public final class ZycckReportPdfRenderer {
     }
 
     public static byte[] render(ZycckRecord record, List<ZycckCareerQuestion> careers) throws IOException {
+        return render(record, careers, java.util.Collections.emptyMap());
+    }
+    public static byte[] render(ZycckRecord record, List<ZycckCareerQuestion> careers, Map<Long,String> categoryNames) throws IOException {
         try (PDDocument document = new PDDocument(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             ZycckReportPdfRenderer writer = new ZycckReportPdfRenderer(document);
             try {
@@ -40,6 +44,7 @@ public final class ZycckReportPdfRenderer {
                 writer.text("我的未来职业探索报告", 44, true);
                 writer.text("这些是你主动关注、想进一步了解的职业", 28, false);
                 writer.text("我想进一步了解：" + careers.size() + " 个职业", 30, true);
+                writer.categoryRatio(careers, categoryNames);
                 if (careers.isEmpty()) {
                     writer.text("本次没有加入进一步了解的职业。", 32, true);
                     writer.text("你已经完成了未来职业探索，本次参与记录已保存。未来还可以继续探索更多可能。", 30, false);
@@ -106,6 +111,13 @@ public final class ZycckReportPdfRenderer {
         y += 18;
     }
     private void section(String title, String body) throws IOException { ensure(140); text(title, 32, true); text(value(body), 30, false); }
+    private void categoryRatio(List<ZycckCareerQuestion> careers, Map<Long,String> names) throws IOException {
+        if (careers.isEmpty()) return;
+        Map<String,Integer> counts = new java.util.LinkedHashMap<>();
+        for (ZycckCareerQuestion c : careers) { String n = names.get(c.getCategoryId()); if (n == null) n = "其他"; counts.put(n, counts.getOrDefault(n, 0) + 1); }
+        text("职业大类比例", 30, true); int total = careers.size();
+        for (Map.Entry<String,Integer> e : counts.entrySet()) text(e.getKey() + "：" + Math.round(e.getValue() * 100f / total) + "%", 26, false);
+    }
     private void dayItems(String value) throws IOException {
         String[] items = value(value).split("\\R");
         int columnWidth = (WIDTH - PAD * 2) / 4;

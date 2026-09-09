@@ -6,6 +6,7 @@ import com.gkzh.common.exception.ServiceException;
 import com.gkzh.zycck.domain.ZycckCareerQuestion;
 import com.gkzh.zycck.domain.ZycckRecord;
 import com.gkzh.zycck.mapper.ZycckCareerQuestionMapper;
+import com.gkzh.zycck.mapper.ZycckCategoryMapper;
 import com.gkzh.zycck.mapper.ZycckRecordMapper;
 import com.gkzh.zycck.service.ZycckRecordService;
 import org.springframework.stereotype.Service;
@@ -18,12 +19,14 @@ public class ZycckReportPdfService {
     private final ZycckRecordService records;
     private final ZycckRecordMapper recordMapper;
     private final ZycckCareerQuestionMapper careers;
+    private final ZycckCategoryMapper categories;
 
     public ZycckReportPdfService(ZycckRecordService records, ZycckRecordMapper recordMapper,
-                                 ZycckCareerQuestionMapper careers) {
+                                 ZycckCareerQuestionMapper careers, ZycckCategoryMapper categories) {
         this.records = records;
         this.recordMapper = recordMapper;
         this.careers = careers;
+        this.categories = categories;
     }
 
     public byte[] create(Long recordId, Long userId) throws IOException {
@@ -39,7 +42,9 @@ public class ZycckReportPdfService {
                 selected.add(byId.get(id));
             }
         }
-        return ZycckReportPdfRenderer.render(record, selected);
+        Map<Long, String> categoryNames = new HashMap<>();
+        for (com.gkzh.zycck.domain.ZycckCategory c : categories.selectList(new QueryWrapper<com.gkzh.zycck.domain.ZycckCategory>().eq("status", "0"))) categoryNames.put(c.getCategoryId(), c.getName());
+        return ZycckReportPdfRenderer.render(record, selected, categoryNames);
     }
 
     public byte[] createForActivity(Long schoolId, Long instanceId, Long gameId, Long userId) throws IOException {

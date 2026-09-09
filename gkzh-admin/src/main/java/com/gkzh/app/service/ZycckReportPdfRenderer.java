@@ -56,6 +56,10 @@ public final class ZycckReportPdfRenderer {
             } finally { if (writer.graphics != null) writer.graphics.dispose(); }
         }
     }
+    /** 兼容旧调用方；正式报告由服务层传入职业大类名称。 */
+    public static byte[] render(ZycckRecord record, List<ZycckCareerQuestion> careers) throws IOException {
+        return render(record, careers, java.util.Collections.emptyMap());
+    }
 
     private static String value(String text) { return text == null || text.trim().isEmpty() ? "暂无介绍" : text.trim(); }
     private void newPage() {

@@ -115,8 +115,7 @@ public final class ZycckReportPdfRenderer {
         y = cy + radius + 36; index = 0; for (Map.Entry<String,Integer> e : counts.entrySet()) { graphics.setColor(colors[index % colors.length]); graphics.fillOval(PAD, y-16, 16, 16); graphics.setColor(new Color(75,85,99)); graphics.setFont(font.deriveFont(20f)); graphics.drawString(e.getKey()+" "+Math.round(e.getValue()*100f/careers.size())+"%", PAD+24, y); y += 30; index++; }
     }
     private void careerLine(int index, ZycckCareerQuestion career) throws IOException {
-        ensure(58); graphics.setFont(font.deriveFont(Font.BOLD, 23f)); graphics.setColor(new Color(26,44,74)); graphics.drawString(index + ". " + value(career.getCareerName()), PAD, y); y += 29;
-        graphics.setFont(font.deriveFont(18f)); graphics.setColor(new Color(75,85,99)); String intro = value(career.getOneLineIntro()); while (graphics.getFontMetrics().stringWidth(intro) > WIDTH - PAD * 2) intro = intro.substring(0, Math.max(1, intro.length() - 1)); graphics.drawString(intro, PAD + 20, y); y += 29;
+        ensure(38); graphics.setFont(font.deriveFont(Font.BOLD, 20f)); graphics.setColor(new Color(26,44,74)); String line = index + ". " + value(career.getCareerName()) + "：" + value(career.getOneLineIntro()); while (graphics.getFontMetrics().stringWidth(line) > WIDTH - PAD * 2) line = line.substring(0, Math.max(1, line.length() - 1)); graphics.drawString(line, PAD, y); y += 34;
     }
     private void section(String title, String body) throws IOException { ensure(140); text(title, 32, true); text(value(body), 30, false); }
     private void dayItems(String value) throws IOException {

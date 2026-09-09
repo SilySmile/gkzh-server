@@ -13,6 +13,8 @@ import java.util.List;
 
 /** 按页绘制，先换行再分页；中文随页面嵌入，不依赖阅读器字体。 */
 public final class ZycckReportPdfRenderer {
+    // 成品按 76mm × 130mm 热敏/标签纸输出（PDF 点单位）。
+    private static final PDRectangle REPORT_PAPER = new PDRectangle(76f / 25.4f * 72f, 130f / 25.4f * 72f);
     private static final int WIDTH = 1080, HEIGHT = 1528, PAD = 76, BOTTOM = 1400;
     private final PDDocument document;
     private final Font font;
@@ -74,9 +76,9 @@ public final class ZycckReportPdfRenderer {
         String footer = "未来职业猜猜看   |   第 " + (document.getNumberOfPages() + 1) + " 页";
         graphics.drawString(footer, (WIDTH - graphics.getFontMetrics().stringWidth(footer)) / 2, HEIGHT - 52);
         graphics.dispose(); graphics = null;
-        PDPage page = new PDPage(PDRectangle.A4); document.addPage(page);
+        PDPage page = new PDPage(REPORT_PAPER); document.addPage(page);
         try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
-            stream.drawImage(LosslessFactory.createFromImage(document, image), 0, 0, PDRectangle.A4.getWidth(), PDRectangle.A4.getHeight());
+            stream.drawImage(LosslessFactory.createFromImage(document, image), 0, 0, REPORT_PAPER.getWidth(), REPORT_PAPER.getHeight());
         }
     }
     private void ensure(int height) throws IOException { if (y + height > BOTTOM) { flushPage(); newPage(); } }

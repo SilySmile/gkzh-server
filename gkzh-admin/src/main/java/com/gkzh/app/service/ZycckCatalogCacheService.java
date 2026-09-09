@@ -1,11 +1,12 @@
 package com.gkzh.app.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.alibaba.fastjson2.JSON;
 import com.gkzh.zycck.domain.ZycckCareerQuestion;
 import com.gkzh.zycck.domain.ZycckCategory;
 import com.gkzh.zycck.mapper.ZycckCareerQuestionMapper;
 import com.gkzh.zycck.mapper.ZycckCategoryMapper;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -17,14 +18,16 @@ import java.util.concurrent.TimeUnit;
 /** zycck 职业目录缓存。目录是读多写少的数据，避免每次请求重复查询整套职业与题目。 */
 @Service
 public class ZycckCatalogCacheService {
-    private static final String CACHE_KEY = "zycck:catalog:v1";
+    // v2 改用纯 JSON 字符串，避免对象序列化携带的 Java 类型信息导致读取失败后静默回源。
+    private static final String CACHE_KEY = "zycck:catalog:v2";
+    private static final String LEGACY_CACHE_KEY = "zycck:catalog:v1";
     private static final long CACHE_MINUTES = 10L;
 
-    private final RedisTemplate<Object, Object> redisTemplate;
+    private final StringRedisTemplate redisTemplate;
     private final ZycckCategoryMapper categoryMapper;
     private final ZycckCareerQuestionMapper questionMapper;
 
-    public ZycckCatalogCacheService(RedisTemplate<Object, Object> redisTemplate,
+    public ZycckCatalogCacheService(StringRedisTemplate redisTemplate,
                                      ZycckCategoryMapper categoryMapper,
                                      ZycckCareerQuestionMapper questionMapper) {
         this.redisTemplate = redisTemplate;
@@ -32,25 +35,24 @@ public class ZycckCatalogCacheService {
         this.questionMapper = questionMapper;
     }
 
-    @SuppressWarnings("unchecked")
     public Map<String, Object> getCatalog() {
         try {
-            Object cached = redisTemplate.opsForValue().get(CACHE_KEY);
-            if (cached instanceof Map) return (Map<String, Object>) cached;
+            String cached = redisTemplate.opsForValue().get(CACHE_KEY);
+            if (cached != null && !cached.isEmpty()) return JSON.parseObject(cached);
         } catch (RuntimeException ignored) {
             // Redis 临时不可用时回源数据库，不能影响游戏正常进入。
         }
         // 单机并发下双重检查，避免缓存刚失效时 500 个请求同时回源数据库。
         synchronized (this) {
             try {
-                Object cached = redisTemplate.opsForValue().get(CACHE_KEY);
-                if (cached instanceof Map) return (Map<String, Object>) cached;
+                String cached = redisTemplate.opsForValue().get(CACHE_KEY);
+                if (cached != null && !cached.isEmpty()) return JSON.parseObject(cached);
             } catch (RuntimeException ignored) {
                 // Redis 不可用时继续回源数据库。
             }
             Map<String, Object> result = loadFromDatabase();
             try {
-                redisTemplate.opsForValue().set(CACHE_KEY, result, CACHE_MINUTES, TimeUnit.MINUTES);
+                redisTemplate.opsForValue().set(CACHE_KEY, JSON.toJSONString(result), CACHE_MINUTES, TimeUnit.MINUTES);
             } catch (RuntimeException ignored) {
                 // 写缓存失败不影响本次响应。
             }
@@ -61,6 +63,7 @@ public class ZycckCatalogCacheService {
     public void evict() {
         try {
             redisTemplate.delete(CACHE_KEY);
+            redisTemplate.delete(LEGACY_CACHE_KEY);
         } catch (RuntimeException ignored) {
             // 删除失败时由 TTL 兜底，避免管理端保存操作失败。
         }

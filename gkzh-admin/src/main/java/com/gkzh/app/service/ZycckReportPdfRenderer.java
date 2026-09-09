@@ -42,7 +42,7 @@ public final class ZycckReportPdfRenderer {
             try {
                 writer.newPage();
                 writer.text("我的未来职业探索报告", 44, true);
-                writer.text("今天了解的职业：" + careers.size() + " 个", 30, true);
+                writer.text("进一步了解的职业：" + careers.size() + " 个", 30, true);
                 writer.pie(further, categoryNames);
                 if (careers.isEmpty()) {
                     writer.text("本次没有记录到职业信息。", 28, false);

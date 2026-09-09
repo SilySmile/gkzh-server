@@ -9,6 +9,8 @@ import com.gkzh.zycck.mapper.ZycckCareerQuestionMapper;
 import com.gkzh.zycck.mapper.ZycckCategoryMapper;
 import com.gkzh.zycck.mapper.ZycckRecordMapper;
 import com.gkzh.zycck.service.ZycckRecordService;
+import com.gkzh.school.domain.GkzhStudent;
+import com.gkzh.school.mapper.GkzhStudentMapper;
 import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.util.*;
@@ -20,13 +22,16 @@ public class ZycckReportPdfService {
     private final ZycckRecordMapper recordMapper;
     private final ZycckCareerQuestionMapper careers;
     private final ZycckCategoryMapper categoryMapper;
+    private final GkzhStudentMapper studentMapper;
 
     public ZycckReportPdfService(ZycckRecordService records, ZycckRecordMapper recordMapper,
-                                 ZycckCareerQuestionMapper careers, ZycckCategoryMapper categoryMapper) {
+                                 ZycckCareerQuestionMapper careers, ZycckCategoryMapper categoryMapper,
+                                 GkzhStudentMapper studentMapper) {
         this.records = records;
         this.recordMapper = recordMapper;
         this.careers = careers;
         this.categoryMapper = categoryMapper;
+        this.studentMapper = studentMapper;
     }
 
     public byte[] create(Long recordId, Long userId) throws IOException {
@@ -52,7 +57,15 @@ public class ZycckReportPdfService {
             Map<Long, ZycckCareerQuestion> byId = new HashMap<>(); for (ZycckCareerQuestion career : careers.selectBatchIds(furtherIds)) byId.put(career.getCareerQuestionId(), career);
             for (Long id : furtherIds) if (byId.containsKey(id)) further.add(byId.get(id));
         }
-        return ZycckReportPdfRenderer.render(record, selected, further, categoryNames);
+        return ZycckReportPdfRenderer.render(record, selected, further, categoryNames, resolveStudentName(record));
+    }
+
+    private String resolveStudentName(ZycckRecord record) {
+        GkzhStudent student = record.getStudentId() == null ? null : studentMapper.selectById(record.getStudentId());
+        if (student == null && record.getUserId() != null) {
+            student = studentMapper.selectOne(new QueryWrapper<GkzhStudent>().eq("user_id", record.getUserId()).last("limit 1"));
+        }
+        return student == null || student.getStudentName() == null ? "" : student.getStudentName();
     }
 
     public byte[] createForActivity(Long schoolId, Long instanceId, Long gameId, Long userId) throws IOException {

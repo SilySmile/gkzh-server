@@ -44,10 +44,15 @@ public final class ZycckReportPdfRenderer {
     }
 
     public static byte[] render(ZycckRecord record, List<ZycckCareerQuestion> careers, List<ZycckCareerQuestion> further, Map<Long, String> categoryNames) throws IOException {
+        return render(record, careers, further, categoryNames, "");
+    }
+
+    public static byte[] render(ZycckRecord record, List<ZycckCareerQuestion> careers, List<ZycckCareerQuestion> further, Map<Long, String> categoryNames, String studentName) throws IOException {
         try (PDDocument document = new PDDocument(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             ZycckReportPdfRenderer writer = new ZycckReportPdfRenderer(document);
             try {
                 writer.newPage();
+                writer.studentName(studentName);
                 writer.text("我的未来职业探索报告", 44, true);
                 writer.text("进一步了解的职业：" + careers.size() + " 个", 30, true);
                 writer.pie(further, categoryNames);
@@ -139,6 +144,15 @@ public final class ZycckReportPdfRenderer {
         y += 18;
     }
 
+    private void studentName(String value) {
+        if (value == null || value.trim().isEmpty()) return;
+        graphics.setFont(font.deriveFont(Font.PLAIN, 24f));
+        graphics.setColor(new Color(75, 85, 99));
+        String label = "学生：" + value.trim();
+        int x = WIDTH - PAD - graphics.getFontMetrics().stringWidth(label);
+        graphics.drawString(label, Math.max(PAD, x), 72);
+    }
+
     private void pie(List<ZycckCareerQuestion> careers, Map<Long, String> names) throws IOException {
         if (careers.isEmpty()) return;
         Map<String, Integer> counts = new java.util.LinkedHashMap<>();
@@ -164,7 +178,7 @@ public final class ZycckReportPdfRenderer {
             graphics.setColor(colors[index % colors.length]);
             graphics.fillOval(PAD, y - 16, 16, 16);
             graphics.setColor(new Color(75, 85, 99));
-            graphics.setFont(font.deriveFont(20f));
+            graphics.setFont(font.deriveFont(24f));
             graphics.drawString(e.getKey() + " " + Math.round(e.getValue() * 100f / careers.size()) + "%", PAD + 24, y);
             y += 30;
             index++;
@@ -182,14 +196,14 @@ public final class ZycckReportPdfRenderer {
         ensure(blockHeight);
 
         graphics.setColor(new Color(26, 44, 74));
-        graphics.setFont(font.deriveFont(Font.BOLD, 22f));
+        graphics.setFont(font.deriveFont(Font.BOLD, 28f));
         y += 32;
         for (String line : nameLines) {
             graphics.drawString(line, PAD, y);
             y += 32;
         }
         graphics.setColor(new Color(75, 85, 99));
-        graphics.setFont(font.deriveFont(Font.PLAIN, 18f));
+        graphics.setFont(font.deriveFont(Font.PLAIN, 24f));
         for (String line : introLines) {
             graphics.drawString(line, PAD + 18, y);
             y += 27;

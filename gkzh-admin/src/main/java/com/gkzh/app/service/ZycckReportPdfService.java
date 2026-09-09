@@ -31,13 +31,12 @@ public class ZycckReportPdfService {
 
     public byte[] create(Long recordId, Long userId) throws IOException {
         ZycckRecord record = records.get(recordId, userId);
-        LinkedHashSet<Long> idSet = new LinkedHashSet<>();
-        if (record.getCareerIds() != null) idSet.addAll(JSON.parseArray(record.getCareerIds(), Long.class));
-        if (record.getViewedCareerIds() != null) idSet.addAll(JSON.parseArray(record.getViewedCareerIds(), Long.class));
-        if (idSet.isEmpty() && record.getExplorationCareerIds() != null) idSet.addAll(JSON.parseArray(record.getExplorationCareerIds(), Long.class));
-        List<Long> ids = new ArrayList<>(idSet);
+        // 报告仅包含用户主动加入探索清单的职业；竞猜题目和浏览记录不属于“进一步了解”内容。
+        List<Long> ids = record.getExplorationCareerIds() == null
+                ? Collections.emptyList()
+                : JSON.parseArray(record.getExplorationCareerIds(), Long.class);
         List<ZycckCareerQuestion> selected = new ArrayList<>();
-        if (ids != null && !ids.isEmpty()) {
+        if (!ids.isEmpty()) {
             Map<Long, ZycckCareerQuestion> byId = new HashMap<>();
             for (ZycckCareerQuestion career : careers.selectBatchIds(ids)) byId.put(career.getCareerQuestionId(), career);
             for (Long id : ids) {

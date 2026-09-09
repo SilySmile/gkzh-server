@@ -115,7 +115,28 @@ public final class ZycckReportPdfRenderer {
         y = cy + radius + 36; index = 0; for (Map.Entry<String,Integer> e : counts.entrySet()) { graphics.setColor(colors[index % colors.length]); graphics.fillOval(PAD, y-16, 16, 16); graphics.setColor(new Color(75,85,99)); graphics.setFont(font.deriveFont(20f)); graphics.drawString(e.getKey()+" "+Math.round(e.getValue()*100f/careers.size())+"%", PAD+24, y); y += 30; index++; }
     }
     private void careerLine(int index, ZycckCareerQuestion career) throws IOException {
-        ensure(58); graphics.setFont(font.deriveFont(Font.BOLD, 20f)); graphics.setColor(new Color(26,44,74)); String line = index + ". " + value(career.getCareerName()) + "：" + value(career.getOneLineIntro()); while (graphics.getFontMetrics().stringWidth(line) > WIDTH - PAD * 2) line = line.substring(0, Math.max(1, line.length() - 1)); graphics.drawString(line, PAD, y); y += 54;
+        // 职业名称和一句话介绍分上下两行，统一留出间距，避免介绍与下一条内容拥挤。
+        int width = WIDTH - PAD * 2;
+        List<String> nameLines = wrap(index + ". " + value(career.getCareerName()), 22, width, true);
+        List<String> introLines = wrap(value(career.getOneLineIntro()), 18, width - 18, false);
+        // 一句话介绍最多占两行，超长内容截断，确保报告始终保持单页。
+        if (introLines.size() > 2) introLines = new ArrayList<>(introLines.subList(0, 2));
+        int blockHeight = nameLines.size() * 32 + introLines.size() * 27 + 24;
+        ensure(blockHeight);
+
+        graphics.setColor(new Color(26, 44, 74));
+        graphics.setFont(font.deriveFont(Font.BOLD, 22f));
+        for (String line : nameLines) {
+            graphics.drawString(line, PAD, y);
+            y += 32;
+        }
+        graphics.setColor(new Color(75, 85, 99));
+        graphics.setFont(font.deriveFont(Font.PLAIN, 18f));
+        for (String line : introLines) {
+            graphics.drawString(line, PAD + 18, y);
+            y += 27;
+        }
+        y += 24;
     }
     private void section(String title, String body) throws IOException { ensure(140); text(title, 32, true); text(value(body), 30, false); }
     private void dayItems(String value) throws IOException {

@@ -31,8 +31,11 @@ public class ZycckReportPdfService {
 
     public byte[] create(Long recordId, Long userId) throws IOException {
         ZycckRecord record = records.get(recordId, userId);
-        String idsJson = record.getViewedCareerIds() != null ? record.getViewedCareerIds() : record.getExplorationCareerIds();
-        List<Long> ids = idsJson == null ? Collections.emptyList() : JSON.parseArray(idsJson, Long.class);
+        LinkedHashSet<Long> idSet = new LinkedHashSet<>();
+        if (record.getCareerIds() != null) idSet.addAll(JSON.parseArray(record.getCareerIds(), Long.class));
+        if (record.getViewedCareerIds() != null) idSet.addAll(JSON.parseArray(record.getViewedCareerIds(), Long.class));
+        if (idSet.isEmpty() && record.getExplorationCareerIds() != null) idSet.addAll(JSON.parseArray(record.getExplorationCareerIds(), Long.class));
+        List<Long> ids = new ArrayList<>(idSet);
         List<ZycckCareerQuestion> selected = new ArrayList<>();
         if (ids != null && !ids.isEmpty()) {
             Map<Long, ZycckCareerQuestion> byId = new HashMap<>();

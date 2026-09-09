@@ -10,12 +10,13 @@ import java.awt.image.BufferedImage;
 import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /** 按页绘制，先换行再分页；中文随页面嵌入，不依赖阅读器字体。 */
 public final class ZycckReportPdfRenderer {
     // 成品按 76mm × 130mm 热敏/标签纸输出（PDF 点单位）。
     private static final PDRectangle REPORT_PAPER = new PDRectangle(76f / 25.4f * 72f, 130f / 25.4f * 72f);
-    private static final int WIDTH = 1080, HEIGHT = 1528, PAD = 76, BOTTOM = 1400;
+    private static final int WIDTH = 900, HEIGHT = 1539, PAD = 54, BOTTOM = 1450;
     private final PDDocument document;
     private final Font font;
     private BufferedImage image;
@@ -32,30 +33,22 @@ public final class ZycckReportPdfRenderer {
         font = available;
     }
 
-    public static byte[] render(ZycckRecord record, List<ZycckCareerQuestion> careers) throws IOException {
+    public static byte[] render(ZycckRecord record, List<ZycckCareerQuestion> careers, Map<Long,String> categoryNames) throws IOException {
         try (PDDocument document = new PDDocument(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             ZycckReportPdfRenderer writer = new ZycckReportPdfRenderer(document);
             try {
                 writer.newPage();
                 writer.text("我的未来职业探索报告", 44, true);
-                writer.text("这些是你主动关注、想进一步了解的职业", 28, false);
-                writer.text("我想进一步了解：" + careers.size() + " 个职业", 30, true);
+                writer.text("今天了解的职业：" + careers.size() + " 个", 30, true);
                 if (careers.isEmpty()) {
-                    writer.text("本次没有加入进一步了解的职业。", 32, true);
-                    writer.text("你已经完成了未来职业探索，本次参与记录已保存。未来还可以继续探索更多可能。", 30, false);
+                    writer.text("本次没有记录到职业信息。", 28, false);
                 }
                 for (int i = 0; i < careers.size(); i++) {
                     ZycckCareerQuestion career = careers.get(i);
-                    if (i > 0) { writer.flushPage(); writer.newPage(); }
-                    writer.ensure(160);
-                    writer.text((i + 1) + ". " + value(career.getCareerName()), 38, true);
-                    writer.text(value(career.getOneLineIntro()), 30, false);
-                    writer.section("这个职业主要做什么？", career.getMainWork());
-                    writer.ensure(160);
-                    writer.text("一天可能做什么？", 32, true);
-                    writer.dayItems(career.getDayExample());
-                    writer.section("为什么会有这样的职业？", career.getWhyExists());
+                    writer.text((i + 1) + ". " + value(career.getCareerName()), 27, true);
+                    writer.text(value(career.getOneLineIntro()), 22, false);
                 }
+                writer.pie(careers, categoryNames);
                 writer.flushPage();
                 document.getDocumentInformation().setTitle("我的未来职业探索报告");
                 document.save(out);
@@ -104,6 +97,16 @@ public final class ZycckReportPdfRenderer {
             graphics.drawString(line, PAD, y); y += size + 18;
         }
         y += 18;
+    }
+    private void pie(List<ZycckCareerQuestion> careers, Map<Long,String> names) throws IOException {
+        if (careers.isEmpty()) return;
+        Map<String,Integer> counts = new java.util.LinkedHashMap<>();
+        for (ZycckCareerQuestion c : careers) { String n = names.get(c.getCategoryId()); counts.put(n == null ? "其他" : n, counts.getOrDefault(n == null ? "其他" : n, 0) + 1); }
+        ensure(430); text("职业大类比例", 27, true);
+        int cx = WIDTH / 2, cy = y + 155, radius = 125; double start = -Math.PI / 2;
+        Color[] colors = {new Color(78,141,247), new Color(82,183,136), new Color(246,173,85), new Color(231,111,81), new Color(155,135,245)}; int index = 0;
+        for (Map.Entry<String,Integer> e : counts.entrySet()) { double end = start + Math.PI * 2 * e.getValue() / careers.size(); graphics.setColor(colors[index++ % colors.length]); graphics.fillArc(cx-radius, cy-radius, radius*2, radius*2, (int)Math.toDegrees(-end), (int)Math.toDegrees(end-start)); start = end; }
+        y = cy + radius + 36; index = 0; for (Map.Entry<String,Integer> e : counts.entrySet()) { graphics.setColor(colors[index % colors.length]); graphics.fillOval(PAD, y-16, 16, 16); graphics.setColor(new Color(75,85,99)); graphics.setFont(font.deriveFont(20f)); graphics.drawString(e.getKey()+" "+Math.round(e.getValue()*100f/careers.size())+"%", PAD+24, y); y += 30; index++; }
     }
     private void section(String title, String body) throws IOException { ensure(140); text(title, 32, true); text(value(body), 30, false); }
     private void dayItems(String value) throws IOException {

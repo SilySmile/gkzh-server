@@ -61,9 +61,9 @@ public class ZycckReportPdfService {
     }
 
     private String resolveStudentName(ZycckRecord record) {
-        GkzhStudent student = record.getStudentId() == null ? null : studentMapper.selectById(record.getStudentId());
+        GkzhStudent student = record.getStudentId() == null ? null : studentMapper.selectGkzhStudentByStudentId(record.getStudentId());
         if (student == null && record.getUserId() != null) {
-            student = studentMapper.selectOne(new QueryWrapper<GkzhStudent>().eq("user_id", record.getUserId()).last("limit 1"));
+            student = studentMapper.selectGkzhStudentByUserId(record.getUserId());
         }
         return student == null || student.getStudentName() == null ? "" : student.getStudentName();
     }

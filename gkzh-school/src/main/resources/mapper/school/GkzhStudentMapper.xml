@@ -76,6 +76,12 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         where s.student_id = #{studentId} and s.del_flag = '0'
     </select>
 
+    <select id="selectGkzhStudentByUserId" parameterType="Long" resultMap="GkzhStudentResult">
+        <include refid="selectGkzhStudentVo"/>
+        where s.user_id = #{userId} and s.del_flag = '0'
+        limit 1
+    </select>
+
     <select id="selectGkzhStudentByCheckinInfo" parameterType="GkzhStudent" resultMap="GkzhStudentResult">
         <include refid="selectGkzhStudentVo"/>
         where s.school_id = #{schoolId} 

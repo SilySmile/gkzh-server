@@ -20,7 +20,10 @@ public interface GkzhStudentMapper extends BaseMapper<GkzhStudent> {
      * @param studentId 学生主键
      * @return 学生
      */
-    public GkzhStudent selectGkzhStudentByStudentId(Long studentId);
+    public GkzhStudent selectGkzhStudentByStudentId(@Param("studentId") Long studentId);
+
+    /** 根据平台用户 ID 查询学生，用于报告等场景补充学生姓名。 */
+    public GkzhStudent selectGkzhStudentByUserId(@Param("userId") Long userId);
 
     /**
      * 查询学生列表

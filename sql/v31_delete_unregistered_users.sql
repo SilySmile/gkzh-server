@@ -32,6 +32,7 @@ BEGIN
                MAX(c.column_name = 'student_id')
           FROM information_schema.columns c
          WHERE c.table_schema = DATABASE()
+           AND c.column_name IN ('user_id', 'student_id')
            AND c.table_name NOT IN ('gkzh_student', 'sys_user')
            AND c.table_name NOT LIKE 'tmp\\_%'
            AND c.table_name NOT LIKE 'gkzh_purge\\_%'

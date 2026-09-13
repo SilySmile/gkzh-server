@@ -2,6 +2,7 @@ package com.gkzh.lottery.service.impl;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 import java.security.SecureRandom;
 import java.math.BigDecimal;
@@ -308,21 +309,23 @@ public class LotteryPrizeServiceImpl implements ILotteryPrizeService
         LotteryPrize lotteryPrize = null;
         int currentWeight = 0;
         for (LotteryPrize prize : prizes) {
-            currentWeight += prize.getWeight() != null ? prize.getWeight() : 1;
-            if (randomValue <= currentWeight) {
-                if (prize.getStock() != null && prize.getStock() <= 0) {
-                    lotteryPrize = prizes.get(prizes.size() - 1);
-                } else {
+            if (!prize.getPrizeType().equals(3)) {
+                currentWeight += prize.getWeight() != null ? prize.getWeight() : 1;
+            }
+            if (prize.getStock() > 0 || prize.getStock() == -1) {
+                if (randomValue <= currentWeight) {
                     lotteryPrize = prize;
+                    break;
                 }
-                break;
             }
         }
         if (lotteryPrize == null) {
-            lotteryPrize = prizes.get(prizes.size() - 1);
+            lotteryPrize = prizes.stream().filter(prize ->prize.getPrizeType() != null && prize.getPrizeType().equals(3)).findFirst().get();
         }
-        lotteryPrize.setStock(lotteryPrize.getStock() - 1);
-        updateLotteryPrize(lotteryPrize);
+        if (lotteryPrize.getStock() > 0 && !lotteryPrize.getPrizeType().equals(3)) {
+            lotteryPrize.setStock(lotteryPrize.getStock() - 1);
+            updateLotteryPrize(lotteryPrize);
+        }
 
         LotteryRecord record = new LotteryRecord();
         record.setPrizeId(lotteryPrize.getPrizeId());

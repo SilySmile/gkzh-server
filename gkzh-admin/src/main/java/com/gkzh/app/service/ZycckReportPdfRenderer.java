@@ -53,7 +53,7 @@ public final class ZycckReportPdfRenderer {
             try {
                 writer.newPage();
                 writer.studentName(studentName);
-                writer.text("我的未来职业探索报告", 44, true);
+                writer.text("我的未来职业探索清单", 44, true);
                 writer.text("进一步了解的职业：" + careers.size() + " 个", 30, true);
                 writer.pie(further, categoryNames);
                 if (careers.isEmpty()) {
@@ -64,7 +64,7 @@ public final class ZycckReportPdfRenderer {
                     writer.careerLine(i + 1, career);
                 }
                 writer.flushPage();
-                document.getDocumentInformation().setTitle("我的未来职业探索报告");
+                document.getDocumentInformation().setTitle("我的未来职业探索清单");
                 document.save(out);
                 return out.toByteArray();
             } finally {
@@ -146,7 +146,7 @@ public final class ZycckReportPdfRenderer {
 
     private void studentName(String value) {
         if (value == null || value.trim().isEmpty()) return;
-        graphics.setFont(font.deriveFont(Font.PLAIN, 24f));
+        graphics.setFont(font.deriveFont(Font.PLAIN, 32f));
         graphics.setColor(new Color(75, 85, 99));
         String label = "学生：" + value.trim();
         int x = WIDTH - PAD - graphics.getFontMetrics().stringWidth(label);
@@ -196,17 +196,17 @@ public final class ZycckReportPdfRenderer {
         ensure(blockHeight);
 
         graphics.setColor(new Color(26, 44, 74));
-        graphics.setFont(font.deriveFont(Font.BOLD, 28f));
-        y += 32;
+        graphics.setFont(font.deriveFont(Font.BOLD, 38f));
+        y += 38;
         for (String line : nameLines) {
             graphics.drawString(line, PAD, y);
-            y += 32;
+            y += 46;
         }
         graphics.setColor(new Color(75, 85, 99));
-        graphics.setFont(font.deriveFont(Font.PLAIN, 24f));
+        graphics.setFont(font.deriveFont(Font.PLAIN, 34f));
         for (String line : introLines) {
             graphics.drawString(line, PAD + 18, y);
-            y += 27;
+            y += 20;
         }
         y += 24;
     }

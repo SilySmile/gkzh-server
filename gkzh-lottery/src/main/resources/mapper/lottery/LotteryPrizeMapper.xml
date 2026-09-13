@@ -36,6 +36,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="isEnabled != null "> and p.is_enabled = #{isEnabled}</if>
             <if test="sortOrder != null "> and p.sort_order = #{sortOrder}</if>
         </where>
+        order by p.sort_order asc
     </select>
     
     <select id="selectLotteryPrizeByPrizeId" parameterType="Long" resultMap="LotteryPrizeResult">

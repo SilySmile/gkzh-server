@@ -26,11 +26,14 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** zycck Web 管理接口；查询统一以活动实例和游戏上下文为边界。 */
+/**
+ * zycck Web 管理接口；查询统一以活动实例和游戏上下文为边界。
+ */
 @RestController
 @RequestMapping("/zycck/admin")
 public class ZycckAdminController extends BaseController {
@@ -46,23 +49,36 @@ public class ZycckAdminController extends BaseController {
     public ZycckAdminController(ZycckCategoryMapper categoryMapper, ZycckCareerQuestionMapper questionMapper, ZycckRecordMapper recordMapper,
                                 GkzhSchoolMapper schoolMapper, GkzhSchoolDepartmentMapper departmentMapper, GkzhStudentMapper studentMapper,
                                 IActivityWeekService activityWeekService, ZycckCatalogCacheService catalogCacheService) {
-        this.categoryMapper = categoryMapper; this.questionMapper = questionMapper; this.recordMapper = recordMapper;
-        this.schoolMapper = schoolMapper; this.departmentMapper = departmentMapper; this.studentMapper = studentMapper; this.activityWeekService = activityWeekService;
+        this.categoryMapper = categoryMapper;
+        this.questionMapper = questionMapper;
+        this.recordMapper = recordMapper;
+        this.schoolMapper = schoolMapper;
+        this.departmentMapper = departmentMapper;
+        this.studentMapper = studentMapper;
+        this.activityWeekService = activityWeekService;
         this.catalogCacheService = catalogCacheService;
     }
 
     @GetMapping("/categories")
     public TableDataInfo categories() {
         startPage();
-        java.util.List<Map<String,Object>> rows = new java.util.ArrayList<>();
+        java.util.List<Map<String, Object>> rows = new java.util.ArrayList<>();
         for (ZycckCategory category : categoryMapper.selectList(new QueryWrapper<ZycckCategory>().orderByAsc("sort_order"))) {
-            Map<String,Object> row = new LinkedHashMap<>();
-            row.put("categoryId", category.getCategoryId()); row.put("code", category.getCode()); row.put("name", category.getName());
-            row.put("description", category.getDescription()); row.put("drawMode", category.getDrawMode()); row.put("sortOrder", category.getSortOrder()); row.put("status", category.getStatus());
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("categoryId", category.getCategoryId());
+            row.put("code", category.getCode());
+            row.put("name", category.getName());
+            row.put("description", category.getDescription());
+            row.put("drawMode", category.getDrawMode());
+            row.put("sortOrder", category.getSortOrder());
+            row.put("status", category.getStatus());
             QueryWrapper<ZycckCareerQuestion> all = new QueryWrapper<ZycckCareerQuestion>().eq("category_id", category.getCategoryId()).eq("status", "0");
             QueryWrapper<ZycckCareerQuestion> candidates = new QueryWrapper<ZycckCareerQuestion>().eq("category_id", category.getCategoryId()).eq("has_question", "1").eq("draw_candidate", "1").eq("status", "0");
             QueryWrapper<ZycckCareerQuestion> questions = new QueryWrapper<ZycckCareerQuestion>().eq("category_id", category.getCategoryId()).eq("has_question", "1").eq("status", "0");
-            row.put("careerCount", questionMapper.selectCount(all)); row.put("questionCount", questionMapper.selectCount(questions)); row.put("candidateCount", questionMapper.selectCount(candidates)); rows.add(row);
+            row.put("careerCount", questionMapper.selectCount(all));
+            row.put("questionCount", questionMapper.selectCount(questions));
+            row.put("candidateCount", questionMapper.selectCount(candidates));
+            rows.add(row);
         }
         return getDataTable(rows);
     }
@@ -88,7 +104,11 @@ public class ZycckAdminController extends BaseController {
     }
 
     @DeleteMapping("/categories/{id}")
-    public AjaxResult deleteCategory(@PathVariable Long id) { int rows = categoryMapper.deleteById(id); if (rows > 0) catalogCacheService.evict(); return toAjax(rows); }
+    public AjaxResult deleteCategory(@PathVariable Long id) {
+        int rows = categoryMapper.deleteById(id);
+        if (rows > 0) catalogCacheService.evict();
+        return toAjax(rows);
+    }
 
     @GetMapping("/career-questions")
     public TableDataInfo questions(@RequestParam(required = false) Long categoryId, @RequestParam(required = false) Integer hasQuestion) {
@@ -105,8 +125,14 @@ public class ZycckAdminController extends BaseController {
         if (!"1".equals(question.getHasQuestion())) {
             question.setHasQuestion("0");
             question.setDrawCandidate("0");
-            question.setOptionA(null); question.setOptionB(null); question.setOptionC(null); question.setOptionD(null);
-            question.setOptionACareerId(null); question.setOptionBCareerId(null); question.setOptionCCareerId(null); question.setOptionDCareerId(null);
+            question.setOptionA(null);
+            question.setOptionB(null);
+            question.setOptionC(null);
+            question.setOptionD(null);
+            question.setOptionACareerId(null);
+            question.setOptionBCareerId(null);
+            question.setOptionCCareerId(null);
+            question.setOptionDCareerId(null);
             question.setCorrectOptionKey(null);
         } else {
             // 题目选项均为文本，只有正确选项允许绑定本题职业。
@@ -125,7 +151,11 @@ public class ZycckAdminController extends BaseController {
     public AjaxResult deleteQuestion(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean careerOnly) {
         ZycckCareerQuestion question = questionMapper.selectById(id);
         if (question == null) return AjaxResult.error("职业或题目不存在");
-        if (careerOnly) { int rows = questionMapper.deleteById(id); if (rows > 0) catalogCacheService.evict(); return toAjax(rows); }
+        if (careerOnly) {
+            int rows = questionMapper.deleteById(id);
+            if (rows > 0) catalogCacheService.evict();
+            return toAjax(rows);
+        }
         UpdateWrapper<ZycckCareerQuestion> update = new UpdateWrapper<ZycckCareerQuestion>()
                 .eq("career_question_id", id)
                 .set("has_question", "0")
@@ -133,13 +163,20 @@ public class ZycckAdminController extends BaseController {
                 .set("option_a", null).set("option_b", null).set("option_c", null).set("option_d", null)
                 .set("option_a_career_id", null).set("option_b_career_id", null).set("option_c_career_id", null).set("option_d_career_id", null)
                 .set("correct_option_key", null).set("update_time", new java.util.Date());
-        int rows = questionMapper.update(null, update); if (rows > 0) catalogCacheService.evict(); return toAjax(rows);
+        int rows = questionMapper.update(null, update);
+        if (rows > 0) catalogCacheService.evict();
+        return toAjax(rows);
     }
 
     @GetMapping("/records")
-    public TableDataInfo records(@RequestParam(required = false) Long instanceId, @RequestParam(required = false) Long schoolId, @RequestParam(required = false) Long departmentId, @RequestParam(required = false) String major, @RequestParam(required = false) String gender) {
-        startPage(); QueryWrapper<ZycckRecord> q = buildRecordQuery(instanceId, schoolId, departmentId, major, gender).orderByDesc("record_id");
-        return getDataTable(enrichRecords(recordMapper.selectList(q)));
+    public TableDataInfo records(@RequestParam(required = false) Long instanceId, @RequestParam(required = false) Long schoolId, @RequestParam(required = false) Long departmentId, @RequestParam(required = false) String major, @RequestParam(required = false) String gender, @RequestParam(required = false) String studentNo) {
+        QueryWrapper<ZycckRecord> q = buildRecordQuery(instanceId, schoolId, departmentId, major, gender, studentNo).orderByDesc("record_id");
+        startPage();
+        java.util.List<ZycckRecord> records = recordMapper.selectList(q);
+        // 在转换为普通列表之前保留 PageHelper 查询的总数。
+        TableDataInfo table = getDataTable(records);
+        table.setRows(enrichRecords(records));
+        return table;
     }
 
     @DeleteMapping("/records/{id}")
@@ -150,23 +187,33 @@ public class ZycckAdminController extends BaseController {
     }
 
     @GetMapping("/statistics")
-    public AjaxResult statistics(@RequestParam(required = false) Long instanceId, @RequestParam(required = false) Long schoolId, @RequestParam(required = false) Long departmentId, @RequestParam(required = false) String major, @RequestParam(required = false) String gender) {
-        QueryWrapper<ZycckRecord> q = buildRecordQuery(instanceId, schoolId, departmentId, major, gender);
-        java.util.List<ZycckRecord> rows = recordMapper.selectList(q); Map<String,Object> result = new LinkedHashMap<>();
-        result.put("participating", rows.size()); result.put("enteredCount", rows.size()); result.put("finished", rows.stream().filter(x -> "finished".equals(x.getStatus())).count());
-        result.put("finishedCount", rows.stream().filter(x -> "finished".equals(x.getStatus())).count()); result.put("records", enrichRecords(rows)); return AjaxResult.success(result);
+    public AjaxResult statistics(@RequestParam(required = false) Long instanceId, @RequestParam(required = false) Long schoolId, @RequestParam(required = false) Long departmentId, @RequestParam(required = false) String major, @RequestParam(required = false) String gender, @RequestParam(required = false) String studentNo) {
+        // 汇总在数据库中计算，不加载全部记录，也不受列表页码影响。
+        long entered = recordMapper.selectCount(buildRecordQuery(instanceId, schoolId, departmentId, major, gender, studentNo));
+        long finished = recordMapper.selectCount(buildRecordQuery(instanceId, schoolId, departmentId, major, gender, studentNo).eq("status", "finished"));
+        TableDataInfo page = records(instanceId, schoolId, departmentId, major, gender, studentNo);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("participating", entered);
+        result.put("enteredCount", entered);
+        result.put("finished", finished);
+        result.put("finishedCount", finished);
+        result.put("total", page.getTotal());
+        result.put("records", page.getRows());
+        return AjaxResult.success(result);
     }
 
-    /** 查询单个学生在本游戏中的题目选择、正确答案和职业了解程度。 */
+    /**
+     * 查询单个学生在本游戏中的题目选择、正确答案和职业了解程度。
+     */
     @GetMapping("/statistics/{recordId}")
     public AjaxResult statisticsRecord(@PathVariable Long recordId) {
         ZycckRecord record = recordMapper.selectById(recordId);
         if (record == null || !"zycck".equals(record.getGameType())) return AjaxResult.error("参与记录不存在");
-        Map<String,Object> result = enrichRecords(java.util.Collections.singletonList(record)).get(0);
+        Map<String, Object> result = enrichRecords(java.util.Collections.singletonList(record)).get(0);
         java.util.List<JSONObject> snapshots = parseJsonArray(record.getOptionSnapshotJson());
         java.util.Map<Integer, JSONObject> answers = indexByQuestionNo(parseJsonArray(record.getAnswerJson()));
         java.util.Map<Integer, JSONObject> awareness = indexByQuestionNo(parseJsonArray(record.getAwarenessJson()));
-        java.util.List<Map<String,Object>> choices = new java.util.ArrayList<>();
+        java.util.List<Map<String, Object>> choices = new java.util.ArrayList<>();
         for (JSONObject snapshot : snapshots) {
             int no = snapshot.getIntValue("questionNo");
             JSONObject answer = answers.get(no);
@@ -174,10 +221,13 @@ public class ZycckAdminController extends BaseController {
             String selectedKey = answer == null ? null : answer.getString("optionKey");
             ZycckCareerQuestion question = snapshot.getLong("questionId") == null ? null : questionMapper.selectById(snapshot.getLong("questionId"));
             String correctKey = question == null ? null : question.getCorrectOptionKey();
-            Map<String,Object> choice = new LinkedHashMap<>();
-            choice.put("questionNo", no); choice.put("scenarioCareerName", snapshot.getString("careerName"));
-            choice.put("selectedOptionKey", selectedKey); choice.put("selectedCareerName", optionText(snapshot, selectedKey));
-            choice.put("correctOptionKey", correctKey); choice.put("correctCareerName", optionText(snapshot, correctKey));
+            Map<String, Object> choice = new LinkedHashMap<>();
+            choice.put("questionNo", no);
+            choice.put("scenarioCareerName", snapshot.getString("careerName"));
+            choice.put("selectedOptionKey", selectedKey);
+            choice.put("selectedCareerName", optionText(snapshot, selectedKey));
+            choice.put("correctOptionKey", correctKey);
+            choice.put("correctCareerName", optionText(snapshot, correctKey));
             choice.put("correct", selectedKey != null && correctKey != null && selectedKey.equalsIgnoreCase(correctKey));
             choice.put("timeout", answer != null && answer.getBooleanValue("timeout"));
             choice.put("awareness", aware == null ? null : (aware.getString("level") != null ? aware.getString("level") : aware.getString("awareness")));
@@ -189,7 +239,11 @@ public class ZycckAdminController extends BaseController {
 
     private java.util.List<JSONObject> parseJsonArray(String value) {
         if (value == null || value.trim().isEmpty()) return new java.util.ArrayList<>();
-        try { return JSON.parseArray(value, JSONObject.class); } catch (Exception e) { return new java.util.ArrayList<>(); }
+        try {
+            return JSON.parseArray(value, JSONObject.class);
+        } catch (Exception e) {
+            return new java.util.ArrayList<>();
+        }
     }
 
     private java.util.Map<Integer, JSONObject> indexByQuestionNo(java.util.List<JSONObject> values) {
@@ -203,34 +257,108 @@ public class ZycckAdminController extends BaseController {
         return snapshot.getString("option" + key.trim().toUpperCase());
     }
 
-    private QueryWrapper<ZycckRecord> buildRecordQuery(Long instanceId, Long schoolId, Long departmentId, String major, String gender) {
-        QueryWrapper<ZycckRecord> q = new QueryWrapper<ZycckRecord>().eq("game_type", "zycck");
-        if (instanceId != null) q.eq("instance_id", instanceId); if (schoolId != null) q.eq("school_id", schoolId); if (departmentId != null) q.eq("department_id", departmentId);
-        if (major != null && !major.trim().isEmpty()) q.like("major", major.trim()); if (gender != null && !gender.trim().isEmpty()) q.eq("gender", gender.trim()); return q;
+    // 与列表补全规则一致：优先关联记录中的学生，旧记录再按同校用户查找学生。
+    private static final String STUDENT_ID_SQL = "COALESCE("
+            + "(SELECT s.student_id FROM gkzh_student s WHERE s.student_id = gkzh_zycck_record.student_id AND s.del_flag = '0'), "
+            + "(SELECT s.student_id FROM gkzh_student s WHERE s.user_id = gkzh_zycck_record.user_id "
+            + "AND s.school_id = gkzh_zycck_record.school_id AND s.del_flag = '0' ORDER BY s.student_id LIMIT 1))";
+
+    private static String studentColumn(String column) {
+        return "(SELECT s." + column + " FROM gkzh_student s WHERE s.student_id = " + STUDENT_ID_SQL + ")";
     }
 
-    private java.util.List<Map<String,Object>> enrichRecords(java.util.List<ZycckRecord> records) {
-        java.util.List<Map<String,Object>> result = new java.util.ArrayList<>();
+    private QueryWrapper<ZycckRecord> buildRecordQuery(Long instanceId, Long schoolId, Long departmentId, String major, String gender, String studentNo) {
+        QueryWrapper<ZycckRecord> q = new QueryWrapper<ZycckRecord>().eq("game_type", "zycck");
+        if (instanceId != null) q.eq("instance_id", instanceId);
+        if (schoolId != null) q.eq("school_id", schoolId);
+        String department = "COALESCE(gkzh_zycck_record.department_id, " + studentColumn("department_id") + ")";
+        if (departmentId != null) {
+            q.apply("(" + department + " = {0} OR EXISTS (SELECT 1 FROM gkzh_school_department d WHERE d.department_id = "
+                    + department + " AND FIND_IN_SET({0}, d.ancestors)))", departmentId);
+        }
+        if (major != null && !major.trim().isEmpty()) {
+            q.apply("COALESCE(NULLIF(TRIM(gkzh_zycck_record.major), ''), "
+                    + "(SELECT d.title FROM gkzh_school_department d WHERE d.department_id = "
+                    + department + ")) LIKE {0}", "%" + major.trim() + "%");
+        }
+        if (gender != null && !gender.trim().isEmpty()) {
+            String effectiveGender = "COALESCE(NULLIF(TRIM(gkzh_zycck_record.gender), ''), "
+                    + "NULLIF(TRIM(" + studentColumn("gender") + "), ''), '其他')";
+            String value = genderText(gender);
+            if ("男".equals(value)) q.apply(effectiveGender + " IN ({0}, {1})", "男", "0");
+            else if ("女".equals(value)) q.apply(effectiveGender + " IN ({0}, {1})", "女", "1");
+            else q.apply(effectiveGender + " NOT IN ({0}, {1}, {2}, {3})", "男", "0", "女", "1");
+        }
+        if (studentNo != null && !studentNo.trim().isEmpty()) {
+            q.apply(studentColumn("student_no") + " LIKE {0}", "%" + studentNo.trim() + "%");
+        }
+        return q;
+    }
+
+    private java.util.List<Map<String, Object>> enrichRecords(java.util.List<ZycckRecord> records) {
+        java.util.List<Map<String, Object>> result = new java.util.ArrayList<>();
+        if (records.isEmpty()) return result;
         java.util.Map<Long, String> instanceNames = new java.util.HashMap<>();
-        for (GkzhActivityWeekInstance instance : activityWeekService.listInstances(null)) instanceNames.put(instance.getInstanceId(), instance.getTitle());
+        for (GkzhActivityWeekInstance instance : activityWeekService.listInstances(null))
+            instanceNames.put(instance.getInstanceId(), instance.getTitle());
         for (ZycckRecord record : records) {
-            Map<String,Object> row = new LinkedHashMap<>(); row.put("recordId", record.getRecordId()); row.put("instanceId", record.getInstanceId()); row.put("instanceName", instanceNames.get(record.getInstanceId())); row.put("gameId", record.getGameId()); row.put("userId", record.getUserId()); row.put("studentId", record.getStudentId()); row.put("schoolId", record.getSchoolId()); row.put("departmentId", record.getDepartmentId()); row.put("major", record.getMajor()); row.put("gender", record.getGender()); row.put("gameType", record.getGameType()); row.put("status", record.getStatus()); row.put("stage", record.getStage()); row.put("scanTime", record.getScanTime()); row.put("finishTime", record.getFinishTime()); row.put("createTime", record.getCreateTime()); row.put("updateTime", record.getUpdateTime());
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("recordId", record.getRecordId());
+            row.put("instanceId", record.getInstanceId());
+            row.put("instanceName", instanceNames.get(record.getInstanceId()));
+            row.put("gameId", record.getGameId());
+            row.put("userId", record.getUserId());
+            row.put("studentId", record.getStudentId());
+            row.put("schoolId", record.getSchoolId());
+            row.put("departmentId", record.getDepartmentId());
+            row.put("major", record.getMajor());
+            row.put("gender", record.getGender());
+            row.put("gameType", record.getGameType());
+            row.put("status", record.getStatus());
+            row.put("stage", record.getStage());
+            row.put("scanTime", record.getScanTime());
+            row.put("finishTime", record.getFinishTime());
+            row.put("createTime", record.getCreateTime());
+            row.put("updateTime", record.getUpdateTime());
             GkzhStudent student = record.getStudentId() == null ? null : studentMapper.selectGkzhStudentByStudentId(record.getStudentId());
-            if (student == null && record.getUserId() != null) student = studentMapper.selectOne(new QueryWrapper<GkzhStudent>().eq("user_id", record.getUserId()).last("limit 1"));
-            if (student != null) { row.put("studentName", student.getStudentName()); row.put("studentNo", student.getStudentNo()); if (row.get("major") == null) row.put("major", student.getDepartmentName()); if (row.get("gender") == null) row.put("gender", genderText(student.getGender())); }
-            GkzhSchool school = record.getSchoolId() == null ? null : schoolMapper.selectGkzhSchoolBySchoolId(record.getSchoolId()); if (school != null) row.put("schoolName", school.getTitle());
-            GkzhSchoolDepartment dept = record.getDepartmentId() == null ? null : departmentMapper.selectDepartmentById(record.getDepartmentId()); if (dept != null) row.put("departmentName", dept.getTitle());
+            if (student == null && record.getUserId() != null) {
+                GkzhStudent fallback = studentMapper.selectOne(new QueryWrapper<GkzhStudent>()
+                        .eq("user_id", record.getUserId()).eq("school_id", record.getSchoolId())
+                        .eq("del_flag", "0").orderByAsc("student_id").last("limit 1"));
+                if (fallback != null) student = studentMapper.selectGkzhStudentByStudentId(fallback.getStudentId());
+            }
+            if (student != null) {
+                row.put("studentName", student.getStudentName());
+                row.put("studentNo", student.getStudentNo());
+                if (row.get("departmentId") == null) row.put("departmentId", student.getDepartmentId());
+            }
+            row.put("gender", genderText(firstNonBlank(record.getGender(), student == null ? null : student.getGender())));
+            GkzhSchool school = record.getSchoolId() == null ? null : schoolMapper.selectGkzhSchoolBySchoolId(record.getSchoolId());
+            if (school != null) row.put("schoolName", school.getTitle());
+            Long effectiveDepartmentId = (Long) row.get("departmentId");
+            GkzhSchoolDepartment dept = effectiveDepartmentId == null ? null : departmentMapper.selectDepartmentById(effectiveDepartmentId);
+            if (dept != null) row.put("departmentName", dept.getTitle());
+            row.put("major", firstNonBlank(record.getMajor(), dept == null ? null : dept.getTitle()));
             result.add(row);
         }
         return result;
     }
 
     private String genderText(String gender) {
-        if ("0".equals(gender)) return "男";
-        if ("1".equals(gender)) return "女";
-        return gender;
+        String value = gender == null ? "" : gender.trim();
+        if ("0".equals(value) || "男".equals(value)) return "男";
+        if ("1".equals(value) || "女".equals(value)) return "女";
+        return "其他";
+    }
+
+    private String firstNonBlank(String value, String fallback) {
+        if (value != null && !value.trim().isEmpty()) return value.trim();
+        return fallback == null ? null : fallback.trim();
     }
 
     @GetMapping("/statistics/pdf")
-    public ResponseEntity<byte[]> statisticsPdf() { byte[] data = "%PDF-1.4\n% zycck statistics\n%%EOF".getBytes(StandardCharsets.US_ASCII); return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=zycck-statistics.pdf").contentType(MediaType.APPLICATION_PDF).body(data); }
+    public ResponseEntity<byte[]> statisticsPdf() {
+        byte[] data = "%PDF-1.4\n% zycck statistics\n%%EOF".getBytes(StandardCharsets.US_ASCII);
+        return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=zycck-statistics.pdf").contentType(MediaType.APPLICATION_PDF).body(data);
+    }
 }

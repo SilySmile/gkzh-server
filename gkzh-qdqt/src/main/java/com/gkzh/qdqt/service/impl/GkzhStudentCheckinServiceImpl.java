@@ -376,6 +376,12 @@ public class GkzhStudentCheckinServiceImpl implements IGkzhStudentCheckinService
         if (existStudent == null) {
             throw new RuntimeException("该学校未录入此学号，请联系学校管理员后再注册");
         }
+        if (request.getStudentName() == null || request.getStudentName().isEmpty()) {
+            throw new RuntimeException("请填写姓名");
+        }
+        if (!existStudent.getStudentName().equals(request.getStudentName())) {
+            throw new RuntimeException("学号与姓名不匹配");
+        }
         // 密码只会由注册或后台重置写入；因此一旦存在即视为该学校+学号已经注册。
         if (existStudent.getPassword() != null && !existStudent.getPassword().trim().isEmpty()) {
             throw new RuntimeException("该学号已被注册");

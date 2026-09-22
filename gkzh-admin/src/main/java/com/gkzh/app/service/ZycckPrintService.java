@@ -22,7 +22,6 @@ import javax.imageio.ImageIO;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -71,7 +70,6 @@ public class ZycckPrintService {
     }
 
     /** 学生选择打印机后提交打印。 */
-    @Transactional
     public ZycckPrintTask print(Long recordId, Long userId, Long printerId) throws IOException {
         if (recordId == null) throw new ServiceException("缺少报告记录编号");
         if (userId == null) throw new ServiceException("登录信息已失效");
@@ -82,7 +80,6 @@ public class ZycckPrintService {
     }
 
     /** 工作人员重打历史任务；使用报告原所属用户生成报告，避免绕过报告数据权限。 */
-    @Transactional
     public ZycckPrintTask reprint(Long taskId) throws IOException {
         ZycckPrintTask oldTask = findTask(taskId);
         if (oldTask.getRecordId() == null) throw new ServiceException("历史任务缺少报告记录");
@@ -92,6 +89,48 @@ public class ZycckPrintService {
         byte[] pdf = reportPdfService.create(record.getRecordId(), record.getUserId());
         int retry = oldTask.getRetryCount() == null ? 1 : oldTask.getRetryCount() + 1;
         return submit(record.getRecordId(), printer, pdf, retry);
+    }
+
+    /**
+     * 接收汉印云打印任务状态推送并同步本地任务。
+     * 汉印当前推送状态：1 已打印，-2 任务取消。
+     */
+    @Transactional
+    public ZycckPrintTask updateTaskFromCallback(String printId, Integer cloudStatus, Long printTimeSeconds) {
+        if (!StringUtils.hasText(printId) || cloudStatus == null) {
+            return null;
+        }
+        ZycckPrintTask task = taskMapper.selectOne(new QueryWrapper<ZycckPrintTask>()
+                .eq("print_id", printId.trim())
+                .orderByDesc("task_id")
+                .last("LIMIT 1"));
+        if (task == null) {
+            return null;
+        }
+        String nextStatus;
+        if (cloudStatus == 1) {
+            nextStatus = STATUS_SUCCESS;
+        } else if (cloudStatus == -2 || cloudStatus == -1) {
+            nextStatus = STATUS_FAILED;
+        } else {
+            nextStatus = STATUS_SUBMITTED;
+        }
+        // 回调可能重复到达，成功任务不允许被旧的待打印状态覆盖。
+        if (STATUS_SUCCESS.equals(task.getStatus()) && !STATUS_SUCCESS.equals(nextStatus)) {
+            return task;
+        }
+        task.setStatus(nextStatus);
+        if (STATUS_FAILED.equals(nextStatus) && !StringUtils.hasText(task.getErrorMessage())) {
+            task.setErrorMessage("汉印云端取消打印任务");
+        }
+        if (STATUS_SUCCESS.equals(nextStatus)) {
+            task.setPrintTime(printTimeSeconds == null
+                    ? DateUtils.getNowDate()
+                    : new Date(printTimeSeconds * 1000L));
+        }
+        task.setUpdateTime(DateUtils.getNowDate());
+        taskMapper.updateById(task);
+        return task;
     }
 
     /** 查询汉印云端任务状态并同步本地状态。 */
@@ -209,18 +248,19 @@ public class ZycckPrintService {
         return pages;
     }
 
-    private void appendTsplLabel(StringBuilder content, BufferedImage image) throws IOException {
+    private void appendTsplLabel(StringBuilder content, BufferedImage image) {
         content.append("SIZE 76 mm,130 mm\r\n")
                 .append("GAP 2 mm,0\r\n")
                 .append("CLS\r\n")
                 .append("BITMAP 0,0,")
                 .append(IMAGE_WIDTH_BYTES).append(',').append(IMAGE_HEIGHT).append(",0,")
-                .append(toBitmapHex(image)).append("\r\n")
+                .append(toBitmapData(image)).append("\r\n")
                 .append("PRINT 1\r\n");
     }
 
-    private String toBitmapHex(BufferedImage image) throws IOException {
-        ByteArrayOutputStream bytes = new ByteArrayOutputStream(IMAGE_WIDTH_BYTES * IMAGE_HEIGHT);
+    /** TSPL BITMAP 的最后一段是逐字节点阵数据，不能转换为可见的十六进制文本。 */
+    private String toBitmapData(BufferedImage image) {
+        StringBuilder bytes = new StringBuilder(IMAGE_WIDTH_BYTES * IMAGE_HEIGHT);
         for (int y = 0; y < IMAGE_HEIGHT; y++) {
             for (int byteX = 0; byteX < IMAGE_WIDTH_BYTES; byteX++) {
                 int value = 0;
@@ -230,13 +270,11 @@ public class ZycckPrintService {
                         value |= 0x80 >> bit;
                     }
                 }
-                bytes.write(value);
+                // 汉印 printTask 的 content 是字符串；用 ISO-8859-1 等价字符保留 0x00-0xff 原始字节。
+                bytes.append((char) (value & 0xff));
             }
         }
-        byte[] bitmap = bytes.toByteArray();
-        StringBuilder hex = new StringBuilder(bitmap.length * 2);
-        for (byte value : bitmap) hex.append(String.format("%02X", value & 0xff));
-        return hex.toString();
+        return bytes.toString();
     }
 
     private String mapCloudStatus(Integer status) {

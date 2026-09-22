@@ -8,6 +8,9 @@ import com.gkzh.common.core.page.TableDataInfo;
 import com.gkzh.zycck.domain.ZycckCareerQuestion;
 import com.gkzh.zycck.domain.ZycckCategory;
 import com.gkzh.zycck.domain.ZycckRecord;
+import com.gkzh.zycck.domain.ZycckPrintTask;
+import com.gkzh.zycck.dto.ZycckPrintTaskView;
+import com.gkzh.zycck.dto.ZycckPrinterView;
 import com.gkzh.zycck.mapper.ZycckCareerQuestionMapper;
 import com.gkzh.zycck.mapper.ZycckCategoryMapper;
 import com.gkzh.zycck.mapper.ZycckRecordMapper;
@@ -20,14 +23,18 @@ import com.gkzh.school.mapper.GkzhStudentMapper;
 import com.gkzh.activity.domain.week.GkzhActivityWeekInstance;
 import com.gkzh.activity.service.IActivityWeekService;
 import com.gkzh.app.service.ZycckCatalogCacheService;
+import com.gkzh.app.service.ZycckPrintService;
+import com.gkzh.zycck.service.ZycckPrinterService;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.nio.charset.StandardCharsets;
+import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -45,10 +52,13 @@ public class ZycckAdminController extends BaseController {
     private final GkzhStudentMapper studentMapper;
     private final IActivityWeekService activityWeekService;
     private final ZycckCatalogCacheService catalogCacheService;
+    private final ZycckPrinterService printerService;
+    private final ZycckPrintService printService;
 
     public ZycckAdminController(ZycckCategoryMapper categoryMapper, ZycckCareerQuestionMapper questionMapper, ZycckRecordMapper recordMapper,
                                 GkzhSchoolMapper schoolMapper, GkzhSchoolDepartmentMapper departmentMapper, GkzhStudentMapper studentMapper,
-                                IActivityWeekService activityWeekService, ZycckCatalogCacheService catalogCacheService) {
+                                IActivityWeekService activityWeekService, ZycckCatalogCacheService catalogCacheService,
+                                ZycckPrinterService printerService, ZycckPrintService printService) {
         this.categoryMapper = categoryMapper;
         this.questionMapper = questionMapper;
         this.recordMapper = recordMapper;
@@ -57,6 +67,8 @@ public class ZycckAdminController extends BaseController {
         this.studentMapper = studentMapper;
         this.activityWeekService = activityWeekService;
         this.catalogCacheService = catalogCacheService;
+        this.printerService = printerService;
+        this.printService = printService;
     }
 
     @GetMapping("/categories")
@@ -354,6 +366,76 @@ public class ZycckAdminController extends BaseController {
     private String firstNonBlank(String value, String fallback) {
         if (value != null && !value.trim().isEmpty()) return value.trim();
         return fallback == null ? null : fallback.trim();
+    }
+
+    @GetMapping("/printers")
+    @PreAuthorize("@ss.hasPermi('zycck:printer:list')")
+    public AjaxResult printers() {
+        return AjaxResult.success(printerService.listAllPrinters().stream()
+                .map(ZycckPrinterView::from).collect(java.util.stream.Collectors.toList()));
+    }
+
+    @PostMapping("/printers/sync")
+    @PreAuthorize("@ss.hasPermi('zycck:printer:sync')")
+    public AjaxResult syncPrinters() {
+        return AjaxResult.success(printerService.syncCloudPrinters().stream()
+                .map(ZycckPrinterView::from).collect(java.util.stream.Collectors.toList()));
+    }
+
+    @PostMapping("/printers/bind")
+    @PreAuthorize("@ss.hasPermi('zycck:printer:bind')")
+    public AjaxResult bindPrinter(@RequestBody Map<String, Object> body) {
+        return AjaxResult.success(ZycckPrinterView.from(printerService.bindPrinter(
+                text(body.get("equipmentSn")), text(body.get("equipmentSecret")), text(body.get("printerName")))));
+    }
+
+    @PostMapping("/printers/{id}/name")
+    @PreAuthorize("@ss.hasPermi('zycck:printer:edit')")
+    public AjaxResult renamePrinter(@PathVariable Long id, @RequestParam String printerName) {
+        return AjaxResult.success(ZycckPrinterView.from(printerService.renamePrinter(id, printerName)));
+    }
+
+    @PostMapping("/printers/{id}/status")
+    @PreAuthorize("@ss.hasPermi('zycck:printer:edit')")
+    public AjaxResult refreshPrinterStatus(@PathVariable Long id) {
+        return AjaxResult.success(ZycckPrinterView.from(printerService.refreshPrinterStatus(id)));
+    }
+
+    @DeleteMapping("/printers/{id}")
+    @PreAuthorize("@ss.hasPermi('zycck:printer:remove')")
+    public AjaxResult unbindPrinter(@PathVariable Long id) {
+        return AjaxResult.success(ZycckPrinterView.from(printerService.unbindPrinter(id)));
+    }
+
+    @GetMapping("/print-tasks")
+    @PreAuthorize("@ss.hasPermi('zycck:print-task:list')")
+    public TableDataInfo printTasks(@RequestParam(required = false) Long printerId,
+                                    @RequestParam(required = false) String status,
+                                    @RequestParam(required = false) Long recordId) {
+        startPage();
+        java.util.List<ZycckPrintTask> tasks = printService.listTasks(printerId, status, recordId);
+        TableDataInfo table = getDataTable(tasks);
+        table.setRows(tasks.stream().map(ZycckPrintTaskView::from)
+                .collect(java.util.stream.Collectors.toList()));
+        return table;
+    }
+
+    @PostMapping("/print-tasks/{taskId}/reprint")
+    @PreAuthorize("@ss.hasPermi('zycck:print-task:reprint')")
+    public AjaxResult reprint(@PathVariable Long taskId) throws IOException {
+        return AjaxResult.success(ZycckPrintTaskView.from(printService.reprint(taskId)));
+    }
+
+    @PostMapping("/print-tasks/{taskId}/status")
+    @PreAuthorize("@ss.hasPermi('zycck:print-task:query')")
+    public AjaxResult refreshPrintTask(@PathVariable Long taskId) {
+        return AjaxResult.success(ZycckPrintTaskView.from(printService.refreshTask(taskId)));
+    }
+
+    private String text(Object value) {
+        if (value == null) return null;
+        String result = String.valueOf(value).trim();
+        return result.isEmpty() ? null : result;
     }
 
     @GetMapping("/statistics/pdf")

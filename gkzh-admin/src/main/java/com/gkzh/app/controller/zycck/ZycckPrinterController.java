@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -54,6 +55,12 @@ public class ZycckPrinterController {
         String printerName = text(body.get("printerName"));
         return AjaxResult.success(ZycckPrinterView.from(
                 printerService.bindPrinter(equipmentSn, equipmentSecret, printerName)));
+    }
+
+    /** 修改本地业务名称，不修改汉印云端设备名称。 */
+    @PostMapping("/api/staff/zycck/printers/{id}/name")
+    public AjaxResult renamePrinter(@PathVariable Long id, @RequestParam String printerName) {
+        return AjaxResult.success(ZycckPrinterView.from(printerService.renamePrinter(id, printerName)));
     }
 
     /** 刷新单台打印机的在线状态。 */

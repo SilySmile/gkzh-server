@@ -16,7 +16,7 @@ public final class HttpUtils {
     private HttpUtils() {
     }
 
-    public static <T> HPRTResult<T> post(String url, Map<String, Object> body) {
+    public static <T> HPRTResult<T> post(String url, Map<String, Object> body, TypeReference<T> responseType) {
         try (HttpResponse response = HttpRequest.post(url)
                 .timeout(TIMEOUT_MILLIS)
                 .contentType("application/json")
@@ -25,8 +25,7 @@ public final class HttpUtils {
             if (response.getStatus() < 200 || response.getStatus() >= 300) {
                 throw new HPRTSdkException("汉印云接口 HTTP 状态异常: " + response.getStatus());
             }
-            return new HPRTResult<>(response.body(), new TypeReference<>() {
-            });
+            return new HPRTResult<>(response.body(), responseType);
         } catch (HPRTSdkException e) {
             throw e;
         } catch (Exception e) {

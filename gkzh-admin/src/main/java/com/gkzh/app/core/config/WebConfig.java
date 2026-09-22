@@ -16,7 +16,8 @@ public class WebConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(studentAuthInterceptor)
                 .addPathPatterns("/api/**") // 前台接口路径
-                .excludePathPatterns("/api/student/checkin", "/api/common/**", "/api/student/login", "/api/student/register", "/api/staff/**"); // 登录接口不需要拦截
+                .excludePathPatterns("/api/student/checkin", "/api/common/**", "/api/student/login", "/api/student/register",
+                        "/api/staff/**", "/api/zycck/hprt/callback"); // 登录及云平台回调接口不需要拦截
         registry.addInterceptor(staffAuthInterceptor)
                 .addPathPatterns("/api/staff/**")
                 .excludePathPatterns("/api/staff/login");

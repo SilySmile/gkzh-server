@@ -13,7 +13,9 @@ import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 未来职业猜猜看打印机业务。
@@ -39,6 +41,7 @@ public class ZycckPrinterService {
         return printerMapper.selectList(new QueryWrapper<ZycckPrinter>()
                 .eq("enabled", ENABLED)
                 .eq("bound_status", BOUND)
+                .eq("status", 1)
                 .orderByAsc("printer_name")
                 .orderByAsc("printer_id"));
     }
@@ -76,10 +79,13 @@ public class ZycckPrinterService {
             if (cloudPrinters == null || cloudPrinters.isEmpty()) {
                 break;
             }
+            Map<String, Integer> statuses = queryStatuses(cloudPrinters);
             for (HPRTPrinter cloudPrinter : cloudPrinters) {
                 if (cloudPrinter == null || !StringUtils.hasText(cloudPrinter.getEquipment_sn())) {
                     continue;
                 }
+                Integer status = statuses.get(cloudPrinter.getEquipment_sn().trim());
+                if (status != null) cloudPrinter.setStatus(status);
                 synced.add(upsertCloudPrinter(cloudPrinter));
             }
             if (cloudPrinters.size() < size) {
@@ -96,7 +102,9 @@ public class ZycckPrinterService {
     @Transactional
     public ZycckPrinter bindPrinter(String equipmentSn, String equipmentSecret, String printerName) {
         requireText(equipmentSn, "设备序列号不能为空");
+        String cloudName = StringUtils.hasText(printerName) ? printerName.trim() : equipmentSn.trim();
         HPRTPrinter cloudPrinter = HPRTPrinter.builder()
+                .name(cloudName)
                 .equipment_sn(equipmentSn.trim())
                 .equipment_secret(equipmentSecret == null ? "" : equipmentSecret.trim())
                 .build();
@@ -126,7 +134,25 @@ public class ZycckPrinterService {
         } else {
             printerMapper.updateById(local);
         }
-        return local;
+        try {
+            return refreshPrinterStatus(local.getPrinterId());
+        } catch (RuntimeException ignored) {
+            // 云端绑定已经成功时必须保留本地设备；状态可由回调或“刷新状态”稍后补齐。
+            return local;
+        }
+    }
+
+    /** 修改面向学生展示的本地业务名称。 */
+    @Transactional
+    public ZycckPrinter renamePrinter(Long printerId, String printerName) {
+        requireText(printerName, "打印机名称不能为空");
+        String name = printerName.trim();
+        if (name.length() > 100) throw new ServiceException("打印机名称不能超过100个字符");
+        ZycckPrinter printer = findById(printerId);
+        printer.setPrinterName(name);
+        printer.setUpdateTime(DateUtils.getNowDate());
+        printerMapper.updateById(printer);
+        return printer;
     }
 
     /**
@@ -147,9 +173,27 @@ public class ZycckPrinterService {
     }
 
     /**
-     * 查询本地打印机的实时状态并更新缓存。
+     * 接收汉印云打印机状态推送并更新本地缓存。
+     * 云端可能推送本地尚未同步的设备，未找到本地记录时直接忽略。
      */
     @Transactional
+    public ZycckPrinter updateStatusFromCallback(String equipmentSn, Integer status) {
+        if (!StringUtils.hasText(equipmentSn) || status == null) {
+            return null;
+        }
+        ZycckPrinter printer = printerMapper.selectOne(new QueryWrapper<ZycckPrinter>()
+                .eq("equipment_sn", equipmentSn.trim()));
+        if (printer == null) {
+            return null;
+        }
+        Date now = DateUtils.getNowDate();
+        printer.setStatus(status);
+        printer.setLastStatusSyncTime(now);
+        printer.setUpdateTime(now);
+        printerMapper.updateById(printer);
+        return printer;
+    }
+
     public ZycckPrinter refreshPrinterStatus(Long printerId) {
         ZycckPrinter printer = findById(printerId);
         HPRTResult<List<HPRTPrinter>> result = hprtCloudService.queryPrinterStatus(List.of(printer.getEquipmentSn()));
@@ -199,6 +243,27 @@ public class ZycckPrinterService {
             printerMapper.updateById(local);
         }
         return local;
+    }
+
+    private Map<String, Integer> queryStatuses(List<HPRTPrinter> cloudPrinters) {
+        List<String> equipmentSnList = new ArrayList<>();
+        for (HPRTPrinter printer : cloudPrinters) {
+            if (printer != null && StringUtils.hasText(printer.getEquipment_sn())) {
+                equipmentSnList.add(printer.getEquipment_sn().trim());
+            }
+        }
+        Map<String, Integer> resultMap = new HashMap<>();
+        if (equipmentSnList.isEmpty()) return resultMap;
+        HPRTResult<List<HPRTPrinter>> result = hprtCloudService.queryPrinterStatus(equipmentSnList);
+        ensureSuccess(result, "查询汉印打印机状态失败");
+        if (result.getData() != null) {
+            for (HPRTPrinter printer : result.getData()) {
+                if (printer != null && StringUtils.hasText(printer.getEquipment_sn())) {
+                    resultMap.put(printer.getEquipment_sn().trim(), printer.getStatus());
+                }
+            }
+        }
+        return resultMap;
     }
 
     private void ensureSuccess(HPRTResult<?> result, String defaultMessage) {

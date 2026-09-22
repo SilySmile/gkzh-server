@@ -102,3 +102,11 @@ spring:
                 # #连接池最大阻塞等待时间（使用负值表示没有限制）
 
                 max-wait: -1ms
+
+# 汉印云打印配置
+# 生产环境建议通过 HPRT_USER_KEY、HPRT_USER_SECRET 环境变量注入真实密钥。
+hprt:
+  cloud:
+    user-key: ${HPRT_USER_KEY:}
+    user-secret: ${HPRT_USER_SECRET:}
+    print-type: ${HPRT_PRINT_TYPE:TSPL}

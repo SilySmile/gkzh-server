@@ -35,8 +35,14 @@ public class HprtCloudService {
         return printerClient.sendPrinterTask(equipmentSn, content, properties.getPrintType(), orderNo);
     }
 
+    /** 根据设备 SN 和云端任务编号查询实际打印状态。 */
     public HPRTResult<Integer> queryPrinterTask(String equipmentSn, String printId) {
         return printerClient.queryPrinterTask(equipmentSn, printId);
+    }
+
+    /** 取消尚未打印的汉印云任务，重试打印前会先调用此方法。 */
+    public HPRTResult<Void> cancelPrinterTask(String equipmentSn, String printId) {
+        return printerClient.cancelPrinterTask(equipmentSn, printId);
     }
 
     public HPRTResult<Void> reprintTask(String equipmentSn, String printId) {

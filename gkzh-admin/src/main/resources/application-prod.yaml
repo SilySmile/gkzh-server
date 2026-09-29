@@ -107,6 +107,6 @@ spring:
 # 生产环境建议通过 HPRT_USER_KEY、HPRT_USER_SECRET 环境变量注入真实密钥。
 hprt:
   cloud:
-    user-key: ${HPRT_USER_KEY:}
-    user-secret: ${HPRT_USER_SECRET:}
+    user-key: ${HPRT_USER_KEY:3850ce88b61e11f19c2ac470bdc8eb5a}
+    user-secret: ${HPRT_USER_SECRET:385146cfb61e11f19c2ac470bdc8eb5a}
     print-type: ${HPRT_PRINT_TYPE:TSPL}

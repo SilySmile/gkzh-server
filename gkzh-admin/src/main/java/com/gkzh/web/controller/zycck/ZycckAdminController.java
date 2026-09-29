@@ -10,6 +10,7 @@ import com.gkzh.zycck.domain.ZycckCategory;
 import com.gkzh.zycck.domain.ZycckRecord;
 import com.gkzh.zycck.domain.ZycckPrintTask;
 import com.gkzh.zycck.dto.ZycckPrintTaskView;
+import com.gkzh.zycck.dto.ZycckBeaconSettingsView;
 import com.gkzh.zycck.dto.ZycckPrinterView;
 import com.gkzh.zycck.mapper.ZycckCareerQuestionMapper;
 import com.gkzh.zycck.mapper.ZycckCategoryMapper;
@@ -24,6 +25,7 @@ import com.gkzh.activity.domain.week.GkzhActivityWeekInstance;
 import com.gkzh.activity.service.IActivityWeekService;
 import com.gkzh.app.service.ZycckCatalogCacheService;
 import com.gkzh.app.service.ZycckPrintService;
+import com.gkzh.app.service.ZycckBeaconConfigService;
 import com.gkzh.zycck.service.ZycckPrinterService;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
@@ -54,11 +56,13 @@ public class ZycckAdminController extends BaseController {
     private final ZycckCatalogCacheService catalogCacheService;
     private final ZycckPrinterService printerService;
     private final ZycckPrintService printService;
+    private final ZycckBeaconConfigService beaconConfigService;
 
     public ZycckAdminController(ZycckCategoryMapper categoryMapper, ZycckCareerQuestionMapper questionMapper, ZycckRecordMapper recordMapper,
                                 GkzhSchoolMapper schoolMapper, GkzhSchoolDepartmentMapper departmentMapper, GkzhStudentMapper studentMapper,
                                 IActivityWeekService activityWeekService, ZycckCatalogCacheService catalogCacheService,
-                                ZycckPrinterService printerService, ZycckPrintService printService) {
+                                ZycckPrinterService printerService, ZycckPrintService printService,
+                                ZycckBeaconConfigService beaconConfigService) {
         this.categoryMapper = categoryMapper;
         this.questionMapper = questionMapper;
         this.recordMapper = recordMapper;
@@ -69,6 +73,7 @@ public class ZycckAdminController extends BaseController {
         this.catalogCacheService = catalogCacheService;
         this.printerService = printerService;
         this.printService = printService;
+        this.beaconConfigService = beaconConfigService;
     }
 
     @GetMapping("/categories")
@@ -375,6 +380,20 @@ public class ZycckAdminController extends BaseController {
                 .map(ZycckPrinterView::from).collect(java.util.stream.Collectors.toList()));
     }
 
+    /** 读取独立信标管理菜单中的多信标配置。 */
+    @GetMapping("/beacons/config")
+    @PreAuthorize("@ss.hasPermi('zycck:beacon:list')")
+    public AjaxResult beaconConfig() {
+        return AjaxResult.success(beaconConfigService.get());
+    }
+
+    /** 保存后立即用于学生端展示及服务端打印校验。 */
+    @PutMapping("/beacons/config")
+    @PreAuthorize("@ss.hasPermi('zycck:beacon:edit')")
+    public AjaxResult saveBeaconConfig(@RequestBody ZycckBeaconSettingsView body) {
+        return AjaxResult.success(beaconConfigService.save(body));
+    }
+
     @PostMapping("/printers/sync")
     @PreAuthorize("@ss.hasPermi('zycck:printer:sync')")
     public AjaxResult syncPrinters() {
@@ -407,13 +426,20 @@ public class ZycckAdminController extends BaseController {
         return AjaxResult.success(ZycckPrinterView.from(printerService.unbindPrinter(id)));
     }
 
+    /** 打印任务分页列表，支持按快照字段查询历史打印人员和活动。 */
     @GetMapping("/print-tasks")
     @PreAuthorize("@ss.hasPermi('zycck:print-task:list')")
     public TableDataInfo printTasks(@RequestParam(required = false) Long printerId,
                                     @RequestParam(required = false) String status,
-                                    @RequestParam(required = false) Long recordId) {
+                                    @RequestParam(required = false) Long recordId,
+                                    @RequestParam(required = false) String schoolName,
+                                    @RequestParam(required = false) String studentNo,
+                                    @RequestParam(required = false) String studentName,
+                                    @RequestParam(required = false) String activityName,
+                                    @RequestParam(required = false) String gameName) {
         startPage();
-        java.util.List<ZycckPrintTask> tasks = printService.listTasks(printerId, status, recordId);
+        java.util.List<ZycckPrintTask> tasks = printService.listTasks(
+                printerId, status, recordId, schoolName, studentNo, studentName, activityName, gameName);
         TableDataInfo table = getDataTable(tasks);
         table.setRows(tasks.stream().map(ZycckPrintTaskView::from)
                 .collect(java.util.stream.Collectors.toList()));
@@ -430,6 +456,21 @@ public class ZycckAdminController extends BaseController {
     @PreAuthorize("@ss.hasPermi('zycck:print-task:query')")
     public AjaxResult refreshPrintTask(@PathVariable Long taskId) {
         return AjaxResult.success(ZycckPrintTaskView.from(printService.refreshTask(taskId)));
+    }
+
+    /** 管理端取消打印；服务层会先核对汉印云状态再执行。 */
+    @PostMapping("/print-tasks/{taskId}/cancel")
+    @PreAuthorize("@ss.hasPermi('zycck:print-task:cancel')")
+    public AjaxResult cancelPrintTask(@PathVariable Long taskId) {
+        return AjaxResult.success(ZycckPrintTaskView.from(printService.cancelTask(taskId)));
+    }
+
+    /** 管理端删除本地打印记录；进行中的任务必须先取消。 */
+    @DeleteMapping("/print-tasks/{taskId}")
+    @PreAuthorize("@ss.hasPermi('zycck:print-task:remove')")
+    public AjaxResult deletePrintTask(@PathVariable Long taskId) {
+        printService.deleteTask(taskId);
+        return AjaxResult.success("打印任务记录已删除");
     }
 
     private String text(Object value) {

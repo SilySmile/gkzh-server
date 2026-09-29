@@ -6,6 +6,7 @@ import com.gkzh.common.core.controller.FrontBaseController;
 import com.gkzh.common.core.domain.AjaxResult;
 import com.gkzh.common.exception.ServiceException;
 import com.gkzh.zycck.domain.ZycckPrintTask;
+import com.gkzh.zycck.dto.ZycckPrintRequest;
 import com.gkzh.zycck.dto.ZycckPrintTaskView;
 import com.gkzh.zycck.service.ZycckPrinterService;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -38,9 +39,16 @@ public class ZycckPrintController extends FrontBaseController {
 
     /** 学生选择打印机后打印当前职业探索报告。 */
     @PostMapping("/api/zycck/records/{recordId}/print")
-    public AjaxResult print(@PathVariable Long recordId, @RequestBody Map<String, Object> body) throws IOException {
-        Long printerId = id(body.get("printerId"));
-        return AjaxResult.success(toView(printService.print(recordId, getCurrentStudent().getUserId(), printerId)));
+    public AjaxResult print(@PathVariable Long recordId, @RequestBody ZycckPrintRequest request) throws IOException {
+        if (request == null || request.getPrinterId() == null) throw new ServiceException("缺少打印机编号");
+        return AjaxResult.success(toView(printService.print(
+                recordId, getCurrentStudent().getUserId(), request.getPrinterId(), request.getBeacon())));
+    }
+
+    /** 打开打印面板前获取一次打印与蓝牙信标要求。 */
+    @GetMapping("/api/zycck/records/{recordId}/print-eligibility")
+    public AjaxResult printEligibility(@PathVariable Long recordId) {
+        return AjaxResult.success(printService.eligibility(recordId, getCurrentStudent().getUserId()));
     }
 
     /** 学生查看自己提交的打印任务状态。 */
@@ -53,10 +61,11 @@ public class ZycckPrintController extends FrontBaseController {
 
     /**
      * 汉印云消息推送回调。
-     * 汉印以 application/x-www-form-urlencoded 推送，收到后必须在 3 秒内返回固定确认内容。
+     * 汉印以 application/x-www-form-urlencoded 推送，收到后必须在 3 秒内返回固定确认内容；
+     * 同时放开 GET，兼容开放平台保存回调地址时的连通性校验。
      */
     @Anonymous
-    @RequestMapping(value = "/api/zycck/hprt/callback", method = RequestMethod.POST)
+    @RequestMapping(value = "/api/zycck/hprt/callback", method = {RequestMethod.GET, RequestMethod.POST})
     public Map<String, String> hprtCallback(@RequestParam Map<String, String> form) {
         try {
             Integer messageType = integer(form.get("message_type"));
@@ -112,15 +121,6 @@ public class ZycckPrintController extends FrontBaseController {
 
     private ZycckPrintTaskView toView(ZycckPrintTask task) {
         return ZycckPrintTaskView.from(task);
-    }
-
-    private static Long id(Object value) {
-        if (value == null) throw new ServiceException("缺少打印机编号");
-        try {
-            return Long.valueOf(String.valueOf(value));
-        } catch (NumberFormatException e) {
-            throw new ServiceException("打印机编号格式错误");
-        }
     }
 
     private static Integer integer(String value) {

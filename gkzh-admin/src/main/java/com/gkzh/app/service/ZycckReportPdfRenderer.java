@@ -95,7 +95,7 @@ public final class ZycckReportPdfRenderer {
 
     private void flushPage() throws IOException {
         graphics.setFont(font.deriveFont(24f));
-        graphics.setColor(new Color(120, 130, 145));
+        graphics.setColor(new Color(0, 0, 0));
         String footer = "未来职业猜猜看   |   第 " + (document.getNumberOfPages() + 1) + " 页";
         graphics.drawString(footer, (WIDTH - graphics.getFontMetrics().stringWidth(footer)) / 2, HEIGHT - 52);
         graphics.dispose();
@@ -168,16 +168,16 @@ public final class ZycckReportPdfRenderer {
         int index = 0;
         for (Map.Entry<String, Integer> e : counts.entrySet()) {
             double end = start + Math.PI * 2 * e.getValue() / careers.size();
-            graphics.setColor(colors[index++ % colors.length]);
+            graphics.setColor(new Color(0, 0, 0));
             graphics.fillArc(cx - radius, cy - radius, radius * 2, radius * 2, (int) Math.toDegrees(-end), (int) Math.toDegrees(end - start));
             start = end;
         }
         y = cy + radius + 36;
         index = 0;
         for (Map.Entry<String, Integer> e : counts.entrySet()) {
-            graphics.setColor(colors[index % colors.length]);
+            graphics.setColor(new Color(0, 0, 0));
             graphics.fillOval(PAD, y - 16, 16, 16);
-            graphics.setColor(new Color(75, 85, 99));
+            graphics.setColor(new Color(0, 0, 0));
             graphics.setFont(font.deriveFont(24f));
             graphics.drawString(e.getKey() + " " + Math.round(e.getValue() * 100f / careers.size()) + "%", PAD + 24, y);
             y += 30;
@@ -195,14 +195,14 @@ public final class ZycckReportPdfRenderer {
         int blockHeight = nameLines.size() * 32 + introLines.size() * 27 + 24;
         ensure(blockHeight);
 
-        graphics.setColor(new Color(26, 44, 74));
+        graphics.setColor(new Color(0, 0, 0));
         graphics.setFont(font.deriveFont(Font.BOLD, 38f));
         y += 38;
         for (String line : nameLines) {
             graphics.drawString(line, PAD, y);
             y += 46;
         }
-        graphics.setColor(new Color(75, 85, 99));
+        graphics.setColor(new Color(0, 0, 0));
         graphics.setFont(font.deriveFont(Font.PLAIN, 34f));
         for (String line : introLines) {
             graphics.drawString(line, PAD + 18, y);

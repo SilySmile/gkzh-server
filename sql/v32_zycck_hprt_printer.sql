@@ -1,5 +1,23 @@
 -- zycck 汉印云打印机及打印任务表（MySQL 5.7+，可重复执行）
 
+-- 新环境同时建立 Web 可维护的信标配置表；已有环境执行 v37。
+CREATE TABLE IF NOT EXISTS gkzh_zycck_beacon_config (
+    config_id BIGINT NOT NULL COMMENT '配置编号，固定为1',
+    beacon_enabled CHAR(1) NOT NULL DEFAULT '0' COMMENT '是否启用蓝牙信标限制：0关闭，1开启',
+    beacons_json JSON NOT NULL COMMENT '信标规则列表JSON，含名称、UUID、Major、Minor、最大距离和最低RSSI',
+    default_max_distance DECIMAL(8,2) NOT NULL DEFAULT 3.00 COMMENT '信标未单独配置时允许的最大距离，单位米',
+    default_min_rssi INT NOT NULL DEFAULT -90 COMMENT '信标未单独配置时允许的最低RSSI',
+    max_age_seconds INT NOT NULL DEFAULT 15 COMMENT '手机扫描结果最长有效时间，单位秒',
+    scan_timeout_seconds INT NOT NULL DEFAULT 10 COMMENT '小程序搜索信标的最长时间，单位秒',
+    update_time DATETIME DEFAULT NULL COMMENT '最近一次保存配置的时间',
+    PRIMARY KEY (config_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='职业猜猜看打印点蓝牙信标配置';
+
+-- 首次安装默认关闭蓝牙信标限制，待管理员在 Web 中配置后启用。
+INSERT IGNORE INTO gkzh_zycck_beacon_config
+    (config_id, beacon_enabled, beacons_json, default_max_distance, default_min_rssi, max_age_seconds, scan_timeout_seconds, update_time)
+VALUES (1, '0', '[]', 3.00, -90, 15, 10, NOW());
+
 CREATE TABLE IF NOT EXISTS gkzh_zycck_printer (
     printer_id BIGINT NOT NULL AUTO_INCREMENT COMMENT '本地打印机编号',
     printer_name VARCHAR(100) NOT NULL COMMENT '本地打印机名称',

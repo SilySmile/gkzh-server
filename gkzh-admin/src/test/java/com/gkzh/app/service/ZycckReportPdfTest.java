@@ -1,6 +1,5 @@
 package com.gkzh.app.service;
 
-import com.gkzh.app.controller.common.ReportCachePublicController;
 import com.gkzh.common.config.GkzhConfig;
 import com.gkzh.common.exception.ServiceException;
 import com.gkzh.zycck.domain.*;

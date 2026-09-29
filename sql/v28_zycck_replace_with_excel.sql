@@ -5,7 +5,19 @@
 
 SET @backup_table := CONCAT('gkzh_zycck_career_question_backup_', DATE_FORMAT(NOW(), '%Y%m%d%H%i%s'));
 SET @backup_sql := CONCAT(
-  'CREATE TABLE `', @backup_table, '` AS SELECT * FROM gkzh_zycck_career_question'
+  'CREATE TABLE `', @backup_table, '` LIKE gkzh_zycck_career_question'
+);
+PREPARE backup_stmt FROM @backup_sql;
+EXECUTE backup_stmt;
+DEALLOCATE PREPARE backup_stmt;
+SET @backup_sql := CONCAT(
+  'ALTER TABLE `', @backup_table, '` COMMENT = ''职业猜猜看职业资料及竞猜题目全量重建前备份'''
+);
+PREPARE backup_stmt FROM @backup_sql;
+EXECUTE backup_stmt;
+DEALLOCATE PREPARE backup_stmt;
+SET @backup_sql := CONCAT(
+  'INSERT INTO `', @backup_table, '` SELECT * FROM gkzh_zycck_career_question'
 );
 PREPARE backup_stmt FROM @backup_sql;
 EXECUTE backup_stmt;

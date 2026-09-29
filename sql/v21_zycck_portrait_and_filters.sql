@@ -3,7 +3,7 @@ SET @sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_sche
   'ALTER TABLE gkzh_game_config ADD COLUMN participate_portrait char(1) NOT NULL DEFAULT ''1'' COMMENT ''是否参与人物画像''', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 SET @sql := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='gkzh_zycck_record' AND column_name='department_id')=0,
-  'ALTER TABLE gkzh_zycck_record ADD COLUMN department_id bigint DEFAULT NULL, ADD COLUMN major varchar(100) DEFAULT NULL, ADD COLUMN gender char(1) DEFAULT NULL', 'SELECT 1');
+  'ALTER TABLE gkzh_zycck_record ADD COLUMN department_id bigint DEFAULT NULL COMMENT ''院系或专业部门编号'', ADD COLUMN major varchar(100) DEFAULT NULL COMMENT ''专业名称快照'', ADD COLUMN gender char(1) DEFAULT NULL COMMENT ''性别快照：0男，1女，其他未知''', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 SET @sql := IF((SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='gkzh_zycck_record' AND index_name='idx_zycck_record_filters')=0,
   'CREATE INDEX idx_zycck_record_filters ON gkzh_zycck_record(school_id,department_id,major,gender)', 'SELECT 1');

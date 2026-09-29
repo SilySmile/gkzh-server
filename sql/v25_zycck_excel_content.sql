@@ -10,13 +10,22 @@ SET @zycck_has_question := (
 );
 SET @zycck_sql := IF(
   @zycck_has_question = 0,
-  'ALTER TABLE gkzh_zycck_career_question ADD COLUMN has_question CHAR(1) NOT NULL DEFAULT ''1'' AFTER career_name',
+  'ALTER TABLE gkzh_zycck_career_question ADD COLUMN has_question CHAR(1) NOT NULL DEFAULT ''1'' COMMENT ''是否有对应竞猜题：1有题目，0仅探索职业'' AFTER career_name',
   'SELECT 1'
 );
 PREPARE zycck_stmt FROM @zycck_sql;
 EXECUTE zycck_stmt;
 DEALLOCATE PREPARE zycck_stmt;
-ALTER TABLE gkzh_zycck_career_question MODIFY option_a VARCHAR(200) DEFAULT NULL, MODIFY option_b VARCHAR(200) DEFAULT NULL, MODIFY option_c VARCHAR(200) DEFAULT NULL, MODIFY option_d VARCHAR(200) DEFAULT NULL, MODIFY option_a_career_id BIGINT DEFAULT NULL, MODIFY option_b_career_id BIGINT DEFAULT NULL, MODIFY option_c_career_id BIGINT DEFAULT NULL, MODIFY option_d_career_id BIGINT DEFAULT NULL, MODIFY correct_option_key CHAR(1) DEFAULT NULL;
+ALTER TABLE gkzh_zycck_career_question
+  MODIFY option_a VARCHAR(200) DEFAULT NULL COMMENT '选项 A 文本',
+  MODIFY option_b VARCHAR(200) DEFAULT NULL COMMENT '选项 B 文本',
+  MODIFY option_c VARCHAR(200) DEFAULT NULL COMMENT '选项 C 文本',
+  MODIFY option_d VARCHAR(200) DEFAULT NULL COMMENT '选项 D 文本',
+  MODIFY option_a_career_id BIGINT DEFAULT NULL COMMENT '选项 A 对应职业编号',
+  MODIFY option_b_career_id BIGINT DEFAULT NULL COMMENT '选项 B 对应职业编号',
+  MODIFY option_c_career_id BIGINT DEFAULT NULL COMMENT '选项 C 对应职业编号',
+  MODIFY option_d_career_id BIGINT DEFAULT NULL COMMENT '选项 D 对应职业编号',
+  MODIFY correct_option_key CHAR(1) DEFAULT NULL COMMENT '正确选项标识：A、B、C、D';
 UPDATE gkzh_zycck_career_question SET status='1', draw_candidate='0' WHERE status='0';
 UPDATE gkzh_zycck_category SET draw_mode='fixed', status='0', update_time=NOW() WHERE code='digital_product';
 UPDATE gkzh_zycck_category SET draw_mode='random', status='0', update_time=NOW() WHERE code='digital_content';

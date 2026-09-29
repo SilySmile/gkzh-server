@@ -8,19 +8,32 @@ import java.util.Date;
 /** 对前端公开的打印机信息，不包含 equipment_secret。 */
 @Data
 public class ZycckPrinterView {
+    /** 本地打印机编号。 */
     private Long printerId;
+    /** 管理员设置的业务名称。 */
     private String printerName;
+    /** 汉印云开放平台中的设备名称。 */
     private String cloudName;
+    /** 汉印云打印设备序列号 SN。 */
     private String equipmentSn;
+    /** 打印机型号名称。 */
     private String modelName;
+    /** 汉印云设备状态码。 */
     private Integer status;
+    /** 由设备状态码转换后的中文状态名称。 */
     private String statusText;
+    /** 本系统启用状态：0 启用，1 禁用。 */
     private String enabled;
+    /** 汉印云绑定状态：0 已绑定，1 未绑定。 */
     private String boundStatus;
+    /** 当前设备是否满足已启用、已绑定且在线三个打印条件。 */
     private boolean canPrint;
+    /** 最近一次查询设备状态的时间。 */
     private Date lastStatusSyncTime;
+    /** 最近一次同步汉印云设备列表的时间。 */
     private Date lastSyncTime;
 
+    /** 将打印机实体转换为不包含设备密钥的前端返回对象。 */
     public static ZycckPrinterView from(ZycckPrinter printer) {
         ZycckPrinterView view = new ZycckPrinterView();
         view.printerId = printer.getPrinterId();
@@ -40,6 +53,7 @@ public class ZycckPrinterView {
         return view;
     }
 
+    /** 将汉印云设备状态码转换为 Web 和小程序可直接展示的中文名称。 */
     private static String statusText(Integer status) {
         if (status == null) return "未知";
         switch (status) {

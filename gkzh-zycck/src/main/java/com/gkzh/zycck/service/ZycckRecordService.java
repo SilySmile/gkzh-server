@@ -1,6 +1,7 @@
 package com.gkzh.zycck.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.gkzh.activity.domain.week.GkzhActivityGame;
@@ -91,6 +92,8 @@ public class ZycckRecordService {
     public ZycckRecord start(Long recordId, Long userId) {
         ZycckRecord record = get(recordId, userId);
         if ("finished".equals(record.getStatus())) throw new ServiceException("本次游戏已完成");
+        // 清单已确认但反馈未提交时恢复报告页，不重新开始题目计时。
+        if ("activity_feedback".equals(record.getStage())) return record;
         if (record.getStartTime() == null) {
             record.setStartTime(DateUtils.getNowDate());
             prepareQuestionSnapshot(record);
@@ -108,7 +111,7 @@ public class ZycckRecordService {
     }
 
     @Transactional
-    public ZycckRecord openQuestion(Long recordId, Long userId) { ZycckRecord record = get(recordId, userId); if ("finished".equals(record.getStatus())) throw new ServiceException("本次游戏已完成"); if (record.getQuestionStartTime() == null) { record.setStage("question"); record.setQuestionStartTime(DateUtils.getNowDate()); record.setUpdateTime(DateUtils.getNowDate()); recordMapper.updateById(record); } return record; }
+    public ZycckRecord openQuestion(Long recordId, Long userId) { ZycckRecord record = get(recordId, userId); ensureExplorationEditable(record); if (record.getQuestionStartTime() == null) { record.setStage("question"); record.setQuestionStartTime(DateUtils.getNowDate()); record.setUpdateTime(DateUtils.getNowDate()); recordMapper.updateById(record); } return record; }
 
     private void prepareQuestionSnapshot(ZycckRecord record) {
         java.util.List<ZycckCategory> categories = categoryMapper.selectList(new QueryWrapper<ZycckCategory>().eq("status", "0").orderByAsc("sort_order"));
@@ -129,7 +132,7 @@ public class ZycckRecordService {
     @Transactional
     public Map<String,Object> answer(Long recordId, Long userId, Map<String,Object> answer) {
         ZycckRecord record = get(recordId, userId);
-        if ("finished".equals(record.getStatus())) throw new ServiceException("本次游戏已完成");
+        ensureExplorationEditable(record);
         int no = currentQuestionNo(record);
         boolean timeout = Boolean.parseBoolean(String.valueOf(answer.getOrDefault("timeoutFlag", false)));
         java.util.List<JSONObject> snapshots = record.getOptionSnapshotJson() == null ? java.util.Collections.emptyList() : JSON.parseArray(record.getOptionSnapshotJson(), JSONObject.class);
@@ -211,7 +214,7 @@ public class ZycckRecordService {
 
     @Transactional
     public Map<String,Object> awareness(Long recordId, Long userId, Map<String,Object> body) {
-        ZycckRecord record = get(recordId, userId); if ("finished".equals(record.getStatus())) throw new ServiceException("本次游戏已完成");
+        ZycckRecord record = get(recordId, userId); ensureExplorationEditable(record);
         if (!"feedback".equals(record.getStage())) throw new ServiceException("当前没有待提交的了解程度");
         java.util.List<JSONObject> values = record.getAwarenessJson() == null ? new java.util.ArrayList<>() : JSON.parseArray(record.getAwarenessJson(), JSONObject.class);
         JSONObject item = new JSONObject(); item.put("questionNo", record.getCurrentQuestionNo()); item.put("level", body == null ? null : (body.get("level") != null ? body.get("level") : body.get("awareness"))); values.removeIf(v -> record.getCurrentQuestionNo().equals(v.getInteger("questionNo"))); values.add(item); record.setAwarenessJson(JSON.toJSONString(values));
@@ -224,22 +227,24 @@ public class ZycckRecordService {
 
     @Transactional
     public ZycckRecord finish(Long recordId, Long userId) {
-        ZycckRecord record = get(recordId, userId);
-        if ("finished".equals(record.getStatus())) return record;
+        // 保留原 /finish 接口名称以兼容客户端，现在只确认清单并进入待反馈阶段。
+        ZycckRecord record = recordMapper.selectOne(new QueryWrapper<ZycckRecord>()
+                .eq("record_id", recordId).last("FOR UPDATE"));
+        if (record == null || userId == null || !userId.equals(record.getUserId())) throw new ServiceException("记录不存在");
+        if ("finished".equals(record.getStatus()) || "activity_feedback".equals(record.getStage())) return record;
         if (!"summary".equals(record.getStage()) && (record.getCurrentQuestionNo() == null || record.getCurrentQuestionNo() <= 5)) {
             throw new ServiceException("请先完成五道题");
         }
         if (record.getViewedCareerIds() == null || JSON.parseArray(record.getViewedCareerIds(), Long.class).isEmpty()) throw new ServiceException("请先查看职业详情");
-        record.setStatus("finished"); record.setStage("exploration"); record.setFinishTime(DateUtils.getNowDate()); record.setUpdateTime(DateUtils.getNowDate());
+        // 游戏和活动参与状态都保持进行中，提交有效反馈的事务才负责结束。
+        record.setStage("activity_feedback"); record.setUpdateTime(DateUtils.getNowDate());
         recordMapper.updateById(record);
-        GkzhGameParticipation participation = activityWeekService.getLatestParticipation(record.getGameId(), record.getUserId());
-        if (participation != null && record.getInstanceId().equals(participation.getInstanceId())) { participation.setFinishTime(record.getFinishTime()); participation.setStatus("1"); participation.setResultJson(JSON.toJSONString(java.util.Collections.singletonMap("recordId", record.getRecordId()))); activityWeekService.updateGameParticipation(participation); }
         return record;
     }
 
     @Transactional
     public ZycckRecord browse(Long recordId, Long userId, Long careerId) {
-        ZycckRecord record = get(recordId, userId); if ("finished".equals(record.getStatus())) throw new ServiceException("本次游戏已完成");
+        ZycckRecord record = lockExplorationRecord(recordId, userId); ensureExplorationEditable(record);
         ZycckCareerQuestion career = questionMapper.selectById(careerId);
         if (career == null || !"0".equals(career.getStatus()) || "1".equals(career.getHasQuestion())) throw new ServiceException("该职业仅用于竞猜，暂不可探索");
         java.util.List<Long> ids = record.getViewedCareerIds() == null ? new java.util.ArrayList<>() : JSON.parseArray(record.getViewedCareerIds(), Long.class); if (careerId != null && !ids.contains(careerId)) ids.add(careerId); record.setViewedCareerIds(JSON.toJSONString(ids)); record.setUpdateTime(DateUtils.getNowDate()); recordMapper.updateById(record); return record;
@@ -248,14 +253,43 @@ public class ZycckRecordService {
     public Map<String,Object> exploration(Long recordId, Long userId) {
         ZycckRecord record = get(recordId, userId); Map<String,Object> out = new LinkedHashMap<>(); out.put("record", record); out.put("viewedCareerIds", record.getViewedCareerIds() == null ? java.util.Collections.emptyList() : JSON.parseArray(record.getViewedCareerIds(), Long.class));
         java.util.List<Long> ids = record.getExplorationCareerIds() == null ? new java.util.ArrayList<>() : JSON.parseArray(record.getExplorationCareerIds(), Long.class); out.put("explorationCareerIds", ids);
-        java.util.List<Map<String,Object>> items = new java.util.ArrayList<>(); if (!ids.isEmpty()) for (ZycckCareerQuestion q : questionMapper.selectBatchIds(ids)) { Map<String,Object> item = new LinkedHashMap<>(); item.put("careerId", q.getCareerQuestionId()); item.put("careerName", q.getCareerName()); item.put("oneLineIntro", q.getOneLineIntro()); item.put("careerImageUrl", q.getCareerImageUrl()); items.add(item); } out.put("items", items); out.put("count", items.size()); out.put("limit", 6); out.put("readOnly", "finished".equals(record.getStatus())); return out;
+        java.util.List<Map<String,Object>> items = new java.util.ArrayList<>(); if (!ids.isEmpty()) for (ZycckCareerQuestion q : questionMapper.selectBatchIds(ids)) { Map<String,Object> item = new LinkedHashMap<>(); item.put("careerId", q.getCareerQuestionId()); item.put("careerName", q.getCareerName()); item.put("oneLineIntro", q.getOneLineIntro()); item.put("careerImageUrl", q.getCareerImageUrl()); items.add(item); } out.put("items", items); out.put("count", items.size()); out.put("limit", 6); out.put("readOnly", "finished".equals(record.getStatus()) || "activity_feedback".equals(record.getStage())); return out;
     }
 
     @Transactional
     public ZycckRecord updateExploration(Long recordId, Long userId, Long careerId, boolean remove) {
-        ZycckRecord record = get(recordId, userId); if ("finished".equals(record.getStatus())) throw new ServiceException("本次游戏已完成，结果仅可查看");
+        ZycckRecord record = lockExplorationRecord(recordId, userId); ensureExplorationEditable(record);
         ZycckCareerQuestion career = questionMapper.selectById(careerId);
         if (career == null || !"0".equals(career.getStatus()) || "1".equals(career.getHasQuestion())) throw new ServiceException("该职业仅用于竞猜，不能加入探索清单");
-        java.util.List<Long> ids = record.getExplorationCareerIds() == null ? new java.util.ArrayList<>() : JSON.parseArray(record.getExplorationCareerIds(), Long.class); if (remove) ids.remove(careerId); else { if (!ids.contains(careerId) && ids.size() >= 6) throw new ServiceException("探索清单最多添加 6 个职业"); if (!ids.contains(careerId)) ids.add(careerId); } record.setExplorationCareerIds(JSON.toJSONString(ids)); record.setUpdateTime(DateUtils.getNowDate()); recordMapper.updateById(record); return record;
+        java.util.List<Long> ids = record.getExplorationCareerIds() == null ? new java.util.ArrayList<>() : JSON.parseArray(record.getExplorationCareerIds(), Long.class);
+        // 第 2 道活动反馈题按“曾加入过”判断，移除最后一个职业不能清除这个标记。
+        if (!ids.isEmpty()) record.setExplorationAdded("1");
+        if (remove) ids.remove(careerId);
+        else {
+            if (!ids.contains(careerId) && ids.size() >= 6) throw new ServiceException("探索清单最多添加 6 个职业");
+            if (!ids.contains(careerId)) ids.add(careerId);
+            record.setExplorationAdded("1");
+        }
+        record.setExplorationCareerIds(JSON.toJSONString(ids)); record.setUpdateTime(DateUtils.getNowDate());
+        // 历史标记只通过此处显式置为1；普通 updateById 不写该字段，避免旧快照并发覆盖为0。
+        UpdateWrapper<ZycckRecord> update = new UpdateWrapper<ZycckRecord>().eq("record_id", recordId)
+                .set("exploration_career_ids", record.getExplorationCareerIds()).set("update_time", record.getUpdateTime());
+        if ("1".equals(record.getExplorationAdded())) update.set("exploration_added", "1");
+        recordMapper.update(null, update);
+        return record;
+    }
+
+    /** 清单确认后报告内容冻结，待反馈期间不能用旧页面改变答题或职业清单。 */
+    private void ensureExplorationEditable(ZycckRecord record) {
+        if ("finished".equals(record.getStatus())) throw new ServiceException("本次游戏已完成，结果仅可查看");
+        if ("activity_feedback".equals(record.getStage())) throw new ServiceException("探索清单已确认，请完成活动反馈");
+    }
+
+    /** 职业变更与确认清单使用相同的行锁，避免旧请求在确认后继续修改报告内容。 */
+    private ZycckRecord lockExplorationRecord(Long recordId, Long userId) {
+        ZycckRecord record = recordMapper.selectOne(new QueryWrapper<ZycckRecord>()
+                .eq("record_id", recordId).last("FOR UPDATE"));
+        if (record == null || userId == null || !userId.equals(record.getUserId())) throw new ServiceException("记录不存在");
+        return record;
     }
 }

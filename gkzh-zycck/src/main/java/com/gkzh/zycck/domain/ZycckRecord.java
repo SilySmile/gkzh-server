@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import lombok.Data;
 import java.util.Date;
 
@@ -37,7 +38,7 @@ public class ZycckRecord {
     private String gameType;
     /** 参与状态：participating 进行中，finished 已完成。 */
     private String status;
-    /** 当前业务阶段，如 scanned、question、exploration、finished。 */
+    /** 当前阶段，如 scanned、question、summary；activity_feedback 清单已确认待反馈，finished 游戏结束。 */
     private String stage;
     /** 当前题号，从 0 开始记录流程进度。 */
     private Integer currentQuestionNo;
@@ -59,6 +60,9 @@ public class ZycckRecord {
     private String viewedCareerIds;
     /** 学生加入进一步探索清单的职业编号列表。 */
     private String explorationCareerIds;
+    /** 是否曾加入过探索清单：0 未加入，1 曾加入；删除清单职业后仍保留。 */
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private String explorationAdded;
     /** 创建记录时使用的游戏配置版本。 */
     private String configVersion;
     /** 当前题目开始作答时间。 */

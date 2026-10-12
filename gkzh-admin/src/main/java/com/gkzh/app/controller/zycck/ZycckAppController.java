@@ -5,6 +5,8 @@ import com.gkzh.common.core.domain.AjaxResult;
 import com.gkzh.common.core.domain.model.StudentCheckin;
 import com.gkzh.zycck.domain.ZycckRecord;
 import com.gkzh.zycck.service.ZycckRecordService;
+import com.gkzh.zycck.service.ZycckActivityFeedbackService;
+import com.gkzh.zycck.dto.ZycckActivityFeedbackRequest;
 import com.gkzh.zycck.mapper.ZycckCategoryMapper;
 import com.gkzh.zycck.mapper.ZycckCareerQuestionMapper;
 import com.gkzh.zycck.domain.ZycckCategory;
@@ -27,13 +29,15 @@ public class ZycckAppController extends FrontBaseController {
     private final ZycckCareerQuestionMapper questionMapper;
     private final ZycckReportPdfService reportPdfService;
     private final ZycckCatalogCacheService catalogCacheService;
+    private final ZycckActivityFeedbackService activityFeedbackService;
 
-    public ZycckAppController(ZycckRecordService recordService, ZycckCategoryMapper categoryMapper, ZycckCareerQuestionMapper questionMapper, ZycckReportPdfService reportPdfService, ZycckCatalogCacheService catalogCacheService) {
+    public ZycckAppController(ZycckRecordService recordService, ZycckCategoryMapper categoryMapper, ZycckCareerQuestionMapper questionMapper, ZycckReportPdfService reportPdfService, ZycckCatalogCacheService catalogCacheService, ZycckActivityFeedbackService activityFeedbackService) {
         this.recordService = recordService;
         this.categoryMapper = categoryMapper;
         this.questionMapper = questionMapper;
         this.reportPdfService = reportPdfService;
         this.catalogCacheService = catalogCacheService;
+        this.activityFeedbackService = activityFeedbackService;
     }
 
     @GetMapping("/catalog")
@@ -122,6 +126,19 @@ public class ZycckAppController extends FrontBaseController {
         byte[] data = reportPdfService.create(recordId, getCurrentStudent().getUserId());
         return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=zycck-report.pdf")
                 .contentType(MediaType.APPLICATION_PDF).body(data);
+    }
+
+    /** 获取当前活动游戏的问卷、适用题目及本人已经保存的反馈。 */
+    @GetMapping("/records/{id}/activity-feedback")
+    public AjaxResult activityFeedback(@PathVariable Long id, @RequestParam Long instanceId, @RequestParam Long gameId) {
+        return AjaxResult.success(activityFeedbackService.get(id, getCurrentStudent().getUserId(), instanceId, gameId));
+    }
+
+    /** 清单确认后保存活动反馈并结束游戏，答案和结束状态在同一事务提交。 */
+    @PostMapping("/records/{id}/activity-feedback")
+    public AjaxResult saveActivityFeedback(@PathVariable Long id, @RequestParam Long instanceId,
+                                           @RequestParam Long gameId, @RequestBody ZycckActivityFeedbackRequest body) {
+        return AjaxResult.success(activityFeedbackService.save(id, getCurrentStudent().getUserId(), instanceId, gameId, body));
     }
 
     private static Long id(Object value) {

@@ -310,6 +310,15 @@ public class ActivityWeekServiceImpl implements IActivityWeekService {
     public int countFinishedGames(Long instanceId, Long userId) {
         QueryWrapper<GkzhGameParticipation> query = new QueryWrapper<>();
         query.eq("instance_id", instanceId).eq("user_id", userId).eq("status", "1");
+        // 抽奖等完成数量也必须排除未反馈的猜猜看，避免旧完成标记提前解锁后续环节。
+        query.apply("(NOT EXISTS (SELECT 1 FROM gkzh_activity_game g "
+                + "WHERE g.game_id = gkzh_game_participation.game_id AND g.game_type = 'zycck') "
+                + "OR EXISTS (SELECT 1 FROM gkzh_zycck_record r "
+                + "JOIN gkzh_zycck_activity_feedback f ON f.record_id = r.record_id "
+                + "WHERE r.instance_id = gkzh_game_participation.instance_id "
+                + "AND r.game_id = gkzh_game_participation.game_id "
+                + "AND r.user_id = gkzh_game_participation.user_id "
+                + "AND r.game_type = 'zycck' AND r.status = 'finished'))");
         return Math.toIntExact(gameParticipationMapper.selectCount(query));
     }
 
@@ -465,5 +474,15 @@ public class ActivityWeekServiceImpl implements IActivityWeekService {
     public int updateGameParticipation(GkzhGameParticipation participation) {
         participation.setUpdateTime(DateUtils.getNowDate());
         return gameParticipationMapper.updateById(participation);
+    }
+
+    /** 只删除同一活动、游戏、用户的参与数据；不按最新一条删除，避免旧完成记录残留。 */
+    @Override
+    public int deleteGameParticipations(Long instanceId, Long gameId, Long userId) {
+        if (instanceId == null || gameId == null || userId == null) {
+            throw new ServiceException("缺少活动、游戏或用户信息，无法删除游戏参与记录");
+        }
+        return gameParticipationMapper.delete(new QueryWrapper<GkzhGameParticipation>()
+                .eq("instance_id", instanceId).eq("game_id", gameId).eq("user_id", userId));
     }
 }

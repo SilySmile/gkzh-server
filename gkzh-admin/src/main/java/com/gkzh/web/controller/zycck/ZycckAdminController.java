@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.gkzh.common.core.controller.BaseController;
 import com.gkzh.common.core.domain.AjaxResult;
 import com.gkzh.common.core.page.TableDataInfo;
+import com.gkzh.common.exception.ServiceException;
 import com.gkzh.zycck.domain.ZycckCareerQuestion;
 import com.gkzh.zycck.domain.ZycckCategory;
 import com.gkzh.zycck.domain.ZycckRecord;
@@ -27,6 +28,8 @@ import com.gkzh.app.service.ZycckCatalogCacheService;
 import com.gkzh.app.service.ZycckPrintService;
 import com.gkzh.app.service.ZycckBeaconConfigService;
 import com.gkzh.zycck.service.ZycckPrinterService;
+import com.gkzh.zycck.service.ZycckActivityFeedbackService;
+import com.gkzh.zycck.dto.ZycckCareerBriefView;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import org.springframework.http.HttpHeaders;
@@ -57,12 +60,13 @@ public class ZycckAdminController extends BaseController {
     private final ZycckPrinterService printerService;
     private final ZycckPrintService printService;
     private final ZycckBeaconConfigService beaconConfigService;
+    private final ZycckActivityFeedbackService activityFeedbackService;
 
     public ZycckAdminController(ZycckCategoryMapper categoryMapper, ZycckCareerQuestionMapper questionMapper, ZycckRecordMapper recordMapper,
                                 GkzhSchoolMapper schoolMapper, GkzhSchoolDepartmentMapper departmentMapper, GkzhStudentMapper studentMapper,
                                 IActivityWeekService activityWeekService, ZycckCatalogCacheService catalogCacheService,
                                 ZycckPrinterService printerService, ZycckPrintService printService,
-                                ZycckBeaconConfigService beaconConfigService) {
+                                ZycckBeaconConfigService beaconConfigService, ZycckActivityFeedbackService activityFeedbackService) {
         this.categoryMapper = categoryMapper;
         this.questionMapper = questionMapper;
         this.recordMapper = recordMapper;
@@ -74,6 +78,7 @@ public class ZycckAdminController extends BaseController {
         this.printerService = printerService;
         this.printService = printService;
         this.beaconConfigService = beaconConfigService;
+        this.activityFeedbackService = activityFeedbackService;
     }
 
     @GetMapping("/categories")
@@ -197,10 +202,18 @@ public class ZycckAdminController extends BaseController {
     }
 
     @DeleteMapping("/records/{id}")
+    @org.springframework.transaction.annotation.Transactional
     public AjaxResult deleteRecord(@PathVariable Long id) {
-        ZycckRecord record = recordMapper.selectById(id);
+        // 与反馈提交锁定同一行，保证删除和反馈完成不能交叉留下孤立数据。
+        ZycckRecord record = recordMapper.selectOne(new QueryWrapper<ZycckRecord>()
+                .eq("record_id", id).last("FOR UPDATE"));
         if (record == null || !"zycck".equals(record.getGameType())) return AjaxResult.error("参与记录不存在");
-        return toAjax(recordMapper.deleteById(id));
+        // 三张表在同一事务清理；范围来自数据库记录，不能仅按用户删除其他活动或游戏。
+        activityWeekService.deleteGameParticipations(record.getInstanceId(), record.getGameId(), record.getUserId());
+        activityFeedbackService.deleteForRecord(id);
+        int rows = recordMapper.deleteById(id);
+        if (rows != 1) throw new ServiceException("参与记录删除失败，请重试");
+        return toAjax(rows);
     }
 
     @GetMapping("/statistics")
@@ -220,7 +233,7 @@ public class ZycckAdminController extends BaseController {
     }
 
     /**
-     * 查询单个学生在本游戏中的题目选择、正确答案和职业了解程度。
+     * 查询单个学生的答题、浏览职业、当前探索清单和活动反馈，供后续总结报告取数。
      */
     @GetMapping("/statistics/{recordId}")
     public AjaxResult statisticsRecord(@PathVariable Long recordId) {
@@ -251,7 +264,31 @@ public class ZycckAdminController extends BaseController {
             choices.add(choice);
         }
         result.put("choices", choices);
+        // viewedCareers：看过的职业；explorationCareers：当前保留在探索清单中的职业。
+        result.put("viewedCareers", careerBriefs(record.getViewedCareerIds()));
+        result.put("explorationCareers", careerBriefs(record.getExplorationCareerIds()));
+        // activityFeedback：题目定义、稳定选项编码、补充文字及反馈提交时间。
+        result.put("activityFeedback", activityFeedbackService.view(record));
         return AjaxResult.success(result);
+    }
+
+    /** 按记录中的编号顺序返回职业，原职业被删除时也保留编号，避免统计漏项。 */
+    private java.util.List<ZycckCareerBriefView> careerBriefs(String value) {
+        java.util.List<Long> ids = value == null || value.trim().isEmpty()
+                ? java.util.Collections.emptyList() : JSON.parseArray(value, Long.class);
+        java.util.List<ZycckCareerBriefView> result = new java.util.ArrayList<>();
+        if (ids.isEmpty()) return result;
+        java.util.Map<Long, ZycckCareerQuestion> careers = new java.util.HashMap<>();
+        for (ZycckCareerQuestion career : questionMapper.selectBatchIds(ids)) careers.put(career.getCareerQuestionId(), career);
+        for (Long id : new java.util.LinkedHashSet<>(ids)) {
+            ZycckCareerQuestion career = careers.get(id);
+            ZycckCareerBriefView item = new ZycckCareerBriefView();
+            item.setCareerId(id);
+            item.setCareerName(career == null ? "职业已删除（编号：" + id + "）" : career.getCareerName());
+            item.setOneLineIntro(career == null ? null : career.getOneLineIntro());
+            result.add(item);
+        }
+        return result;
     }
 
     private java.util.List<JSONObject> parseJsonArray(String value) {

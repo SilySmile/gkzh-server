@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
@@ -31,6 +32,7 @@ import com.gkzh.common.utils.DateUtils;
 import com.gkzh.school.domain.GkzhStudent;
 import com.gkzh.school.service.IGkzhStudentService;
 import com.gkzh.xycc.mapper.UserSelectionMapper;
+import com.gkzh.zycck.service.ZycckActivityFeedbackService;
 
 /**
  * 学生端活动接口
@@ -51,6 +53,9 @@ public class WeekAppController extends FrontBaseController {
     @Autowired
     private UserSelectionMapper userSelectionMapper;
 
+    @Autowired
+    private ZycckActivityFeedbackService zycckActivityFeedbackService;
+
     @GetMapping("/{instanceId}/flow")
     public AjaxResult flow(@PathVariable Long instanceId) {
         GkzhActivityWeekInstance instance = activityWeekService.getInstance(instanceId);
@@ -64,6 +69,8 @@ public class WeekAppController extends FrontBaseController {
                 ? new ArrayList<>()
                 : activityWeekService.listAreas(instanceId, schoolId);
         Long userId = student == null ? null : student.getUserId();
+        // 仅存在猜猜看游戏时查询一次反馈完成集合，不增加其他类型活动的查询。
+        Set<Long> completedZycckGames = null;
         List<Map<String, Object>> result = new ArrayList<>();
         for (GkzhActivityArea area : areas) {
             List<GkzhActivityGame> games = activityWeekService.listGames(area.getAreaId());
@@ -77,6 +84,13 @@ public class WeekAppController extends FrontBaseController {
                     boolean finished = participation != null && "1".equals(participation.getStatus());
                     if (finished && "mind-window".equals(game.getGameType())) {
                         finished = userSelectionMapper.selectByGameIdAndUserId(game.getGameId(), userId) != null;
+                    }
+                    if ("zycck".equals(game.getGameType())) {
+                        // 不能沿用旧参与表的完成标记，必须有本活动本人的反馈和结束记录。
+                        if (completedZycckGames == null) {
+                            completedZycckGames = zycckActivityFeedbackService.completedGameIds(instanceId, userId);
+                        }
+                        finished = completedZycckGames.contains(game.getGameId());
                     }
                     gameJson.put("isFinish", finished);
                     gameJson.put("isFail", participation != null && "2".equals(participation.getStatus()));
@@ -222,6 +236,10 @@ public class WeekAppController extends FrontBaseController {
         }
         if (instanceId != null && !instanceId.equals(game.getInstanceId())) {
             return AjaxResult.error("该游戏不属于当前活动");
+        }
+        // 禁止旧客户端或直接调用通用完成接口绕过活动反馈；只能由反馈事务结束游戏。
+        if ("zycck".equals(game.getGameType())) {
+            return AjaxResult.error("请提交活动反馈完成本次游戏");
         }
         GkzhGameParticipation participation = activityWeekService.getLatestParticipation(gameId, student.getUserId());
         if (participation == null) {

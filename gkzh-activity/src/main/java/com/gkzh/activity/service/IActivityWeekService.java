@@ -67,4 +67,7 @@ public interface IActivityWeekService {
     GkzhGameParticipation getLatestParticipation(Long gameId, Long userId);
 
     int updateGameParticipation(GkzhGameParticipation participation);
+
+    /** 按活动实例、游戏、用户清理该次游戏的全部参与记录，包含旧版本重复记录。 */
+    int deleteGameParticipations(Long instanceId, Long gameId, Long userId);
 }

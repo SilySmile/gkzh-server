@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.zycck.mapper.ZycckStatisticsExportMapper">
+    <!-- 明确映射参与记录与关联字段，不依赖全局驼峰开关，避免导出字段为空。 -->
+    <resultMap id="ExportRow" type="com.gkzh.zycck.dto.ZycckStatisticsExportRow" autoMapping="false">
+        <id property="recordId" column="record_id"/>
+        <result property="schoolId" column="school_id"/>
+        <result property="instanceId" column="instance_id"/>
+        <result property="gameId" column="game_id"/>
+        <result property="userId" column="user_id"/>
+        <result property="studentId" column="student_id"/>
+        <result property="departmentId" column="department_id"/>
+        <result property="major" column="major"/>
+        <result property="gender" column="gender"/>
+        <result property="gameType" column="game_type"/>
+        <result property="status" column="status"/>
+        <result property="stage" column="stage"/>
+        <result property="currentQuestionNo" column="current_question_no"/>
+        <result property="questionIds" column="question_ids"/>
+        <result property="questionOrder" column="question_order"/>
+        <result property="careerIds" column="career_ids"/>
+        <result property="categoryIds" column="category_ids"/>
+        <result property="optionSnapshotJson" column="option_snapshot_json"/>
+        <result property="answerJson" column="answer_json"/>
+        <result property="awarenessJson" column="awareness_json"/>
+        <result property="viewedCareerIds" column="viewed_career_ids"/>
+        <result property="explorationCareerIds" column="exploration_career_ids"/>
+        <result property="explorationAdded" column="exploration_added"/>
+        <result property="configVersion" column="config_version"/>
+        <result property="questionStartTime" column="question_start_time"/>
+        <result property="questionElapsedSeconds" column="question_elapsed_seconds"/>
+        <result property="scanTime" column="scan_time"/>
+        <result property="startTime" column="start_time"/>
+        <result property="finishTime" column="finish_time"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="schoolName" column="school_name"/>
+        <result property="instanceName" column="instance_name"/>
+        <result property="gameName" column="game_name"/>
+        <result property="studentName" column="student_name"/>
+        <result property="studentNo" column="student_no"/>
+        <result property="effectiveStudentId" column="effective_student_id"/>
+        <result property="effectiveDepartmentId" column="effective_department_id"/>
+        <result property="departmentName" column="department_name"/>
+        <result property="studentGender" column="student_gender"/>
+        <result property="feedbackRecordId" column="feedback_record_id"/>
+        <result property="feedbackVersion" column="feedback_version"/>
+        <result property="feedbackQuestion1Answers" column="feedback_question1_answers"/>
+        <result property="feedbackQuestion1Other" column="feedback_question1_other"/>
+        <result property="feedbackShowQuestion2" column="feedback_show_question2"/>
+        <result property="feedbackQuestion2Answer" column="feedback_question2_answer"/>
+        <result property="feedbackQuestion2Other" column="feedback_question2_other"/>
+        <result property="feedbackQuestion3Answers" column="feedback_question3_answers"/>
+        <result property="feedbackQuestion3Other" column="feedback_question3_other"/>
+        <result property="feedbackSubmittedTime" column="feedback_submitted_time"/>
+    </resultMap>
+    <!-- 每条参与记录对应一名学生的一次游戏；不同游戏不合并，避免覆盖抽题与答案。 -->
+    <select id="selectBatch" resultMap="ExportRow">
+        SELECT r.*, school.title AS school_name, instance.title AS instance_name, game.title AS game_name,
+               student.student_id AS effective_student_id, student.student_name, student.student_no,
+               student.gender AS student_gender,
+               COALESCE(r.department_id, student.department_id) AS effective_department_id,
+               department.title AS department_name,
+               feedback.record_id AS feedback_record_id, feedback.questionnaire_version AS feedback_version,
+               feedback.question1_answers AS feedback_question1_answers,
+               feedback.question1_other AS feedback_question1_other,
+               feedback.show_question2 AS feedback_show_question2,
+               feedback.question2_answer AS feedback_question2_answer,
+               feedback.question2_other AS feedback_question2_other,
+               feedback.question3_answers AS feedback_question3_answers,
+               feedback.question3_other AS feedback_question3_other,
+               feedback.submitted_time AS feedback_submitted_time
+        FROM gkzh_zycck_record r
+        LEFT JOIN gkzh_school school ON school.school_id = r.school_id
+        LEFT JOIN gkzh_activity_week_instance instance ON instance.instance_id = r.instance_id
+        LEFT JOIN gkzh_activity_game game ON game.game_id = r.game_id AND game.instance_id = r.instance_id
+        <!-- 先按本校学生主键关联，旧记录再按同校用户回退，子查询 LIMIT 1 避免重复学生放大导出行数。 -->
+        LEFT JOIN gkzh_student student ON student.student_id = COALESCE(
+            (SELECT s.student_id FROM gkzh_student s
+             WHERE s.student_id = r.student_id AND s.school_id = r.school_id AND s.del_flag = '0'),
+            (SELECT s.student_id FROM gkzh_student s
+             WHERE s.user_id = r.user_id AND s.school_id = r.school_id AND s.del_flag = '0'
+             ORDER BY s.student_id LIMIT 1))
+        LEFT JOIN gkzh_school_department department
+            ON department.department_id = COALESCE(r.department_id, student.department_id)
+        LEFT JOIN gkzh_zycck_activity_feedback feedback ON feedback.record_id = r.record_id
+        WHERE r.game_type = 'zycck' AND r.school_id = #{schoolId} AND r.instance_id = #{instanceId}
+          AND r.record_id &gt; #{afterId}
+        ORDER BY r.record_id
+        LIMIT #{limit}
+    </select>
+</mapper>

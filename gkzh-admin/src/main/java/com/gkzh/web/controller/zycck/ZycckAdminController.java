@@ -32,13 +32,9 @@ import com.gkzh.zycck.service.ZycckActivityFeedbackService;
 import com.gkzh.zycck.dto.ZycckCareerBriefView;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.nio.charset.StandardCharsets;
 import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -516,9 +512,4 @@ public class ZycckAdminController extends BaseController {
         return result.isEmpty() ? null : result;
     }
 
-    @GetMapping("/statistics/pdf")
-    public ResponseEntity<byte[]> statisticsPdf() {
-        byte[] data = "%PDF-1.4\n% zycck statistics\n%%EOF".getBytes(StandardCharsets.US_ASCII);
-        return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=zycck-statistics.pdf").contentType(MediaType.APPLICATION_PDF).body(data);
-    }
 }

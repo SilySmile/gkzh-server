@@ -21,10 +21,12 @@ public class ZycckStatisticsExportRow extends ZycckRecord {
     private String studentNo;
     /** 实际关联到的学生编号，兼容旧记录未保存学生编号的情况。 */
     private Long effectiveStudentId;
-    /** 实际院系或专业部门编号，优先使用记录快照。 */
+    /** 实际专业（二级部门）编号，优先使用参与记录快照。 */
     private Long effectiveDepartmentId;
-    /** 院系或专业部门名称。 */
+    /** 专业（二级部门）名称，作为专业名称快照缺失时的回退值。 */
     private String departmentName;
+    /** 专业部门上一级的院系名称；专业部门缺失时为空。 */
+    private String facultyName;
     /** 学生资料中的性别，作为记录快照缺失时的回退值。 */
     private String studentGender;
     /** 反馈主键；为空表示尚未提交反馈。 */

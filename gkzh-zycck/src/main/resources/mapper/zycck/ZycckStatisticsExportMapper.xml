@@ -42,6 +42,7 @@
         <result property="effectiveStudentId" column="effective_student_id"/>
         <result property="effectiveDepartmentId" column="effective_department_id"/>
         <result property="departmentName" column="department_name"/>
+        <result property="facultyName" column="faculty_name"/>
         <result property="studentGender" column="student_gender"/>
         <result property="feedbackRecordId" column="feedback_record_id"/>
         <result property="feedbackVersion" column="feedback_version"/>
@@ -61,6 +62,7 @@
                student.gender AS student_gender,
                COALESCE(r.department_id, student.department_id) AS effective_department_id,
                department.title AS department_name,
+               CASE WHEN COALESCE(department.parent_id, 0) = 0 THEN department.title ELSE faculty.title END AS faculty_name,
                feedback.record_id AS feedback_record_id, feedback.questionnaire_version AS feedback_version,
                feedback.question1_answers AS feedback_question1_answers,
                feedback.question1_other AS feedback_question1_other,
@@ -77,16 +79,101 @@
         <!-- 先按本校学生主键关联，旧记录再按同校用户回退，子查询 LIMIT 1 避免重复学生放大导出行数。 -->
         LEFT JOIN gkzh_student student ON student.student_id = COALESCE(
             (SELECT s.student_id FROM gkzh_student s
-             WHERE s.student_id = r.student_id AND s.school_id = r.school_id AND s.del_flag = '0'),
+             WHERE s.student_id = r.student_id AND s.user_id = r.user_id
+               AND s.school_id = r.school_id AND s.del_flag = '0'),
             (SELECT s.student_id FROM gkzh_student s
              WHERE s.user_id = r.user_id AND s.school_id = r.school_id AND s.del_flag = '0'
              ORDER BY s.student_id LIMIT 1))
         LEFT JOIN gkzh_school_department department
             ON department.department_id = COALESCE(r.department_id, student.department_id)
+           AND department.school_id = r.school_id
+        <!-- department 为专业部门，parent_id 对应其上一级院系。 -->
+        LEFT JOIN gkzh_school_department faculty
+            ON faculty.department_id = department.parent_id AND faculty.school_id = r.school_id
         LEFT JOIN gkzh_zycck_activity_feedback feedback ON feedback.record_id = r.record_id
         WHERE r.game_type = 'zycck' AND r.school_id = #{schoolId} AND r.instance_id = #{instanceId}
+        <!-- 状态口径与统计分析页面一致，避免页面与 Excel 行数不同。 -->
+        <if test="statusFilter != null and statusFilter != ''">
+          <choose>
+            <when test="statusFilter == 'finished'">AND r.status = 'finished'</when>
+            <when test="statusFilter == 'pendingFeedback'">AND (r.status IS NULL OR r.status &lt;&gt; 'finished') AND r.stage = 'activity_feedback'</when>
+            <when test="statusFilter == 'inProgress'">AND (r.status IS NULL OR r.status &lt;&gt; 'finished') AND (r.stage IS NULL OR r.stage &lt;&gt; 'activity_feedback')</when>
+          </choose>
+        </if>
+        <!-- 起始日包含 00:00:00，结束日使用次日零点排除；保留 scan_time 索引可用性。 -->
+        <if test="startTime != null">AND r.scan_time &gt;= #{startTime}</if>
+        <if test="endExclusive != null">AND r.scan_time &lt; #{endExclusive}</if>
+        <!-- 院系是专业部门的上级；兼容直接归在一级院系下的历史记录。 -->
+        <if test="departmentId != null">
+          AND (department.department_id = #{departmentId} OR faculty.department_id = #{departmentId})
+        </if>
+        <if test="major != null and major != ''">
+          AND COALESCE(NULLIF(TRIM(r.major), ''), department.title) LIKE CONCAT('%', #{major}, '%')
+        </if>
+        <if test="gender != null and gender != ''">
+          <!-- 与统计列表相同：0/男、1/女归一，其他和未填合并。 -->
+          AND (CASE WHEN COALESCE(NULLIF(TRIM(r.gender), ''), NULLIF(TRIM(student.gender), ''), '其他') IN ('0', '男') THEN '男'
+                    WHEN COALESCE(NULLIF(TRIM(r.gender), ''), NULLIF(TRIM(student.gender), ''), '其他') IN ('1', '女') THEN '女'
+                    ELSE '其他' END) = #{gender}
+        </if>
+        <if test="studentNo != null and studentNo != ''">
+          AND student.student_no LIKE CONCAT('%', #{studentNo}, '%')
+        </if>
           AND r.record_id &gt; #{afterId}
         ORDER BY r.record_id
         LIMIT #{limit}
+    </select>
+    <!-- 用户编号在参与表中非空；按用户取同一学校活动的最早记录，避免多个游戏重复计数。 -->
+    <resultMap id="ParticipationSummaryRow" type="com.gkzh.zycck.dto.ZycckParticipationSummaryRow" autoMapping="false">
+        <result property="facultyId" column="faculty_id"/>
+        <result property="facultyName" column="faculty_name"/>
+        <result property="majorId" column="major_id"/>
+        <result property="majorName" column="major_name"/>
+        <result property="participantCount" column="participant_count"/>
+    </resultMap>
+    <select id="selectParticipationSummary" resultMap="ParticipationSummaryRow">
+        SELECT person.faculty_id, person.faculty_name, person.major_id, person.major_name,
+               COUNT(*) AS participant_count
+        FROM (
+            SELECT CASE WHEN COALESCE(department.parent_id, 0) = 0 THEN department.department_id
+                        ELSE faculty.department_id END AS faculty_id,
+                   CASE WHEN COALESCE(department.parent_id, 0) = 0 THEN department.title
+                        ELSE faculty.title END AS faculty_name,
+                   CASE WHEN department.parent_id &gt; 0 THEN department.department_id ELSE NULL END AS major_id,
+                   COALESCE(NULLIF(TRIM(r.major), ''),
+                            CASE WHEN department.parent_id &gt; 0 THEN department.title ELSE NULL END) AS major_name
+            FROM (
+                SELECT MIN(record_id) AS record_id
+                FROM gkzh_zycck_record
+                WHERE school_id = #{schoolId} AND instance_id = #{instanceId} AND game_type = 'zycck'
+                <!-- 先按状态过滤再取每位学生最早记录，确保人数汇总也服从状态筛选。 -->
+                <if test="statusFilter != null and statusFilter != ''">
+                  <choose>
+                    <when test="statusFilter == 'finished'">AND status = 'finished'</when>
+                    <when test="statusFilter == 'pendingFeedback'">AND (status IS NULL OR status &lt;&gt; 'finished') AND stage = 'activity_feedback'</when>
+                    <when test="statusFilter == 'inProgress'">AND (status IS NULL OR status &lt;&gt; 'finished') AND (stage IS NULL OR stage &lt;&gt; 'activity_feedback')</when>
+                  </choose>
+                </if>
+                <if test="startTime != null">AND scan_time &gt;= #{startTime}</if>
+                <if test="endExclusive != null">AND scan_time &lt; #{endExclusive}</if>
+                GROUP BY user_id
+            ) first_record
+            JOIN gkzh_zycck_record r ON r.record_id = first_record.record_id
+            <!-- 同校学生档案仅用来补足缺失的部门，不能把其他学校的学生匹配进来。 -->
+            LEFT JOIN gkzh_student student ON student.student_id = COALESCE(
+                (SELECT s.student_id FROM gkzh_student s
+                 WHERE s.student_id = r.student_id AND s.user_id = r.user_id
+                   AND s.school_id = r.school_id AND s.del_flag = '0'),
+                (SELECT s.student_id FROM gkzh_student s
+                 WHERE s.user_id = r.user_id AND s.school_id = r.school_id AND s.del_flag = '0'
+                 ORDER BY s.student_id LIMIT 1))
+            LEFT JOIN gkzh_school_department department
+                ON department.department_id = COALESCE(r.department_id, student.department_id)
+               AND department.school_id = r.school_id
+            LEFT JOIN gkzh_school_department faculty
+                ON faculty.department_id = department.parent_id AND faculty.school_id = r.school_id
+        ) person
+        GROUP BY person.faculty_id, person.faculty_name, person.major_id, person.major_name
+        ORDER BY person.faculty_name, person.major_name, person.faculty_id, person.major_id
     </select>
 </mapper>

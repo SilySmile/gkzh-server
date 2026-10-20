@@ -28,7 +28,7 @@ public class ZycckRecord {
     private Long userId;
     /** 学生编号。 */
     private Long studentId;
-    /** 院系或专业部门编号。 */
+    /** 专业（二级部门）编号；其父部门才是院系。 */
     private Long departmentId;
     /** 专业名称快照。 */
     private String major;

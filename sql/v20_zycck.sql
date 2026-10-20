@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS gkzh_zycck_record (
   game_id BIGINT NOT NULL COMMENT '活动游戏编号',
   user_id BIGINT NOT NULL COMMENT '平台用户编号',
   student_id BIGINT DEFAULT NULL COMMENT '学生编号',
-  department_id BIGINT DEFAULT NULL COMMENT '院系或专业部门编号',
+  department_id BIGINT DEFAULT NULL COMMENT '专业（二级部门）编号，其上一级为院系',
   major VARCHAR(100) DEFAULT NULL COMMENT '专业名称快照',
   gender CHAR(1) DEFAULT NULL COMMENT '性别快照：0男，1女，其他未知',
   game_type VARCHAR(32) NOT NULL DEFAULT 'zycck' COMMENT '游戏类型，固定为zycck',

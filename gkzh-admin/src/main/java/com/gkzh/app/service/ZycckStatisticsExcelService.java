@@ -10,6 +10,7 @@ import com.gkzh.zycck.domain.ZycckCareerQuestion;
 import com.gkzh.zycck.domain.ZycckCategory;
 import com.gkzh.zycck.dto.ZycckFeedbackQuestionView;
 import com.gkzh.zycck.dto.ZycckStatisticsExportRow;
+import com.gkzh.zycck.dto.ZycckParticipationSummaryRow;
 import com.gkzh.zycck.mapper.ZycckCareerQuestionMapper;
 import com.gkzh.zycck.mapper.ZycckCategoryMapper;
 import com.gkzh.zycck.mapper.ZycckStatisticsExportMapper;
@@ -24,10 +25,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
-/** 学校活动全量 Excel 导出：按主键分批读取，流式工作簿避免把全部明细驻留内存。 */
+/** 当前筛选条件的学生 Excel 导出：按主键分批读取，流式工作簿避免把全部明细驻留内存。 */
 @Service
 public class ZycckStatisticsExcelService {
     /** 每批查询学生参与记录数量，与页面分页无关。 */
@@ -52,16 +55,39 @@ public class ZycckStatisticsExcelService {
         this.schools = schools; this.activities = activities; this.feedbackService = feedbackService;
     }
 
-    /** 必选学校和活动；同一次只读事务内导出全部游戏记录，不受院系等列表筛选及页码影响。 */
+    /** 兼容只按学校与活动导出的调用。 */
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public SXSSFWorkbook create(Long schoolId, Long instanceId) throws IOException {
-        if (schoolId == null || instanceId == null || schoolId <= 0 || instanceId <= 0)
-            throw new ServiceException("请先选择学校和活动，再下载Excel");
-        PageHelper.clearPage();
-        if (schools.selectGkzhSchoolBySchoolId(schoolId) == null) throw new ServiceException("所选学校不存在，请重新选择");
-        if (activities.getInstance(instanceId) == null) throw new ServiceException("所选活动不存在，请重新选择");
-        List<ZycckStatisticsExportRow> batch = exports.selectBatch(schoolId, instanceId, 0L, BATCH_SIZE);
-        if (batch.isEmpty()) throw new ServiceException("所选学校和活动暂无职业猜猜看参与数据");
+        return create(schoolId, instanceId, null, null, null, null);
+    }
+
+    /** 必选学校和活动，选填院系、专业、性别、学号；始终忽略页面页码。 */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public SXSSFWorkbook create(Long schoolId, Long instanceId, Long departmentId, String major,
+            String gender, String studentNo) throws IOException {
+        return create(schoolId, instanceId, departmentId, major, gender, studentNo, null, null);
+    }
+
+    /** 兼容未传参与状态的已有调用。 */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public SXSSFWorkbook create(Long schoolId, Long instanceId, Long departmentId, String major,
+            String gender, String studentNo, LocalDate startDate, LocalDate endDate) throws IOException {
+        return create(schoolId, instanceId, departmentId, major, gender, studentNo, null, startDate, endDate);
+    }
+
+    /** 学生明细按参与日期和业务状态筛选，结束日计入整天；导出仍不受列表分页影响。 */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public SXSSFWorkbook create(Long schoolId, Long instanceId, Long departmentId, String major,
+            String gender, String studentNo, String statusFilter, LocalDate startDate, LocalDate endDate) throws IOException {
+        validateScope(schoolId, instanceId);
+        validateDateRange(startDate, endDate);
+        major = blankToNull(major); gender = blankToNull(gender); studentNo = blankToNull(studentNo);
+        statusFilter = statusFilter(statusFilter);
+        LocalDateTime startTime = startDate == null ? null : startDate.atStartOfDay();
+        LocalDateTime endExclusive = endDate == null ? null : endDate.plusDays(1).atStartOfDay();
+        List<ZycckStatisticsExportRow> batch = exports.selectBatch(schoolId, instanceId, departmentId, major, gender, studentNo,
+                statusFilter, startTime, endExclusive, 0L, BATCH_SIZE);
+        if (batch.isEmpty()) throw new ServiceException("当前筛选条件下暂无职业猜猜看参与数据");
         Map<Integer, ZycckFeedbackQuestionView> definitions = feedbackService.exportQuestionDefinitions().stream()
                 .collect(Collectors.toMap(ZycckFeedbackQuestionView::getQuestionNo, value -> value));
         Map<Long, ZycckCategory> categoryMap = categories.selectList(new QueryWrapper<>()).stream()
@@ -72,7 +98,7 @@ public class ZycckStatisticsExcelService {
         try {
             Tables tables = new Tables(workbook);
             List<String> studentHeaders = new ArrayList<>(Arrays.asList("记录编号", "学校", "活动", "游戏", "学生姓名", "学号",
-                    "学生编号", "用户编号", "学校编号", "活动编号", "游戏编号", "院系/专业部门", "部门编号", "专业", "性别",
+                    "学生编号", "用户编号", "学校编号", "活动编号", "游戏编号", "院系", "专业部门编号", "专业", "性别",
                     "参与状态", "流程阶段", "当前题号", "扫码时间", "开始时间", "结束时间", "已记录答题数", "非超时作答数", "超时数"));
             for (int no = 1; no <= 5; no++) for (String field : Arrays.asList("场景职业", "学生选项", "学生选择职业", "正确选项",
                     "正确职业", "作答结果", "作答秒数", "职业了解程度")) studentHeaders.add("第" + no + "题" + field);
@@ -81,10 +107,10 @@ public class ZycckStatisticsExcelService {
                     "反馈第2题选项编码", "反馈第2题加入原因", "反馈第2题其他", "反馈第3题选项编码", "反馈第3题后续需求", "反馈第3题其他", "反馈提交时间"));
             Table students = tables.table("学生数据", studentHeaders);
             Table answers = tables.table("答题明细", Arrays.asList("记录编号", "学校", "活动", "游戏", "学生姓名", "学号", "用户编号",
-                    "题号", "题目编号", "职业大类编号", "职业大类", "场景职业", "场景图片", "A选项", "B选项", "C选项", "D选项",
+                    "院系", "专业", "题号", "题目编号", "职业大类编号", "职业大类", "场景职业", "场景图片", "A选项", "B选项", "C选项", "D选项",
                     "学生选项", "学生选择职业", "正确选项", "正确职业", "作答结果", "作答秒数", "了解程度编码", "职业了解程度", "正确答案来源"));
             Table careerRows = tables.table("职业明细", Arrays.asList("记录编号", "学校", "活动", "游戏", "学生姓名", "学号", "用户编号",
-                    "职业编号", "职业名称", "已经浏览", "在探索清单", "职业大类编号", "职业大类", "一句话介绍", "主要工作内容", "一天工作示例",
+                    "院系", "专业", "职业编号", "职业名称", "已经浏览", "在探索清单", "职业大类编号", "职业大类", "一句话介绍", "主要工作内容", "一天工作示例",
                     "职业存在原因", "职业图片", "职业资料状态"));
             Table raw = tables.table("原始记录", Arrays.asList("记录编号", "学校编号", "活动编号", "游戏编号", "用户编号", "原学生编号",
                     "原部门编号", "原专业", "原性别", "游戏类型", "原状态", "原阶段", "当前题号", "题目编号列表", "题目顺序", "关联职业编号",
@@ -93,7 +119,11 @@ public class ZycckStatisticsExcelService {
                     "反馈记录编号", "反馈版本", "反馈第1题编码JSON", "反馈第1题其他", "反馈第2题适用标记", "反馈第2题编码", "反馈第2题其他",
                     "反馈第3题编码JSON", "反馈第3题其他", "反馈提交时间"));
             Table notes = tables.table("数据说明", Arrays.asList("说明项", "内容"));
-            notes.write("导出范围", "仅按学校编号 " + schoolId + " 与活动编号 " + instanceId + " 筛选；包含进行中和已结束记录，不使用页面页码、院系、专业、性别、学号筛选。");
+            notes.write("导出范围", "学校编号 " + schoolId + "；活动编号 " + instanceId + "；院系编号 " + filterText(departmentId)
+                    + "；专业 " + filterText(major) + "；性别 " + filterText(gender) + "；学号 " + filterText(studentNo)
+                    + "；参与状态 " + statusText(statusFilter)
+                    + "；参与开始日期 " + filterText(startDate) + "；参与结束日期 " + filterText(endDate)
+                    + "。结束日包含整天；仅导出上述状态范围内的记录，不使用页面页码。");
             notes.write("学生数据粒度", "每个学生在每个游戏的一份参与记录对应一行；同一活动存在多个猜猜看游戏时分别保留，不覆盖答案。");
             notes.write("完成状态", "反馈已提交且参与记录已结束才为已完成；旧已结束但未反馈的记录显示待活动反馈，原状态和原结束时间保留在原始记录。");
             notes.write("题目与正确答案", "场景及选项来自学生本局快照；旧快照未保存正确答案时从当前题库读取并注明来源。题库删除且快照无正确答案时标为无法判定，不计为错误。");
@@ -121,12 +151,89 @@ public class ZycckStatisticsExcelService {
                     afterId = record.getRecordId();
                 }
                 if (batch.size() < BATCH_SIZE) break;
-                batch = exports.selectBatch(schoolId, instanceId, afterId, BATCH_SIZE);
+                batch = exports.selectBatch(schoolId, instanceId, departmentId, major, gender, studentNo,
+                        statusFilter, startTime, endExclusive, afterId, BATCH_SIZE);
             }
             tables.finish(); complete = true; return workbook;
         } finally {
             if (!complete) { try { workbook.close(); } finally { workbook.dispose(); } }
         }
+    }
+
+    /** 汇总 Excel：一位用户在同一活动中无论参与几个游戏，都只统计一次。 */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public SXSSFWorkbook createParticipationSummary(Long schoolId, Long instanceId) throws IOException {
+        return createParticipationSummary(schoolId, instanceId, null, null);
+    }
+
+    /** 系专业人数按参与日期过滤后，再对所选范围内的用户去重。 */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public SXSSFWorkbook createParticipationSummary(Long schoolId, Long instanceId, LocalDate startDate,
+            LocalDate endDate) throws IOException {
+        return createParticipationSummary(schoolId, instanceId, null, startDate, endDate);
+    }
+
+    /** 系专业人数在日期、业务状态过滤后，再对所选范围内的用户去重。 */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public SXSSFWorkbook createParticipationSummary(Long schoolId, Long instanceId, String statusFilter, LocalDate startDate,
+            LocalDate endDate) throws IOException {
+        validateScope(schoolId, instanceId);
+        validateDateRange(startDate, endDate);
+        statusFilter = statusFilter(statusFilter);
+        LocalDateTime startTime = startDate == null ? null : startDate.atStartOfDay();
+        LocalDateTime endExclusive = endDate == null ? null : endDate.plusDays(1).atStartOfDay();
+        List<ZycckParticipationSummaryRow> rows = exports.selectParticipationSummary(schoolId, instanceId, statusFilter, startTime, endExclusive);
+        if (rows.isEmpty()) throw new ServiceException(startDate == null && endDate == null && statusFilter == null
+                ? "所选学校和活动暂无职业猜猜看参与数据" : "当前筛选条件下暂无职业猜猜看参与数据");
+        SXSSFWorkbook workbook = new SXSSFWorkbook(100);
+        workbook.setCompressTempFiles(true);
+        boolean complete = false;
+        try {
+            Tables tables = new Tables(workbook);
+            Table faculties = tables.table("各系参与人数", Arrays.asList("系", "系编号", "参与人数"));
+            Table majors = tables.table("各专业参与人数", Arrays.asList("系", "系编号", "专业", "专业部门编号", "参与人数"));
+            Table notes = tables.table("统计说明", Arrays.asList("说明项", "内容"));
+            Map<List<Object>, Long> facultyCounts = new LinkedHashMap<>();
+            long total = 0;
+            for (ZycckParticipationSummaryRow row : rows) {
+                long count = row.getParticipantCount() == null ? 0 : row.getParticipantCount();
+                String facultyName = first(row.getFacultyName(), "未分配系");
+                String majorName = first(row.getMajorName(), "未填写专业");
+                List<Object> facultyKey = Arrays.asList(row.getFacultyId(), facultyName);
+                facultyCounts.merge(facultyKey, count, Long::sum);
+                majors.write(facultyName, id(row.getFacultyId()), majorName, id(row.getMajorId()), count);
+                total += count;
+            }
+            for (Map.Entry<List<Object>, Long> entry : facultyCounts.entrySet())
+                faculties.write(entry.getKey().get(1), id((Long) entry.getKey().get(0)), entry.getValue());
+            faculties.write("总计", null, total);
+            majors.write("总计", null, null, null, total);
+            notes.write("统计范围", "学校编号 " + schoolId + "；活动编号 " + instanceId + "；参与开始日期 " + filterText(startDate)
+                    + "；参与结束日期 " + filterText(endDate) + "；参与状态 " + statusText(statusFilter)
+                    + "（结束日包含整天）；不受院系、专业、性别、学号及分页条件影响。");
+            notes.write("参与人数口径", "同一学校、活动、日期和状态范围内按用户编号去重；同一学生参与多个猜猜看游戏只计1人。以该用户最早的符合条件参与记录确定系和专业，因此各系、各专业人数之和均为总人数。");
+            notes.write("系和专业来源", "系为学校部门一级节点，专业为二级节点；优先使用最早参与记录的部门及专业快照，部门缺失时回退到同校学生当前档案，专业快照缺失时回退到专业部门名称。");
+            notes.write("资料缺失", "没有可用部门或专业的学生仍计入人数，分别列在“未分配系”或“未填写专业”；部门已删除但保留旧行时仍可显示历史名称。");
+            notes.write("导出时间", new Date());
+            tables.finish(); complete = true; return workbook;
+        } finally {
+            if (!complete) { try { workbook.close(); } finally { workbook.dispose(); } }
+        }
+    }
+
+    /** 两类导出统一验证学校和活动，且清掉可能由上游请求留下的 PageHelper 分页。 */
+    private void validateScope(Long schoolId, Long instanceId) {
+        if (schoolId == null || instanceId == null || schoolId <= 0 || instanceId <= 0)
+            throw new ServiceException("请先选择学校和活动，再下载Excel");
+        PageHelper.clearPage();
+        if (schools.selectGkzhSchoolBySchoolId(schoolId) == null) throw new ServiceException("所选学校不存在，请重新选择");
+        if (activities.getInstance(instanceId) == null) throw new ServiceException("所选活动不存在，请重新选择");
+    }
+
+    /** 开始日期不能晚于结束日期；两个日期均允许单独设置。 */
+    private static void validateDateRange(LocalDate startDate, LocalDate endDate) {
+        if (startDate != null && endDate != null && startDate.isAfter(endDate))
+            throw new ServiceException("开始日期不能晚于结束日期");
     }
 
     /** 按学生记录展开全部业务数据，未提交学生不丢失、条件题不冒充未回答。 */
@@ -140,7 +247,7 @@ public class ZycckStatisticsExcelService {
         boolean showSecond = submitted ? "1".equals(r.getFeedbackShowQuestion2()) : "1".equals(r.getExplorationAdded()) || !ids(r.getExplorationCareerIds()).isEmpty();
         List<Object> values = identity(r);
         values.addAll(Arrays.asList(id(r.getEffectiveStudentId()), id(r.getUserId()), id(r.getSchoolId()), id(r.getInstanceId()), id(r.getGameId()),
-                r.getDepartmentName(), id(r.getEffectiveDepartmentId()), first(r.getMajor(), r.getDepartmentName()), gender(first(r.getGender(), r.getStudentGender())),
+                r.getFacultyName(), id(r.getEffectiveDepartmentId()), first(r.getMajor(), r.getDepartmentName()), gender(first(r.getGender(), r.getStudentGender())),
                 submitted && "finished".equals(r.getStatus()) ? "已完成" : "finished".equals(r.getStatus()) || "activity_feedback".equals(r.getStage()) ? "待活动反馈" : "进行中",
                 stage(r.getStage()), r.getCurrentQuestionNo(), r.getScanTime(), r.getStartTime(), submitted ? r.getFinishTime() : null,
                 selected.size(), answeredCount, timeoutCount));
@@ -159,6 +266,7 @@ public class ZycckStatisticsExcelService {
                     option(snapshot, correctKey), result, answer == null ? null : answer.getInteger("elapsedSeconds"), awareness(level)));
             questionValues.put(no, detail);
             List<Object> row = identity(r); row.add(id(r.getUserId()));
+            row.add(r.getFacultyName()); row.add(first(r.getMajor(), r.getDepartmentName()));
             Long categoryId = snapshot.getLong("categoryId");
             row.addAll(Arrays.asList(no, id(questionId), id(categoryId), categoryName(categoryMap, categoryId), snapshot.getString("careerName"),
                     snapshot.getString("questionImageUrl"), snapshot.getString("optionA"), snapshot.getString("optionB"), snapshot.getString("optionC"), snapshot.getString("optionD"),
@@ -179,6 +287,7 @@ public class ZycckStatisticsExcelService {
         for (Long careerId : allCareers) {
             ZycckCareerQuestion career = careerMap.get(careerId);
             List<Object> row = identity(r); row.add(id(r.getUserId()));
+            row.add(r.getFacultyName()); row.add(first(r.getMajor(), r.getDepartmentName()));
             row.addAll(Arrays.asList(id(careerId), careerName(careerId, career), viewed.contains(careerId) ? "是" : "否", explored.contains(careerId) ? "是" : "否",
                     career == null ? null : id(career.getCategoryId()), career == null ? null : categoryName(categoryMap, career.getCategoryId()),
                     career == null ? null : career.getOneLineIntro(), career == null ? null : career.getMainWork(), career == null ? null : career.getDayExample(),
@@ -197,6 +306,21 @@ public class ZycckStatisticsExcelService {
     private static List<Object> identity(ZycckStatisticsExportRow r) { return new ArrayList<>(Arrays.asList(id(r.getRecordId()), r.getSchoolName(), r.getInstanceName(), r.getGameName(), r.getStudentName(), r.getStudentNo())); }
     private static String id(Long value) { return value == null ? "" : value.toString(); }
     private static String first(String value, String fallback) { return value == null || value.trim().isEmpty() ? fallback : value; }
+    /** 空筛选项不送入 SQL；说明页用“全部”标明未筛选。 */
+    private static String blankToNull(String value) { return value == null || value.trim().isEmpty() ? null : value.trim(); }
+    private static String filterText(Object value) { return value == null ? "全部" : String.valueOf(value); }
+    /** Web 的业务状态筛选值统一在服务层校验，避免 Mapper 静默忽略错误参数。 */
+    private static String statusFilter(String value) {
+        value = blankToNull(value);
+        if (value == null || "finished".equals(value) || "pendingFeedback".equals(value) || "inProgress".equals(value)) return value;
+        throw new ServiceException("参与状态筛选值无效");
+    }
+    private static String statusText(String value) {
+        if ("finished".equals(value)) return "已完成";
+        if ("pendingFeedback".equals(value)) return "待活动反馈";
+        if ("inProgress".equals(value)) return "进行中";
+        return "全部";
+    }
     private static String gender(String value) { return "0".equals(value) || "男".equals(value) ? "男" : "1".equals(value) || "女".equals(value) ? "女" : "其他"; }
     private static String awareness(String value) { return "A".equals(value) ? "以前就知道" : "B".equals(value) ? "听说过但不了解" : "C".equals(value) ? "第一次知道" : value; }
     private static String stage(String value) { Map<String, String> names = Map.of("scanned", "已扫码", "question", "竞猜中", "feedback", "答题反馈", "summary", "探索中", "exploration", "探索清单", "activity_feedback", "待活动反馈", "finished", "已结束"); return names.getOrDefault(value == null ? "" : value, value); }

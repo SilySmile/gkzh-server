@@ -3,6 +3,9 @@ package com.gkzh.app.controller.zycck;
 import com.gkzh.common.core.controller.FrontBaseController;
 import com.gkzh.common.core.domain.AjaxResult;
 import com.gkzh.common.core.domain.model.StudentCheckin;
+import com.gkzh.common.exception.ServiceException;
+import com.gkzh.school.domain.GkzhStudent;
+import com.gkzh.school.mapper.GkzhStudentMapper;
 import com.gkzh.zycck.domain.ZycckRecord;
 import com.gkzh.zycck.service.ZycckRecordService;
 import com.gkzh.zycck.service.ZycckActivityFeedbackService;
@@ -30,14 +33,17 @@ public class ZycckAppController extends FrontBaseController {
     private final ZycckReportPdfService reportPdfService;
     private final ZycckCatalogCacheService catalogCacheService;
     private final ZycckActivityFeedbackService activityFeedbackService;
+    /** 学生资料以服务端数据库为准，不能依赖小程序提交的专业和院系字段。 */
+    private final GkzhStudentMapper studentMapper;
 
-    public ZycckAppController(ZycckRecordService recordService, ZycckCategoryMapper categoryMapper, ZycckCareerQuestionMapper questionMapper, ZycckReportPdfService reportPdfService, ZycckCatalogCacheService catalogCacheService, ZycckActivityFeedbackService activityFeedbackService) {
+    public ZycckAppController(ZycckRecordService recordService, ZycckCategoryMapper categoryMapper, ZycckCareerQuestionMapper questionMapper, ZycckReportPdfService reportPdfService, ZycckCatalogCacheService catalogCacheService, ZycckActivityFeedbackService activityFeedbackService, GkzhStudentMapper studentMapper) {
         this.recordService = recordService;
         this.categoryMapper = categoryMapper;
         this.questionMapper = questionMapper;
         this.reportPdfService = reportPdfService;
         this.catalogCacheService = catalogCacheService;
         this.activityFeedbackService = activityFeedbackService;
+        this.studentMapper = studentMapper;
     }
 
     @GetMapping("/catalog")
@@ -48,7 +54,17 @@ public class ZycckAppController extends FrontBaseController {
     @PostMapping("/records/enter")
     public AjaxResult enter(@RequestBody Map<String, Object> body) {
         StudentCheckin student = getCurrentStudent();
-        return AjaxResult.success(recordService.enter(id(body.get("schoolId")), id(body.get("instanceId")), id(body.get("gameId")), student.getUserId(), student.getStuId(), id(body.get("departmentId")), text(body.get("major")), text(body.get("gender"))));
+        Long schoolId = id(body.get("schoolId"));
+        GkzhStudent profile = schoolId == null || student == null || student.getStuId() == null ? null
+                : studentMapper.selectGkzhStudentByStudentId(student.getStuId());
+        if (profile == null || !schoolId.equals(profile.getSchoolId()) || student.getUserId() == null
+                || !student.getUserId().equals(profile.getUserId())) {
+            throw new ServiceException("学生档案与当前学校不一致，请重新登录后扫码");
+        }
+        // 学生表的 department_id 是专业（二级部门）ID；院系是该专业的父部门。
+        // 专业名称已由学生查询关联部门表给出，忽略客户端传来的 departmentId/major，避免空值或伪造。
+        return AjaxResult.success(recordService.enter(schoolId, id(body.get("instanceId")), id(body.get("gameId")),
+                student.getUserId(), profile.getStudentId(), profile.getDepartmentId(), profile.getDepartmentName(), profile.getGender()));
     }
 
     @PostMapping("/records/{id}/start")
@@ -145,7 +161,4 @@ public class ZycckAppController extends FrontBaseController {
         return value == null ? null : Long.valueOf(String.valueOf(value));
     }
 
-    private static String text(Object value) {
-        return value == null ? null : String.valueOf(value);
-    }
 }

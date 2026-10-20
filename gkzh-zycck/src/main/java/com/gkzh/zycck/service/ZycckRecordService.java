@@ -55,13 +55,27 @@ public class ZycckRecordService {
         }
         ZycckRecord existing = recordMapper.selectOne(new QueryWrapper<ZycckRecord>()
                 .eq("school_id", schoolId).eq("instance_id", instanceId).eq("game_id", gameId).eq("user_id", userId));
-        if (existing != null) return existing;
+        if (existing != null) {
+            // 旧版本进入游戏时未传专业资料；再次进入时仅补空字段，不覆盖已有历史快照。
+            boolean changed = false;
+            // 只更新补齐字段，避免整个旧实体 updateById 覆盖并发提交的答案、阶段或结束时间。
+            UpdateWrapper<ZycckRecord> patch = new UpdateWrapper<ZycckRecord>().eq("record_id", existing.getRecordId());
+            if (existing.getStudentId() == null && studentId != null) { existing.setStudentId(studentId); patch.set("student_id", studentId); changed = true; }
+            if (existing.getDepartmentId() == null && departmentId != null) { existing.setDepartmentId(departmentId); patch.set("department_id", departmentId); changed = true; }
+            if ((existing.getMajor() == null || existing.getMajor().trim().isEmpty()) && major != null && !major.trim().isEmpty()) {
+                existing.setMajor(major.trim()); patch.set("major", major.trim()); changed = true;
+            }
+            if (existing.getGender() == null && gender != null) { existing.setGender(gender); patch.set("gender", gender); changed = true; }
+            if (changed) { existing.setUpdateTime(DateUtils.getNowDate()); patch.set("update_time", existing.getUpdateTime()); recordMapper.update(null, patch); }
+            return existing;
+        }
         Date now = DateUtils.getNowDate();
         ZycckRecord record = new ZycckRecord();
         record.setSchoolId(schoolId); record.setInstanceId(instanceId); record.setGameId(gameId); record.setUserId(userId);
         record.setGameType("zycck"); record.setStatus("participating"); record.setStage("scanned");
         record.setCurrentQuestionNo(0); record.setScanTime(now); record.setCreateTime(now); record.setUpdateTime(now);
         record.setStudentId(studentId);
+        // department_id 保存专业部门 ID，major 保存其名称快照；院系需要查询该部门的 parent_id。
         record.setDepartmentId(departmentId); record.setMajor(major); record.setGender(gender);
         recordMapper.insert(record);
         // 扫码即参与统计：与 zycck 业务记录在同一事务内写入活动参与表，且按活动实例隔离。

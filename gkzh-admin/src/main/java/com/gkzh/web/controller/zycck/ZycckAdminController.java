@@ -33,9 +33,11 @@ import com.gkzh.zycck.dto.ZycckCareerBriefView;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
+import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -187,8 +189,11 @@ public class ZycckAdminController extends BaseController {
     }
 
     @GetMapping("/records")
-    public TableDataInfo records(@RequestParam(required = false) Long instanceId, @RequestParam(required = false) Long schoolId, @RequestParam(required = false) Long departmentId, @RequestParam(required = false) String major, @RequestParam(required = false) String gender, @RequestParam(required = false) String studentNo) {
-        QueryWrapper<ZycckRecord> q = buildRecordQuery(instanceId, schoolId, departmentId, major, gender, studentNo).orderByDesc("record_id");
+    public TableDataInfo records(@RequestParam(required = false) Long instanceId, @RequestParam(required = false) Long schoolId, @RequestParam(required = false) Long departmentId, @RequestParam(required = false) String major, @RequestParam(required = false) String gender, @RequestParam(required = false) String studentNo,
+            @RequestParam(required = false) String statusFilter,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        QueryWrapper<ZycckRecord> q = buildRecordQuery(instanceId, schoolId, departmentId, major, gender, studentNo, statusFilter, startDate, endDate).orderByDesc("record_id");
         startPage();
         java.util.List<ZycckRecord> records = recordMapper.selectList(q);
         // 在转换为普通列表之前保留 PageHelper 查询的总数。
@@ -213,11 +218,14 @@ public class ZycckAdminController extends BaseController {
     }
 
     @GetMapping("/statistics")
-    public AjaxResult statistics(@RequestParam(required = false) Long instanceId, @RequestParam(required = false) Long schoolId, @RequestParam(required = false) Long departmentId, @RequestParam(required = false) String major, @RequestParam(required = false) String gender, @RequestParam(required = false) String studentNo) {
+    public AjaxResult statistics(@RequestParam(required = false) Long instanceId, @RequestParam(required = false) Long schoolId, @RequestParam(required = false) Long departmentId, @RequestParam(required = false) String major, @RequestParam(required = false) String gender, @RequestParam(required = false) String studentNo,
+            @RequestParam(required = false) String statusFilter,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
         // 汇总在数据库中计算，不加载全部记录，也不受列表页码影响。
-        long entered = recordMapper.selectCount(buildRecordQuery(instanceId, schoolId, departmentId, major, gender, studentNo));
-        long finished = recordMapper.selectCount(buildRecordQuery(instanceId, schoolId, departmentId, major, gender, studentNo).eq("status", "finished"));
-        TableDataInfo page = records(instanceId, schoolId, departmentId, major, gender, studentNo);
+        long entered = recordMapper.selectCount(buildRecordQuery(instanceId, schoolId, departmentId, major, gender, studentNo, statusFilter, startDate, endDate));
+        long finished = recordMapper.selectCount(buildRecordQuery(instanceId, schoolId, departmentId, major, gender, studentNo, statusFilter, startDate, endDate).eq("status", "finished"));
+        TableDataInfo page = records(instanceId, schoolId, departmentId, major, gender, studentNo, statusFilter, startDate, endDate);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("participating", entered);
         result.put("enteredCount", entered);
@@ -231,7 +239,8 @@ public class ZycckAdminController extends BaseController {
     /**
      * 查询单个学生的答题、浏览职业、当前探索清单和活动反馈，供后续总结报告取数。
      */
-    @GetMapping("/statistics/{recordId}")
+    // 详情路径只接受数字记录编号，避免把 /statistics/excel 等固定功能地址误识别为记录编号。
+    @GetMapping("/statistics/{recordId:\\d+}")
     public AjaxResult statisticsRecord(@PathVariable Long recordId) {
         ZycckRecord record = recordMapper.selectById(recordId);
         if (record == null || !"zycck".equals(record.getGameType())) return AjaxResult.error("参与记录不存在");
@@ -317,10 +326,16 @@ public class ZycckAdminController extends BaseController {
         return "(SELECT s." + column + " FROM gkzh_student s WHERE s.student_id = " + STUDENT_ID_SQL + ")";
     }
 
-    private QueryWrapper<ZycckRecord> buildRecordQuery(Long instanceId, Long schoolId, Long departmentId, String major, String gender, String studentNo) {
+    private QueryWrapper<ZycckRecord> buildRecordQuery(Long instanceId, Long schoolId, Long departmentId, String major, String gender, String studentNo,
+            String statusFilter, LocalDate startDate, LocalDate endDate) {
+        if (startDate != null && endDate != null && startDate.isAfter(endDate))
+            throw new ServiceException("开始日期不能晚于结束日期");
         QueryWrapper<ZycckRecord> q = new QueryWrapper<ZycckRecord>().eq("game_type", "zycck");
         if (instanceId != null) q.eq("instance_id", instanceId);
         if (schoolId != null) q.eq("school_id", schoolId);
+        // 参与日期以扫码时间为准，结束日的 23:59:59 也包含在内；不对列做 DATE() 运算。
+        if (startDate != null) q.ge("scan_time", startDate.atStartOfDay());
+        if (endDate != null) q.lt("scan_time", endDate.plusDays(1).atStartOfDay());
         String department = "COALESCE(gkzh_zycck_record.department_id, " + studentColumn("department_id") + ")";
         if (departmentId != null) {
             q.apply("(" + department + " = {0} OR EXISTS (SELECT 1 FROM gkzh_school_department d WHERE d.department_id = "
@@ -342,6 +357,15 @@ public class ZycckAdminController extends BaseController {
         if (studentNo != null && !studentNo.trim().isEmpty()) {
             q.apply(studentColumn("student_no") + " LIKE {0}", "%" + studentNo.trim() + "%");
         }
+        // 页面状态不是简单的 status 字段：待活动反馈表示已进入反馈阶段但还未完成。
+        String status = statusFilter == null ? null : statusFilter.trim();
+        if (status == null || status.isEmpty()) return q;
+        if ("finished".equals(status)) q.eq("status", "finished");
+        else if ("pendingFeedback".equals(status))
+            q.apply("(status IS NULL OR status <> {0}) AND stage = {1}", "finished", "activity_feedback");
+        else if ("inProgress".equals(status))
+            q.apply("(status IS NULL OR status <> {0}) AND (stage IS NULL OR stage <> {1})", "finished", "activity_feedback");
+        else throw new ServiceException("参与状态筛选值无效");
         return q;
     }
 
@@ -371,6 +395,8 @@ public class ZycckAdminController extends BaseController {
             row.put("createTime", record.getCreateTime());
             row.put("updateTime", record.getUpdateTime());
             GkzhStudent student = record.getStudentId() == null ? null : studentMapper.selectGkzhStudentByStudentId(record.getStudentId());
+            if (student != null && (!record.getSchoolId().equals(student.getSchoolId())
+                    || !record.getUserId().equals(student.getUserId()))) student = null;
             if (student == null && record.getUserId() != null) {
                 GkzhStudent fallback = studentMapper.selectOne(new QueryWrapper<GkzhStudent>()
                         .eq("user_id", record.getUserId()).eq("school_id", record.getSchoolId())
@@ -387,8 +413,13 @@ public class ZycckAdminController extends BaseController {
             if (school != null) row.put("schoolName", school.getTitle());
             Long effectiveDepartmentId = (Long) row.get("departmentId");
             GkzhSchoolDepartment dept = effectiveDepartmentId == null ? null : departmentMapper.selectDepartmentById(effectiveDepartmentId);
-            if (dept != null) row.put("departmentName", dept.getTitle());
-            row.put("major", firstNonBlank(record.getMajor(), dept == null ? null : dept.getTitle()));
+            if (dept != null && record.getSchoolId().equals(dept.getSchoolId())) {
+                // 学生 department_id 指向专业；页面“院系”展示专业的父部门。
+                GkzhSchoolDepartment college = dept.getParentId() == null || dept.getParentId() <= 0
+                        ? dept : departmentMapper.selectDepartmentById(dept.getParentId());
+                if (college != null && record.getSchoolId().equals(college.getSchoolId())) row.put("departmentName", college.getTitle());
+                row.put("major", firstNonBlank(record.getMajor(), dept.getParentId() != null && dept.getParentId() > 0 ? dept.getTitle() : null));
+            } else row.put("major", firstNonBlank(record.getMajor(), null));
             result.add(row);
         }
         return result;

@@ -151,7 +151,16 @@ public class WeekAppController extends FrontBaseController {
         }
 
         StudentCheckin student = getCurrentStudent();
-        Long schoolId = findSchoolId(game);
+        Long studentSchoolId = getCurrentStudentSchoolId();
+        Long gameSchoolId = activityWeekService.getGameSchoolId(game);
+        if (studentSchoolId == null) {
+            return AjaxResult.error("当前账号未绑定学校，无法进入活动");
+        }
+        // 扫码入口必须按活动区域的学校归属校验，防止跨校扫码进入其他学校的活动。
+        if (gameSchoolId != null && !gameSchoolId.equals(studentSchoolId)) {
+            return AjaxResult.error("该活动不属于当前学校，无法进入");
+        }
+        Long schoolId = gameSchoolId != null ? gameSchoolId : studentSchoolId;
 
         // 扫码入口必须幂等：已完成的游戏不再重复创建未完成记录。
         GkzhGameParticipation latest = activityWeekService.getLatestParticipation(gameId, student.getUserId());
@@ -237,6 +246,13 @@ public class WeekAppController extends FrontBaseController {
         if (instanceId != null && !instanceId.equals(game.getInstanceId())) {
             return AjaxResult.error("该游戏不属于当前活动");
         }
+        Long gameSchoolId = activityWeekService.getGameSchoolId(game);
+        if (gameSchoolId != null) {
+            Long studentSchoolId = getCurrentStudentSchoolId();
+            if (studentSchoolId == null || !gameSchoolId.equals(studentSchoolId)) {
+                return AjaxResult.error("该活动不属于当前学校，无法进入");
+            }
+        }
         // 禁止旧客户端或直接调用通用完成接口绕过活动反馈；只能由反馈事务结束游戏。
         if ("zycck".equals(game.getGameType())) {
             return AjaxResult.error("请提交活动反馈完成本次游戏");
@@ -263,16 +279,6 @@ public class WeekAppController extends FrontBaseController {
         participation.setResultJson(body == null ? null : JSON.toJSONString(body));
         activityWeekService.updateGameParticipation(participation);
         return AjaxResult.success(passed ? "完成" : "未通过");
-    }
-
-    private Long findSchoolId(GkzhActivityGame game) {
-        List<GkzhActivityArea> areas = activityWeekService.listAreas(game.getInstanceId(), null);
-        for (GkzhActivityArea area : areas) {
-            if (area.getAreaId().equals(game.getAreaId())) {
-                return area.getSchoolId();
-            }
-        }
-        return null;
     }
 
     private Long getCurrentStudentSchoolId() {

@@ -56,6 +56,7 @@ class ZycckRecordDepartmentTest {
         IActivityWeekService activities = mock(IActivityWeekService.class);
         GkzhActivityGame game = new GkzhActivityGame(); game.setInstanceId(4L); game.setGameType("zycck");
         when(activities.getGame(5L)).thenReturn(game);
+        when(activities.getGameSchoolId(game)).thenReturn(9L);
         ZycckRecordService service = new ZycckRecordService(mapper, activities, null, null);
         ZycckRecord record = service.enter(9L, 4L, 5L, 3L, 21L, 101L, "软件工程", "0");
         assertEquals(101L, record.getDepartmentId());
@@ -69,6 +70,7 @@ class ZycckRecordDepartmentTest {
         IActivityWeekService activities = mock(IActivityWeekService.class);
         GkzhActivityGame game = new GkzhActivityGame(); game.setInstanceId(4L); game.setGameType("zycck");
         when(activities.getGame(5L)).thenReturn(game);
+        when(activities.getGameSchoolId(game)).thenReturn(9L);
         ZycckRecord existing = new ZycckRecord(); existing.setRecordId(1L); existing.setMajor("  ");
         when(mapper.selectOne(any(Wrapper.class))).thenReturn(existing);
         ZycckRecordService service = new ZycckRecordService(mapper, activities, null, null);

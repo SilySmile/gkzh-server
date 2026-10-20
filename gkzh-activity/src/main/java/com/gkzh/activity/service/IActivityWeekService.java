@@ -58,6 +58,9 @@ public interface IActivityWeekService {
 
     GkzhActivityGame getGame(Long gameId);
 
+    /** 返回游戏所属区域绑定的学校编号；区域未绑定学校时返回 null。 */
+    Long getGameSchoolId(GkzhActivityGame game);
+
     int saveGame(GkzhActivityGame game);
 
     int deleteGame(Long gameId);

@@ -60,6 +60,8 @@ class WeekActivityFeedbackCompletionTest {
         game = new GkzhActivityGame(); game.setGameId(4L); game.setInstanceId(3L); game.setGameType("zycck");
         when(activities.listGames(7L)).thenReturn(Collections.singletonList(game));
         when(activities.getGame(4L)).thenReturn(game);
+        // 这些用例聚焦完成与反馈规则；学校校验由 WeekAppControllerSchoolTest 单独覆盖。
+        when(activities.getGameSchoolId(any())).thenReturn(null);
         GkzhGameParticipation old = new GkzhGameParticipation(); old.setStatus("1"); old.setInstanceId(3L);
         when(activities.getLatestParticipation(4L, 2L)).thenReturn(old);
         when(records.selectList(any())).thenReturn(Collections.emptyList());

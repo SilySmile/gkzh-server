@@ -53,6 +53,11 @@ public class ZycckRecordService {
         if (game == null || !instanceId.equals(game.getInstanceId()) || !"zycck".equals(game.getGameType())) {
             throw new ServiceException("该游戏不属于当前活动");
         }
+        // 活动区域的学校归属必须与学生当前学校一致，避免扫他校二维码进入。
+        Long activitySchoolId = activityWeekService.getGameSchoolId(game);
+        if (activitySchoolId != null && !activitySchoolId.equals(schoolId)) {
+            throw new ServiceException("该活动不属于当前学校，无法进入");
+        }
         ZycckRecord existing = recordMapper.selectOne(new QueryWrapper<ZycckRecord>()
                 .eq("school_id", schoolId).eq("instance_id", instanceId).eq("game_id", gameId).eq("user_id", userId));
         if (existing != null) {

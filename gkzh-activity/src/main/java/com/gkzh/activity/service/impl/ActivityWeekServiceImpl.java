@@ -398,6 +398,16 @@ public class ActivityWeekServiceImpl implements IActivityWeekService {
     }
 
     @Override
+    public Long getGameSchoolId(GkzhActivityGame game) {
+        if (game == null || game.getAreaId() == null) {
+            return null;
+        }
+        // 区域是活动内容的学校归属来源，与 flow 接口按学校过滤区域的口径保持一致。
+        GkzhActivityArea area = areaMapper.selectById(game.getAreaId());
+        return area == null ? null : area.getSchoolId();
+    }
+
+    @Override
     public int saveGame(GkzhActivityGame game) {
         Date now = DateUtils.getNowDate();
         if (game.getGameId() == null) {

@@ -47,6 +47,10 @@ public class LotteryPrize extends BaseEntity
     @Excel(name = "奖品类型", readConverterExp = "1=实物奖品,2=虚拟奖品,3=谢谢参与")
     private Integer prizeType;
 
+    /** 是否需核销（1-需核销，0-无需核销；默认需核销） */
+    @Excel(name = "是否需核销", readConverterExp = "1=需核销,0=无需核销")
+    private String needRedemption;
+
     /** 是否启用（0-禁用，1-启用） */
     @Excel(name = "是否启用", readConverterExp = "0=禁用,1=启用")
     private String isEnabled;
@@ -57,5 +61,11 @@ public class LotteryPrize extends BaseEntity
 
     /** 计算出的实际概率（用于显示） */
     private BigDecimal actualProbability;
+
+    /** 本次中奖记录编号（抽奖结果返回用，不持久化） */
+    private Long recordId;
+
+    /** 本次中奖核销码（抽奖结果返回用，不持久化） */
+    private String redemptionCode;
 
 }

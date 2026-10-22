@@ -39,6 +39,13 @@ public class LotteryPrizeServiceImpl implements ILotteryPrizeService
         for (int i = 0; i < 10; i++) code.append(REDEMPTION_CHARS.charAt(REDEMPTION_RANDOM.nextInt(REDEMPTION_CHARS.length())));
         return code.toString();
     }
+
+    /** 谢谢参与不进入核销流程；其余奖品按 Web 维护的开关，历史/空值默认需核销。 */
+    private String resolveNeedRedemption(LotteryPrize prize) {
+        if (prize == null) return "1";
+        if (Integer.valueOf(3).equals(prize.getPrizeType())) return "0";
+        return "0".equals(prize.getNeedRedemption()) ? "0" : "1";
+    }
     @Autowired
     private LotteryPrizeMapper lotteryPrizeMapper;
 
@@ -265,8 +272,13 @@ public class LotteryPrizeServiceImpl implements ILotteryPrizeService
             record.setDrawTime(DateUtils.getNowDate());
             record.setCreateTime(DateUtils.getNowDate());
             record.setRedemptionCode(createRedemptionCode());
+            String needRedemption = resolveNeedRedemption(lotteryPrize);
+            record.setNeedRedemption(needRedemption);
             lotteryRecordMapper.insertLotteryRecord(record);
             Long recordId = record.getRecordId();
+            lotteryPrize.setNeedRedemption(needRedemption);
+            lotteryPrize.setRecordId(recordId);
+            lotteryPrize.setRedemptionCode(record.getRedemptionCode());
 
             //添加参与活动记录
             GkzhActivityParticipationRecord activityRecord = new GkzhActivityParticipationRecord();
@@ -338,7 +350,12 @@ public class LotteryPrizeServiceImpl implements ILotteryPrizeService
         record.setDrawTime(DateUtils.getNowDate());
         record.setCreateTime(DateUtils.getNowDate());
         record.setRedemptionCode(createRedemptionCode());
+        String needRedemption = resolveNeedRedemption(lotteryPrize);
+        record.setNeedRedemption(needRedemption);
         lotteryRecordMapper.insertLotteryRecord(record);
+        lotteryPrize.setNeedRedemption(needRedemption);
+        lotteryPrize.setRecordId(record.getRecordId());
+        lotteryPrize.setRedemptionCode(record.getRedemptionCode());
         return lotteryPrize;
     }
 }

@@ -129,6 +129,8 @@ public class LotteryAppController extends FrontBaseController {
                         lotteryPrizeResult.setPrizeId(prize.getPrizeId());
                         lotteryPrizeResult.setImageUrl(resolveUrl(prize.getImageUrl()));
                         lotteryPrizeResult.setTitle(prize.getTitle());
+                        lotteryPrizeResult.setPrizeType(prize.getPrizeType());
+                        lotteryPrizeResult.setNeedRedemption(prize.getNeedRedemption());
                         return lotteryPrizeResult;
                     })
                     .collect(java.util.stream.Collectors.toList());
@@ -153,6 +155,8 @@ public class LotteryAppController extends FrontBaseController {
                         dto.setPrizeId(prize.getPrizeId());
                         dto.setImageUrl(resolveUrl(prize.getImageUrl()));
                         dto.setTitle(prize.getTitle());
+                        dto.setPrizeType(prize.getPrizeType());
+                        dto.setNeedRedemption(prize.getNeedRedemption());
                         return dto;
                     })
                     .collect(java.util.stream.Collectors.toList());
@@ -183,6 +187,10 @@ public class LotteryAppController extends FrontBaseController {
             LotteryPrizeResult lotteryPrizeResult = new LotteryPrizeResult();
             lotteryPrizeResult.setPrizeId(winningPrize.getPrizeId());
             lotteryPrizeResult.setTitle(winningPrize.getTitle());
+            lotteryPrizeResult.setPrizeType(winningPrize.getPrizeType());
+            lotteryPrizeResult.setNeedRedemption(winningPrize.getNeedRedemption());
+            lotteryPrizeResult.setRecordId(winningPrize.getRecordId());
+            lotteryPrizeResult.setRedemptionCode(winningPrize.getRedemptionCode());
             
             return AjaxResult.success(lotteryPrizeResult);
             
@@ -237,6 +245,10 @@ public class LotteryAppController extends FrontBaseController {
             LotteryPrizeResult dto = new LotteryPrizeResult();
             dto.setPrizeId(winningPrize.getPrizeId());
             dto.setTitle(winningPrize.getTitle());
+            dto.setPrizeType(winningPrize.getPrizeType());
+            dto.setNeedRedemption(winningPrize.getNeedRedemption());
+            dto.setRecordId(winningPrize.getRecordId());
+            dto.setRedemptionCode(winningPrize.getRedemptionCode());
             return AjaxResult.success(dto);
         } catch (Exception e) {
             return AjaxResult.error("抽奖失败：" + e.getMessage());

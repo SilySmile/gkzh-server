@@ -139,8 +139,8 @@ public class StaffServiceImpl implements IStaffService {
     }
 
     @Override
-    public List<StaffPrizeView> listPrizeRecords(Long schoolId) {
-        return redemptionMapper.selectPrizeViewsBySchool(schoolId);
+    public List<StaffPrizeView> listPrizeRecords(Long schoolId, String studentNo) {
+        return redemptionMapper.selectPrizeViewsBySchool(schoolId, studentNo);
     }
 
     @Override

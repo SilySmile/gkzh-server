@@ -13,12 +13,13 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="stock"    column="stock"    />
         <result property="weight"    column="weight"    />
         <result property="prizeType"    column="prize_type"    />
+        <result property="needRedemption"    column="need_redemption"    />
         <result property="isEnabled"    column="is_enabled"    />
         <result property="sortOrder"    column="sort_order"    />
     </resultMap>
 
     <sql id="selectLotteryPrizeVo">
-        select p.prize_id, p.lottery_id, a.title as activity_title, p.title, p.image_url, p.stock, p.weight, p.prize_type, p.is_enabled, p.sort_order
+        select p.prize_id, p.lottery_id, a.title as activity_title, p.title, p.image_url, p.stock, p.weight, p.prize_type, p.need_redemption, p.is_enabled, p.sort_order
         from lottery_prize p
         left join lottery a on p.lottery_id = a.lottery_id
     </sql>
@@ -33,6 +34,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="stock != null "> and p.stock = #{stock}</if>
             <if test="weight != null "> and p.weight = #{weight}</if>
             <if test="prizeType != null "> and p.prize_type = #{prizeType}</if>
+            <if test="needRedemption != null and needRedemption != ''"> and p.need_redemption = #{needRedemption}</if>
             <if test="isEnabled != null "> and p.is_enabled = #{isEnabled}</if>
             <if test="sortOrder != null "> and p.sort_order = #{sortOrder}</if>
         </where>
@@ -53,6 +55,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="stock != null">stock,</if>
             <if test="weight != null">weight,</if>
             <if test="prizeType != null">prize_type,</if>
+            <if test="needRedemption != null and needRedemption != ''">need_redemption,</if>
             <if test="isEnabled != null">is_enabled,</if>
             <if test="sortOrder != null">sort_order,</if>
          </trim>
@@ -63,6 +66,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="stock != null">#{stock},</if>
             <if test="weight != null">#{weight},</if>
             <if test="prizeType != null">#{prizeType},</if>
+            <if test="needRedemption != null and needRedemption != ''">#{needRedemption},</if>
             <if test="isEnabled != null">#{isEnabled},</if>
             <if test="sortOrder != null">#{sortOrder},</if>
          </trim>
@@ -77,6 +81,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="stock != null">stock = #{stock},</if>
             <if test="weight != null">weight = #{weight},</if>
             <if test="prizeType != null">prize_type = #{prizeType},</if>
+            <if test="needRedemption != null and needRedemption != ''">need_redemption = #{needRedemption},</if>
             <if test="isEnabled != null">is_enabled = #{isEnabled},</if>
             <if test="sortOrder != null">sort_order = #{sortOrder},</if>
         </trim>

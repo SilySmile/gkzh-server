@@ -17,7 +17,7 @@ public interface IStaffService {
 
     StaffPrizeView adminRedeemPrize(Long recordId, Long adminUserId, String remark);
 
-    List<StaffPrizeView> listPrizeRecords(Long schoolId);
+    List<StaffPrizeView> listPrizeRecords(Long schoolId, String studentNo);
 
     List<GkzhPrizeRedemptionLog> listPrizeLogs(Long recordId);
 

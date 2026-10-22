@@ -62,10 +62,10 @@ public class StaffAppController {
     }
 
     @GetMapping("/prizes")
-    public AjaxResult prizes(HttpServletRequest request) {
+    public AjaxResult prizes(@RequestParam(required = false) String studentNo, HttpServletRequest request) {
         GkzhSchoolStaff staff = staff(request);
         ensureCanRedeem(staff);
-        return AjaxResult.success(staffService.listPrizeRecords(staff.getSchoolId()));
+        return AjaxResult.success(staffService.listPrizeRecords(staff.getSchoolId(), studentNo));
     }
 
     @PostMapping("/prize/scan")

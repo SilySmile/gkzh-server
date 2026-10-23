@@ -6,6 +6,7 @@ import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.gkzh.activity.domain.week.GkzhActivityGame;
+import com.gkzh.activity.domain.week.GkzhActivityWeekInstance;
 import com.gkzh.activity.domain.week.GkzhGameParticipation;
 import com.gkzh.activity.service.IActivityWeekService;
 import com.gkzh.common.exception.ServiceException;
@@ -328,6 +329,12 @@ public class ZcyltzjRecordService {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("recordId", record.getRecordId());
         data.put("instanceId", record.getInstanceId());
+        // 结果页据此返回对应的生涯活动或就业活动页面。
+        GkzhActivityWeekInstance instance = record.getInstanceId() == null ? null
+                : activityWeekService.getInstance(record.getInstanceId());
+        if (instance != null) {
+            data.put("bizType", instance.getBizType());
+        }
         data.put("gameId", record.getGameId());
         data.put("status", record.getStatus());
         data.put("stage", record.getStage());

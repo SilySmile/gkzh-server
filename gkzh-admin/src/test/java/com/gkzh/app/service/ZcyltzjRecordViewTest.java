@@ -3,6 +3,8 @@ package com.gkzh.app.service;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.gkzh.activity.domain.week.GkzhActivityWeekInstance;
+import com.gkzh.activity.service.IActivityWeekService;
 import com.gkzh.zcyltzj.domain.ZcyltzjRecord;
 import com.gkzh.zcyltzj.service.ZcyltzjRecordService;
 import org.junit.jupiter.api.Test;
@@ -13,16 +15,23 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * 骰子局学生端展示数据回归：点数、试题、答案与结果字段必须完整返回。
  */
 public class ZcyltzjRecordViewTest {
 
-    private final ZcyltzjRecordService service = new ZcyltzjRecordService(null, null, null, null);
+    private final IActivityWeekService activityWeekService = mock(IActivityWeekService.class);
+    private final ZcyltzjRecordService service = new ZcyltzjRecordService(null, null, null, activityWeekService);
 
     @Test
     public void finishedRecordReturnsQuestionsAnswersAndResult() {
+        GkzhActivityWeekInstance instance = new GkzhActivityWeekInstance();
+        instance.setBizType("job_week");
+        when(activityWeekService.getInstance(2L)).thenReturn(instance);
+
         ZcyltzjRecord record = baseRecord();
         record.setStatus("finished");
         record.setStage("finished");
@@ -62,6 +71,7 @@ public class ZcyltzjRecordViewTest {
         Map<String, Object> view = service.view(record);
 
         assertEquals("DDL冲刺", view.get("pointName"));
+        assertEquals("job_week", view.get("bizType"));
         assertEquals("多任务并行/极限交付", view.get("theme"));
         assertEquals("时间管理、抗压交付、多任务优先级", view.get("projection"));
         assertNotNull(view.get("questions"));

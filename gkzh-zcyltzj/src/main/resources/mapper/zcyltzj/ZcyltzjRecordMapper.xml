@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.zcyltzj.mapper.ZcyltzjRecordMapper">
+
+    <!-- 参与记录通用筛选条件，列表、汇总和导出共用同一口径。 -->
+    <sql id="recordConditions">
+        <where>
+            game_type = 'zcyltzj'
+            <if test="instanceId != null">
+                AND instance_id = #{instanceId}
+            </if>
+            <if test="schoolId != null">
+                AND school_id = #{schoolId}
+            </if>
+            <if test="pointNo != null">
+                AND point_no = #{pointNo}
+            </if>
+            <if test="startDate != null">
+                AND scan_time &gt;= #{startDate}
+            </if>
+            <if test="endDate != null">
+                AND scan_time &lt; #{endDate}
+            </if>
+            <if test="departmentId != null">
+                AND (department_id = #{departmentId}
+                     OR EXISTS (SELECT 1 FROM gkzh_school_department d
+                                WHERE d.department_id = gkzh_zcyltzj_record.department_id
+                                  AND FIND_IN_SET(#{departmentId}, d.ancestors)))
+            </if>
+            <if test="major != null and major != ''">
+                AND major LIKE CONCAT('%', #{major}, '%')
+            </if>
+            <if test="studentNo != null and studentNo != ''">
+                AND student_no LIKE CONCAT('%', #{studentNo}, '%')
+            </if>
+            <if test='genderValue != null and genderValue.equals("男")'>
+                AND gender IN ('男', '0')
+            </if>
+            <if test='genderValue != null and genderValue.equals("女")'>
+                AND gender IN ('女', '1')
+            </if>
+            <if test='genderValue != null and genderValue.equals("其他")'>
+                AND (gender IS NULL OR TRIM(gender) = '' OR gender NOT IN ('男', '0', '女', '1'))
+            </if>
+            <if test='status != null and status.equals("finished")'>
+                AND status = 'finished'
+            </if>
+            <if test='status != null and status.equals("inProgress")'>
+                AND status &lt;&gt; 'finished'
+            </if>
+        </where>
+    </sql>
+
+    <!-- 后台参与记录分页查询：按活动、点数、学生属性和参与日期动态筛选。 -->
+    <select id="selectAdminRecords" resultType="com.gkzh.zcyltzj.domain.ZcyltzjRecord">
+        SELECT * FROM gkzh_zcyltzj_record
+        <include refid="recordConditions"/>
+        ORDER BY record_id DESC
+    </select>
+
+    <!-- 统计汇总与列表使用同一筛选条件，保证页面人数、颜色分布和导出数据一致。 -->
+    <select id="selectAdminSummary" resultType="java.util.LinkedHashMap">
+        SELECT COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN status = 'finished' THEN 1 ELSE 0 END), 0) AS finished,
+               COALESCE(SUM(CASE WHEN status = 'finished' AND color = 'red' THEN 1 ELSE 0 END), 0) AS redCount,
+               COALESCE(SUM(CASE WHEN status = 'finished' AND color = 'green' THEN 1 ELSE 0 END), 0) AS greenCount,
+               COALESCE(SUM(CASE WHEN status = 'finished' AND color = 'yellow' THEN 1 ELSE 0 END), 0) AS yellowCount,
+               COALESCE(ROUND(AVG(CASE WHEN status = 'finished' THEN pressure_value END)), 0) AS avgPressure
+        FROM gkzh_zcyltzj_record
+        <include refid="recordConditions"/>
+    </select>
+
+</mapper>

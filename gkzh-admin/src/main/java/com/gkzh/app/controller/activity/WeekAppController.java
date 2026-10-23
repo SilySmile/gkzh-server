@@ -257,6 +257,10 @@ public class WeekAppController extends FrontBaseController {
         if ("zycck".equals(game.getGameType())) {
             return AjaxResult.error("请提交活动反馈完成本次游戏");
         }
+        // 骰子局只能由 /api/zcyltzj/records/{id}/submit 结算并完成，避免未答题直接标记完成。
+        if ("zcyltzj".equals(game.getGameType())) {
+            return AjaxResult.error("请完成骰子局答题并生成压力值");
+        }
         GkzhGameParticipation participation = activityWeekService.getLatestParticipation(gameId, student.getUserId());
         if (participation == null) {
             return AjaxResult.error("暂无参与记录");

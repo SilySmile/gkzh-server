@@ -11,7 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 /**
- * 骰子局九宫格规则格配置：只允许维护下中（第 8 格）和下右（第 9 格）两格。
+ * 骰子局九宫格规则格配置：只允许维护下左（第 7 格）和下右（第 9 格）两格。
  */
 @Service
 public class ZcyltzjRuleService {
@@ -36,8 +36,8 @@ public class ZcyltzjRuleService {
     /** 保存规则格标题、内容和状态。 */
     @Transactional
     public ZcyltzjRuleCell save(ZcyltzjRuleCell body) {
-        if (body == null || body.getCellNo() == null || (body.getCellNo() != 8 && body.getCellNo() != 9)) {
-            throw new ServiceException("规则格只允许第 8 格（下中）和第 9 格（下右）");
+        if (body == null || body.getCellNo() == null || (body.getCellNo() != 7 && body.getCellNo() != 9)) {
+            throw new ServiceException("规则格只允许第 7 格（下左）和第 9 格（下右）");
         }
         String title = body.getTitle() == null ? "" : body.getTitle().trim();
         if (title.isEmpty()) {

@@ -22,9 +22,9 @@ public class ZcyltzjRuleServiceTest {
     private final ZcyltzjRuleService service = new ZcyltzjRuleService(mapper);
 
     @Test
-    public void rejectsCellsOtherThanBottomMiddleAndBottomRight() {
+    public void rejectsCellsOtherThanBottomLeftAndBottomRight() {
         ZcyltzjRuleCell body = new ZcyltzjRuleCell();
-        body.setCellNo(7);
+        body.setCellNo(8);
         body.setTitle("规则");
         assertThrows(ServiceException.class, () -> service.save(body));
     }
@@ -32,7 +32,7 @@ public class ZcyltzjRuleServiceTest {
     @Test
     public void rejectsBlankTitle() {
         ZcyltzjRuleCell body = new ZcyltzjRuleCell();
-        body.setCellNo(8);
+        body.setCellNo(7);
         body.setTitle("   ");
         assertThrows(ServiceException.class, () -> service.save(body));
     }
@@ -41,7 +41,7 @@ public class ZcyltzjRuleServiceTest {
     public void insertsWhenRuleCellNotExists() {
         when(mapper.selectOne(any())).thenReturn(null);
         ZcyltzjRuleCell body = new ZcyltzjRuleCell();
-        body.setCellNo(8);
+        body.setCellNo(7);
         body.setTitle("再来一次");
         body.setContent("掷出 6 点后可以再掷一次");
         when(mapper.insert(any())).thenReturn(1);

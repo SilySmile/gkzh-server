@@ -4,3 +4,7 @@ SET @has_left := (SELECT COUNT(*) FROM gkzh_zcyltzj_rule_cell WHERE cell_no = 7)
 UPDATE gkzh_zcyltzj_rule_cell
 SET cell_no = 7, update_time = NOW()
 WHERE cell_no = 8 AND @has_left = 0;
+
+-- 同步字段注释为新的位置说明，避免数据库注释仍写着“8下中”。
+ALTER TABLE gkzh_zcyltzj_rule_cell
+  MODIFY COLUMN cell_no TINYINT NOT NULL COMMENT '九宫格位置：7下左，9下右';

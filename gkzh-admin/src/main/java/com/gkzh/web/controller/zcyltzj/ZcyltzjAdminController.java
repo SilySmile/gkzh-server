@@ -11,8 +11,10 @@ import com.gkzh.common.exception.ServiceException;
 import com.gkzh.zcyltzj.domain.ZcyltzjPoint;
 import com.gkzh.zcyltzj.domain.ZcyltzjQuestion;
 import com.gkzh.zcyltzj.domain.ZcyltzjRecord;
+import com.gkzh.zcyltzj.domain.ZcyltzjRuleCell;
 import com.gkzh.zcyltzj.mapper.ZcyltzjRecordMapper;
 import com.gkzh.zcyltzj.service.ZcyltzjConfigService;
+import com.gkzh.zcyltzj.service.ZcyltzjRuleService;
 import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ContentDisposition;
@@ -45,16 +47,18 @@ import java.util.Map;
 public class ZcyltzjAdminController extends BaseController {
 
     private final ZcyltzjConfigService configService;
+    private final ZcyltzjRuleService ruleService;
     private final ZcyltzjRecordMapper recordMapper;
     private final IActivityWeekService activityWeekService;
     private final ZcyltzjRecordEnrichService enrichService;
     private final ZcyltzjStatisticsExcelService excelService;
 
-    public ZcyltzjAdminController(ZcyltzjConfigService configService, ZcyltzjRecordMapper recordMapper,
-                                  IActivityWeekService activityWeekService,
+    public ZcyltzjAdminController(ZcyltzjConfigService configService, ZcyltzjRuleService ruleService,
+                                  ZcyltzjRecordMapper recordMapper, IActivityWeekService activityWeekService,
                                   ZcyltzjRecordEnrichService enrichService,
                                   ZcyltzjStatisticsExcelService excelService) {
         this.configService = configService;
+        this.ruleService = ruleService;
         this.recordMapper = recordMapper;
         this.activityWeekService = activityWeekService;
         this.enrichService = enrichService;
@@ -95,6 +99,20 @@ public class ZcyltzjAdminController extends BaseController {
     public AjaxResult deleteQuestion(@PathVariable Long id) {
         configService.deleteQuestion(id);
         return AjaxResult.success();
+    }
+
+    /** 九宫格下中、下右两格的规则配置。 */
+    @GetMapping("/rule-cells")
+    @PreAuthorize("@ss.hasPermi('zcyltzj:config:list')")
+    public AjaxResult ruleCells() {
+        return AjaxResult.success(ruleService.listAll());
+    }
+
+    /** 保存规则格标题、规则内容和状态。 */
+    @PostMapping("/rule-cells")
+    @PreAuthorize("@ss.hasPermi('zcyltzj:config:edit')")
+    public AjaxResult saveRuleCell(@RequestBody ZcyltzjRuleCell cell) {
+        return AjaxResult.success(ruleService.save(cell));
     }
 
     /** 参与记录分页查询。 */

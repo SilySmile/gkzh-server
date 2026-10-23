@@ -9,6 +9,7 @@ import com.gkzh.school.mapper.GkzhStudentMapper;
 import com.gkzh.zcyltzj.domain.ZcyltzjRecord;
 import com.gkzh.zcyltzj.service.ZcyltzjConfigService;
 import com.gkzh.zcyltzj.service.ZcyltzjRecordService;
+import com.gkzh.zcyltzj.service.ZcyltzjRuleService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -31,13 +32,15 @@ public class ZcyltzjAppController extends FrontBaseController {
 
     private final ZcyltzjRecordService recordService;
     private final ZcyltzjConfigService configService;
+    private final ZcyltzjRuleService ruleService;
     /** 学生资料以服务端数据库为准，不能依赖小程序提交的姓名、学号和专业字段。 */
     private final GkzhStudentMapper studentMapper;
 
     public ZcyltzjAppController(ZcyltzjRecordService recordService, ZcyltzjConfigService configService,
-                                GkzhStudentMapper studentMapper) {
+                                ZcyltzjRuleService ruleService, GkzhStudentMapper studentMapper) {
         this.recordService = recordService;
         this.configService = configService;
+        this.ruleService = ruleService;
         this.studentMapper = studentMapper;
     }
 
@@ -45,6 +48,12 @@ public class ZcyltzjAppController extends FrontBaseController {
     @GetMapping("/points")
     public AjaxResult points() {
         return AjaxResult.success(configService.listActivePoints());
+    }
+
+    /** 九宫格下中、下右两格的规则内容。 */
+    @GetMapping("/rule-cells")
+    public AjaxResult ruleCells() {
+        return AjaxResult.success(ruleService.listActive());
     }
 
     /** 扫码进入：校验学校归属并幂等创建参与记录。 */

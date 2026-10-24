@@ -1,5 +1,6 @@
 package com.gkzh.activity.service;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -23,7 +24,8 @@ public interface IStaffService {
 
     List<Map<String, Object>> codeStatistics(Long schoolId);
 
-    Map<String, Object> activityStatistics(String bizType, Long schoolId);
+    Map<String, Object> activityStatistics(String bizType, Long schoolId, LocalDate startDate, LocalDate endDate);
 
-    Map<String, Object> gameStatistics(Long gameId, Long schoolId, Long collegeId, Long majorId, String gender);
+    Map<String, Object> gameStatistics(Long gameId, Long schoolId, Long collegeId, Long majorId, String gender,
+            LocalDate startDate, LocalDate endDate);
 }

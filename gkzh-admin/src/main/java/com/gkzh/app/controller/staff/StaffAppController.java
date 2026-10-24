@@ -1,11 +1,13 @@
 package com.gkzh.app.controller.staff;
 
+import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import javax.servlet.http.HttpServletRequest;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 import com.gkzh.activity.domain.staff.GkzhSchoolStaff;
 import com.gkzh.activity.dto.staff.StaffPrizeView;
@@ -113,9 +115,12 @@ public class StaffAppController {
     }
 
     @GetMapping("/statistics/activities/{bizType}")
-    public AjaxResult activityStatistics(@PathVariable String bizType, HttpServletRequest request) {
+    public AjaxResult activityStatistics(@PathVariable String bizType,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            HttpServletRequest request) {
         GkzhSchoolStaff staff = staff(request);
-        return AjaxResult.success(staffService.activityStatistics(bizType, staff.getSchoolId()));
+        return AjaxResult.success(staffService.activityStatistics(bizType, staff.getSchoolId(), startDate, endDate));
     }
 
     @GetMapping("/statistics/games/{gameId}")
@@ -123,10 +128,12 @@ public class StaffAppController {
             @RequestParam(required = false) String collegeId,
             @RequestParam(required = false) String majorId,
             @RequestParam(required = false) String gender,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
             HttpServletRequest request) {
         GkzhSchoolStaff staff = staff(request);
         return AjaxResult.success(staffService.gameStatistics(gameId, staff.getSchoolId(),
-                optionalLong(collegeId), optionalLong(majorId), optionalValue(gender)));
+                optionalLong(collegeId), optionalLong(majorId), optionalValue(gender), startDate, endDate));
     }
 
     private GkzhSchoolStaff staff(HttpServletRequest request) {

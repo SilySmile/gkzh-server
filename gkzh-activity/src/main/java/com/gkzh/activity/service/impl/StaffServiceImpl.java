@@ -1,5 +1,7 @@
 package com.gkzh.activity.service.impl;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -154,10 +156,13 @@ public class StaffServiceImpl implements IStaffService {
     }
 
     @Override
-    public Map<String, Object> activityStatistics(String bizType, Long schoolId) {
+    public Map<String, Object> activityStatistics(String bizType, Long schoolId, LocalDate startDate, LocalDate endDate) {
         if (!"career_week".equals(bizType) && !"job_week".equals(bizType)) {
             throw new ServiceException("活动类型无效");
         }
+        validateDates(startDate, endDate);
+        LocalDateTime startTime = startTime(startDate);
+        LocalDateTime endTime = endTime(endDate);
         StaffActivitySummary activity = activityStatisticsMapper.selectCurrentActivity(bizType, schoolId);
         Map<String, Object> data = new LinkedHashMap<>();
         if (activity == null) {
@@ -165,7 +170,8 @@ public class StaffServiceImpl implements IStaffService {
             data.put("games", new ArrayList<>());
             return data;
         }
-        List<StaffGameSummary> games = activityStatisticsMapper.selectActivityGames(activity.getInstanceId(), schoolId);
+        List<StaffGameSummary> games = activityStatisticsMapper.selectActivityGames(activity.getInstanceId(), schoolId,
+                startTime, endTime);
         activity.setGames(games);
         data.put("activity", activity);
         data.put("games", games);
@@ -173,13 +179,17 @@ public class StaffServiceImpl implements IStaffService {
     }
 
     @Override
-    public Map<String, Object> gameStatistics(Long gameId, Long schoolId, Long collegeId, Long majorId, String gender) {
+    public Map<String, Object> gameStatistics(Long gameId, Long schoolId, Long collegeId, Long majorId, String gender,
+            LocalDate startDate, LocalDate endDate) {
+        validateDates(startDate, endDate);
+        LocalDateTime startTime = startTime(startDate);
+        LocalDateTime endTime = endTime(endDate);
         StaffGameSummary game = activityStatisticsMapper.selectGame(gameId, schoolId);
         if (game == null) {
             throw new ServiceException("游戏不存在或不属于当前学校");
         }
         List<StaffGameDimensionRow> rows = activityStatisticsMapper
-                .selectDimensionRows(gameId, schoolId, collegeId, majorId, gender);
+                .selectDimensionRows(gameId, schoolId, collegeId, majorId, gender, startTime, endTime);
         long participants = rows.stream().mapToLong(item -> value(item.getParticipantCount())).sum();
         long completed = rows.stream().mapToLong(item -> value(item.getCompletedCount())).sum();
         long inProgress = rows.stream().mapToLong(item -> value(item.getInProgressCount())).sum();
@@ -192,10 +202,27 @@ public class StaffServiceImpl implements IStaffService {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("game", game);
         data.put("rows", rows);
-        data.put("students", activityStatisticsMapper.selectStudentRows(gameId, schoolId, collegeId, majorId, gender));
-        data.put("colleges", activityStatisticsMapper.selectCollegeOptions(gameId, schoolId));
-        data.put("majors", activityStatisticsMapper.selectMajorOptions(gameId, schoolId));
+        data.put("students", activityStatisticsMapper.selectStudentRows(gameId, schoolId, collegeId, majorId, gender,
+                startTime, endTime));
+        data.put("colleges", activityStatisticsMapper.selectCollegeOptions(gameId, schoolId, startTime, endTime));
+        data.put("majors", activityStatisticsMapper.selectMajorOptions(gameId, schoolId, startTime, endTime));
         return data;
+    }
+
+    /** 未选择开始日期时从 1970 年开始，保证 SQL 始终有下界。 */
+    private static LocalDateTime startTime(LocalDate date) {
+        return date == null ? LocalDateTime.of(1970, 1, 1, 0, 0) : date.atStartOfDay();
+    }
+
+    /** 结束日期包含当天，因此取次日零点；未选择时给足够大的上界。 */
+    private static LocalDateTime endTime(LocalDate date) {
+        return date == null ? LocalDateTime.of(9999, 12, 31, 23, 59, 59) : date.plusDays(1).atStartOfDay();
+    }
+
+    private static void validateDates(LocalDate startDate, LocalDate endDate) {
+        if (startDate != null && endDate != null && startDate.isAfter(endDate)) {
+            throw new ServiceException("开始日期不能晚于结束日期");
+        }
     }
 
     private long value(Long number) {

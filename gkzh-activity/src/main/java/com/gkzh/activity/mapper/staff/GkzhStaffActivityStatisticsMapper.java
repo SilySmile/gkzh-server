@@ -21,8 +21,13 @@ public interface GkzhStaffActivityStatisticsMapper {
             "left join gkzh_school_department c on c.department_id = d.parent_id ";
 
     @Select("select i.instance_id, i.biz_type, i.title, i.start_time, i.end_time " +
-            "from gkzh_activity_week_instance i join gkzh_activity_week_school ws on ws.instance_id = i.instance_id " +
-            "where i.biz_type = #{bizType} and i.status = '1' and ws.school_id = #{schoolId} and ws.status = '0' " +
+            "from gkzh_activity_week_instance i " +
+            "where i.biz_type = #{bizType} and i.status = '1' " +
+            // 参与学校关系与区域配置任一命中即可：部分活动只配置了学校区域和游戏，未单独保存参与学校关系。
+            "and (exists (select 1 from gkzh_activity_week_school ws " +
+            "where ws.instance_id = i.instance_id and ws.school_id = #{schoolId} and ws.status = '0') " +
+            "or exists (select 1 from gkzh_activity_area a " +
+            "where a.instance_id = i.instance_id and a.school_id = #{schoolId} and a.status = '0')) " +
             "order by i.start_time desc, i.instance_id desc limit 1")
     StaffActivitySummary selectCurrentActivity(@Param("bizType") String bizType, @Param("schoolId") Long schoolId);
 

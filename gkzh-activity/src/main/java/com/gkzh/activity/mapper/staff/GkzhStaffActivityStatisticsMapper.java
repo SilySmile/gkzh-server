@@ -77,7 +77,7 @@ public interface GkzhStaffActivityStatisticsMapper {
             "coalesce(c.department_id, d.department_id) college_id, coalesce(c.title, d.title, '未填写院系') college_name, " +
             "case when c.department_id is null then null else d.department_id end major_id, " +
             "case when c.department_id is null then '未填写专业' else coalesce(d.title, '未填写专业') end major_name, " +
-            "coalesce(s.gender, '2') gender, p.status, p.finish_time " +
+            "coalesce(s.gender, '2') gender, p.scan_time, p.status, p.finish_time " +
             LATEST_PARTICIPATION +
             "<where>" +
             "<if test='collegeId != null'>and coalesce(c.department_id, d.department_id) = #{collegeId}</if>" +

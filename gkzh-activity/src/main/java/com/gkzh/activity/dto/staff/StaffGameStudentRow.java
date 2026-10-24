@@ -16,5 +16,7 @@ public class StaffGameStudentRow {
     private String gender;
     private String status;
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private Date scanTime;
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private Date finishTime;
 }

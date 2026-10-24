@@ -16,7 +16,7 @@ public interface GkzhStaffActivityStatisticsMapper {
     String LATEST_PARTICIPATION = " from gkzh_game_participation p join (" +
             "select user_id, max(participation_id) participation_id from gkzh_game_participation " +
             "where game_id = #{gameId} and school_id = #{schoolId} " +
-            "and scan_time >= #{startTime} and scan_time < #{endTime} group by user_id" +
+            "and scan_time >= #{startTime} and scan_time &lt; #{endTime} group by user_id" +
             ") latest on latest.participation_id = p.participation_id " +
             "join gkzh_student s on s.user_id = p.user_id and s.school_id = #{schoolId} " +
             "left join gkzh_school_department d on d.department_id = s.department_id " +
@@ -42,7 +42,7 @@ public interface GkzhStaffActivityStatisticsMapper {
             "sum(p.status = '0') in_progress_count, sum(p.status = '2') failed_count " +
             "from gkzh_game_participation p join (select game_id, user_id, max(participation_id) participation_id " +
             "from gkzh_game_participation where instance_id = #{instanceId} and school_id = #{schoolId} " +
-            "and scan_time >= #{startTime} and scan_time < #{endTime} group by game_id, user_id) latest " +
+            "and scan_time >= #{startTime} and scan_time &lt; #{endTime} group by game_id, user_id) latest " +
             "on latest.participation_id = p.participation_id group by p.game_id) stat on stat.game_id = g.game_id " +
             "where g.instance_id = #{instanceId} and a.school_id = #{schoolId} and g.status = '0' and a.status = '0' " +
             "order by a.sort_order, a.area_id, g.sort_order, g.game_id")

@@ -204,8 +204,8 @@ public class StaffServiceImpl implements IStaffService {
         data.put("rows", rows);
         data.put("students", activityStatisticsMapper.selectStudentRows(gameId, schoolId, collegeId, majorId, gender,
                 startTime, endTime));
-        data.put("colleges", activityStatisticsMapper.selectCollegeOptions(gameId, schoolId, startTime, endTime));
-        data.put("majors", activityStatisticsMapper.selectMajorOptions(gameId, schoolId, startTime, endTime));
+        data.put("colleges", activityStatisticsMapper.selectCollegeOptions(schoolId));
+        data.put("majors", activityStatisticsMapper.selectMajorOptions(schoolId));
         return data;
     }
 

@@ -89,13 +89,15 @@ public interface GkzhStaffActivityStatisticsMapper {
             @Param("majorId") Long majorId, @Param("gender") String gender,
             @Param("startTime") LocalDateTime startTime, @Param("endTime") LocalDateTime endTime);
 
-    @Select("select distinct coalesce(c.department_id, d.department_id) id, coalesce(c.title, d.title, '未填写院系') name " +
-            LATEST_PARTICIPATION + "order by name")
-    List<StaffDimensionOption> selectCollegeOptions(@Param("gameId") Long gameId, @Param("schoolId") Long schoolId,
-            @Param("startTime") LocalDateTime startTime, @Param("endTime") LocalDateTime endTime);
+    @Select("select department_id id, title name from gkzh_school_department " +
+            "where school_id = #{schoolId} and (parent_id is null or parent_id = 0) " +
+            "and (status = '0' or status is null) and (del_flag = '0' or del_flag is null) " +
+            "order by sort_num, department_id")
+    List<StaffDimensionOption> selectCollegeOptions(@Param("schoolId") Long schoolId);
 
-    @Select("select distinct d.department_id id, coalesce(c.department_id, d.department_id) parent_id, d.title name " +
-            LATEST_PARTICIPATION + "where c.department_id is not null order by name")
-    List<StaffDimensionOption> selectMajorOptions(@Param("gameId") Long gameId, @Param("schoolId") Long schoolId,
-            @Param("startTime") LocalDateTime startTime, @Param("endTime") LocalDateTime endTime);
+    @Select("select department_id id, parent_id, title name from gkzh_school_department " +
+            "where school_id = #{schoolId} and parent_id is not null and parent_id != 0 " +
+            "and (status = '0' or status is null) and (del_flag = '0' or del_flag is null) " +
+            "order by sort_num, department_id")
+    List<StaffDimensionOption> selectMajorOptions(@Param("schoolId") Long schoolId);
 }

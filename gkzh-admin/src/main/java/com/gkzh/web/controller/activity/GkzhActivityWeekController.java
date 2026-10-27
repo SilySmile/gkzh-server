@@ -46,6 +46,7 @@ import com.gkzh.activity.service.IActivityWeekService;
 import com.gkzh.common.annotation.Anonymous;
 import com.gkzh.common.core.controller.BaseController;
 import com.gkzh.common.core.domain.AjaxResult;
+import com.gkzh.common.utils.DateUtils;
 import com.gkzh.common.utils.QRCodeUtils;
 import com.gkzh.xycc.domain.HollandCode;
 import com.gkzh.xycc.mapper.UserSelectionMapper;
@@ -56,6 +57,10 @@ import com.gkzh.sszctop.domain.SszctopDimension;
 import com.gkzh.sszctop.domain.SszctopStudentReport;
 import com.gkzh.sszctop.mapper.SszctopDimensionMapper;
 import com.gkzh.sszctop.mapper.SszctopStudentReportMapper;
+import com.gkzh.app.service.ZyjdcRecordEnrichService;
+import com.gkzh.zyjdc.domain.ZyjdcRecord;
+import com.gkzh.zyjdc.mapper.ZyjdcRecordMapper;
+import com.gkzh.zyjdc.service.ZyjdcStatisticsService;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
@@ -85,6 +90,18 @@ public class GkzhActivityWeekController extends BaseController {
     /** 职场 TOP 的个人结算快照；统计按每位用户的独立报告计算。 */
     @Autowired
     private SszctopStudentReportMapper sszctopStudentReportMapper;
+
+    /** 职业角斗场的角色偏好、胜负分布和完成率统计。 */
+    @Autowired
+    private ZyjdcStatisticsService zyjdcStatisticsService;
+
+    /** 职业角斗场参与记录，查看页只取最近若干条用于展示。 */
+    @Autowired
+    private ZyjdcRecordMapper zyjdcRecordMapper;
+
+    /** 职业角斗场记录展示字段补全，与后台列表使用同一口径。 */
+    @Autowired
+    private ZyjdcRecordEnrichService zyjdcRecordEnrichService;
 
     @Value("${app.qr-code.base-url}")
     private String qrCodeBaseUrl;
@@ -191,7 +208,9 @@ public class GkzhActivityWeekController extends BaseController {
         try {
             Map<String, Object> gameView = buildGameView(game);
             String viewType = String.valueOf(gameView.get("viewType"));
-            if (!"mind-window".equals(viewType) && !"sszctop".equals(viewType)) return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+            if (!"mind-window".equals(viewType) && !"sszctop".equals(viewType) && !"zyjdc".equals(viewType)) {
+                return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+            }
             byte[] bytes = createGameViewPdf(gameView);
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_PDF);
@@ -216,11 +235,14 @@ public class GkzhActivityWeekController extends BaseController {
         }
         // 职场 TOP 的查看页固定使用专属三页模板，避免后台配置缺失时降级为通用空白页。
         if ("sszctop".equals(type)) viewType = "sszctop";
+        // 职业角斗场同样固定使用专属三页模板，配置缺失时也不降级为通用空白页。
+        if ("zyjdc".equals(type)) viewType = "zyjdc";
         view.put("gameId", game.getGameId());
         view.put("gameTitle", game.getTitle());
         view.put("gameType", type);
         view.put("viewType", viewType);
         if ("sszctop".equals(viewType)) return buildSszctopGameView(game, view);
+        if ("zyjdc".equals(viewType)) return buildZyjdcGameView(game, view);
         if (!"mind-window".equals(viewType)) {
             view.put("message", "该游戏暂未配置查看模板");
             view.put("pages", new ArrayList<>());
@@ -307,6 +329,20 @@ public class GkzhActivityWeekController extends BaseController {
         view.put("overallCorrectRate", totalParticipants == 0 ? BigDecimal.ZERO
                 : BigDecimal.valueOf(totalCorrect * 100D / totalParticipants).setScale(2, RoundingMode.HALF_UP));
         view.put("analysis", buildSszctopAnalysis(dimensionStats, totalParticipants, totalCorrect));
+        return view;
+    }
+
+    /**
+     * 构建职业角斗场活动查看数据：
+     * 第一页展示整体参与和最近学生角色选择，第二页展示 8 个角色偏好占比，
+     * 第三页输出整体偏好分析。
+     */
+    private Map<String, Object> buildZyjdcGameView(GkzhActivityGame game, Map<String, Object> view) {
+        Map<String, Object> stats = zyjdcStatisticsService.gameViewStats(game.getGameId());
+        view.putAll(stats);
+        List<ZyjdcRecord> records = zyjdcRecordMapper.selectGameViewRecords(game.getGameId(), 50);
+        view.put("records", zyjdcRecordEnrichService.enrich(records));
+        view.put("recordLimit", 50);
         return view;
     }
 
@@ -426,6 +462,11 @@ public class GkzhActivityWeekController extends BaseController {
             pages.add(drawSszctopStatsPage((List<Map<String, Object>>) view.get("dimensionStats"), title,
                     number(view.get("totalParticipants")), decimal(view.get("overallCorrectRate"))));
             pages.add(drawTextAnalysisPage(String.valueOf(view.get("analysis")), title, "维度正确率简要分析"));
+        } else if ("zyjdc".equals(view.get("viewType"))) {
+            pages.add(drawZyjdcOverviewPage((Map<String, Object>) view.get("summary"),
+                    (List<Map<String, Object>>) view.get("records"), title));
+            pages.add(drawZyjdcRoleStatsPage((List<Map<String, Object>>) view.get("roleStats"), title));
+            pages.add(drawTextAnalysisPage(String.valueOf(view.get("analysis")), title, "整体偏好分析"));
         } else {
             pages.add(drawHollandPage((List<HollandCode>) view.get("hollandCodes"), title));
             pages.add(drawCodeStatsPage((List<Map<String, Object>>) view.get("codeStats"), title));
@@ -441,6 +482,121 @@ public class GkzhActivityWeekController extends BaseController {
             }
             doc.save(out); return out.toByteArray();
         }
+    }
+
+    /** 职业角斗场 PDF 第一页：整体参与数据 + 最近学生角色选择明细。 */
+    private BufferedImage drawZyjdcOverviewPage(Map<String, Object> summary, List<Map<String, Object>> records,
+                                                String title) {
+        List<Map<String, Object>> rows = records == null ? new ArrayList<>() : records;
+        int show = Math.min(rows.size(), 18);
+        int height = Math.max(1527, 240 + show * 50);
+        BufferedImage image = newViewImage(height);
+        Graphics2D g = image.createGraphics();
+        g.setColor(new Color(26, 44, 74));
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 42));
+        g.drawString(title + "—学生角色选择整体数据", 48, 72);
+
+        Map<String, Object> value = summary == null ? new LinkedHashMap<>() : summary;
+        g.setColor(new Color(52, 73, 94));
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 22));
+        g.drawString("扫码参与：" + text(value.get("enteredCount")) + " 人    完成角色选择：" + text(value.get("selectedCount"))
+                + " 人    通关：" + text(value.get("completedCount")) + " 人    完成率：" + text(value.get("completionRate"))
+                + "%    平均尝试：" + text(value.get("averageAttempts")) + " 次", 48, 118);
+
+        int y = 150;
+        String[] headers = {"序号", "学生", "学号", "院系", "专业", "角色", "结果", "参与时间"};
+        int[] xs = {70, 130, 250, 370, 500, 650, 760, 850};
+        g.setColor(new Color(22, 119, 255));
+        g.fillRect(48, y, 984, 44);
+        g.setColor(Color.WHITE);
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 18));
+        for (int i = 0; i < headers.length; i++) {
+            g.drawString(headers[i], xs[i], y + 28);
+        }
+        y += 44;
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 17));
+        for (int i = 0; i < show; i++) {
+            Map<String, Object> row = rows.get(i);
+            g.setColor(i % 2 == 0 ? Color.WHITE : new Color(248, 250, 253));
+            g.fillRect(48, y, 984, 50);
+            g.setColor(new Color(52, 73, 94));
+            g.drawString(String.valueOf(i + 1), xs[0], y + 31);
+            g.drawString(cut(text(row.get("studentName")), 8), xs[1], y + 31);
+            g.drawString(cut(text(row.get("studentNo")), 10), xs[2], y + 31);
+            g.drawString(cut(text(row.get("departmentName")), 8), xs[3], y + 31);
+            g.drawString(cut(text(row.get("major")), 9), xs[4], y + 31);
+            g.drawString(cut(text(row.get("roleName")), 6), xs[5], y + 31);
+            g.drawString(cut(text(row.get("resultName")), 5), xs[6], y + 31);
+            g.drawString(cut(timeText(row.get("scanTime")), 18), xs[7], y + 31);
+            y += 50;
+        }
+        if (rows.size() > show) {
+            g.setColor(new Color(120, 130, 140));
+            g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 16));
+            g.drawString("仅展示最近 " + show + " 条记录，完整数据请在 Web 参与记录或 Excel 中查看。", 70, y + 34);
+        }
+        g.dispose();
+        return image;
+    }
+
+    /** 职业角斗场 PDF 第二页：8 个角色的偏好占比与完成率。 */
+    private BufferedImage drawZyjdcRoleStatsPage(List<Map<String, Object>> rows, String title) {
+        List<Map<String, Object>> list = rows == null ? new ArrayList<>() : rows;
+        int height = Math.max(1200, 210 + list.size() * 56);
+        BufferedImage image = newViewImage(height);
+        Graphics2D g = image.createGraphics();
+        g.setColor(new Color(26, 44, 74));
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 42));
+        g.drawString(title + "—各角色偏好占比统计", 48, 72);
+
+        long selected = 0;
+        for (Map<String, Object> row : list) {
+            selected += number(row.get("userCount"));
+        }
+        g.setColor(new Color(52, 73, 94));
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 23));
+        g.drawString("完成角色选择：" + selected + " 人", 48, 112);
+
+        int y = 148;
+        String[] headers = {"序号", "动物角色", "职场定位", "选择人数", "偏好占比", "通关人数", "完成率"};
+        int[] xs = {72, 140, 280, 540, 650, 760, 870};
+        g.setColor(new Color(103, 194, 58));
+        g.fillRect(48, y, 984, 50);
+        g.setColor(Color.WHITE);
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 20));
+        for (int i = 0; i < headers.length; i++) {
+            g.drawString(headers[i], xs[i], y + 32);
+        }
+        y += 50;
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 20));
+        for (Map<String, Object> row : list) {
+            g.setColor(y % 112 == 0 ? new Color(248, 250, 253) : Color.WHITE);
+            g.fillRect(48, y, 984, 56);
+            g.setColor(new Color(52, 73, 94));
+            g.drawString(String.valueOf(row.get("serialNo")), xs[0], y + 35);
+            g.drawString(cut(text(row.get("roleName")), 6), xs[1], y + 35);
+            g.drawString(cut(text(row.get("jobTitle")), 12), xs[2], y + 35);
+            g.drawString(String.valueOf(number(row.get("userCount"))), xs[3], y + 35);
+            g.drawString(String.valueOf(row.get("probability")) + "%", xs[4], y + 35);
+            g.drawString(String.valueOf(number(row.get("finishedCount"))), xs[5], y + 35);
+            g.drawString(String.valueOf(row.get("completionRate")) + "%", xs[6], y + 35);
+            y += 56;
+        }
+        g.dispose();
+        return image;
+    }
+
+    private String text(Object value) {
+        return value == null ? "-" : String.valueOf(value);
+    }
+
+    private String cut(String value, int max) {
+        return value != null && value.length() > max ? value.substring(0, max) + "…" : value;
+    }
+
+    private String timeText(Object value) {
+        return value instanceof java.util.Date
+                ? DateUtils.parseDateToStr("yyyy-MM-dd HH:mm", (java.util.Date) value) : text(value);
     }
 
     private BufferedImage newViewImage(int height) {

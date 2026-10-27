@@ -149,6 +149,10 @@ public class WeekAppController extends FrontBaseController {
         if (instanceId != null && !instanceId.equals(game.getInstanceId())) {
             return AjaxResult.error("该游戏不属于当前活动");
         }
+        // 职业角斗场由自己的 /api/zyjdc/records/enter 写入参与记录，禁止通用入口重复建记录。
+        if ("zyjdc".equals(game.getGameType())) {
+            return AjaxResult.error("请从职业角斗场入口进入");
+        }
 
         StudentCheckin student = getCurrentStudent();
         Long studentSchoolId = getCurrentStudentSchoolId();
@@ -260,6 +264,10 @@ public class WeekAppController extends FrontBaseController {
         // 骰子局只能由 /api/zcyltzj/records/{id}/submit 结算并完成，避免未答题直接标记完成。
         if ("zcyltzj".equals(game.getGameType())) {
             return AjaxResult.error("请完成骰子局答题并生成压力值");
+        }
+        // 职业角斗场只能由对局胜利写入完成状态，禁止通用完成接口绕过胜负判定。
+        if ("zyjdc".equals(game.getGameType())) {
+            return AjaxResult.error("请完成职业角斗场对局并取得胜利");
         }
         GkzhGameParticipation participation = activityWeekService.getLatestParticipation(gameId, student.getUserId());
         if (participation == null) {

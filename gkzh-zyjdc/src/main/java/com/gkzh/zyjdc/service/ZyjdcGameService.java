@@ -366,9 +366,9 @@ public class ZyjdcGameService {
         if (!"finished".equals(record.getStage())) {
             throw new ServiceException("本局尚未结束，不能重新挑战");
         }
-        // 超时结算刚好获胜时也不允许再重开，保持“通关后只读”。
+        // 超时结算刚好获胜时不允许再重开；返回结算结果并提交事务，避免抛错回滚刚写入的胜利状态。
         if ("finished".equals(record.getStatus())) {
-            throw new ServiceException("已通关，不能重新挑战");
+            return view(record);
         }
         ZyjdcRole role = roleMapper.selectById(record.getRoleId());
         if (role == null) {

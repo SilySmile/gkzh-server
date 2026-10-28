@@ -43,26 +43,36 @@ public class ZyjdcBoardTest {
         assertEquals(8, ZyjdcBoard.count(state.getBoard(), ZyjdcGameState.PLAYER));
         assertEquals(8, ZyjdcBoard.count(state.getBoard(), ZyjdcGameState.AI));
 
-        for (int row = 0; row <= 1; row++) {
-            assertRowFilled(state, row);
-        }
-        for (int row = 7; row <= 8; row++) {
-            assertRowFilled(state, row);
-        }
-        for (int row = 2; row <= 6; row++) {
+        // 2-2-4 阵型：后排狮子、老虎，次排豹子、猫，前排老鼠、狼、狐、大象。
+        assertPiece(state, 0, 0, ZyjdcGameState.AI, "lion");
+        assertPiece(state, 0, 6, ZyjdcGameState.AI, "tiger");
+        assertPiece(state, 1, 1, ZyjdcGameState.AI, "leopard");
+        assertPiece(state, 1, 5, ZyjdcGameState.AI, "cat");
+        assertPiece(state, 2, 0, ZyjdcGameState.AI, "mouse");
+        assertPiece(state, 2, 2, ZyjdcGameState.AI, "wolf");
+        assertPiece(state, 2, 4, ZyjdcGameState.AI, "fox");
+        assertPiece(state, 2, 6, ZyjdcGameState.AI, "elephant");
+
+        assertPiece(state, 8, 0, ZyjdcGameState.PLAYER, "lion");
+        assertPiece(state, 8, 6, ZyjdcGameState.PLAYER, "tiger");
+        assertPiece(state, 7, 1, ZyjdcGameState.PLAYER, "leopard");
+        assertPiece(state, 7, 5, ZyjdcGameState.PLAYER, "cat");
+        assertPiece(state, 6, 0, ZyjdcGameState.PLAYER, "mouse");
+        assertPiece(state, 6, 2, ZyjdcGameState.PLAYER, "wolf");
+        assertPiece(state, 6, 4, ZyjdcGameState.PLAYER, "fox");
+        assertPiece(state, 6, 6, ZyjdcGameState.PLAYER, "elephant");
+
+        // 中间三行必须完全空出，形成双方之间的通道。
+        for (int row = 3; row <= 5; row++) {
             for (int col = 0; col < 7; col++) {
                 assertNull(state.getBoard()[row][col], "row " + row + " col " + col + " should be empty");
             }
         }
     }
 
-    private static void assertRowFilled(ZyjdcGameState state, int row) {
-        for (int col = 1; col <= 4; col++) {
-            assertNotNull(state.getBoard()[row][col], "row " + row + " col " + col + " should have a piece");
-        }
-        assertNull(state.getBoard()[row][0]);
-        assertNull(state.getBoard()[row][5]);
-        assertNull(state.getBoard()[row][6]);
+    private static void assertPiece(ZyjdcGameState state, int row, int col, String side, String code) {
+        assertEquals(ZyjdcBoard.token(side, code), state.getBoard()[row][col],
+                "row " + row + " col " + col + " should be " + side + ":" + code);
     }
 
     @Test
@@ -190,10 +200,15 @@ public class ZyjdcBoardTest {
         Set<String> expected = new HashSet<>(Arrays.asList(
                 "elephant", "lion", "tiger", "leopard", "wolf", "fox", "cat", "mouse"));
         assertEquals(expected, new HashSet<>(ZyjdcBoard.CODES));
-        List<String> back = ZyjdcBoard.BACK_ROW;
-        List<String> front = ZyjdcBoard.FRONT_ROW;
-        Set<String> all = new HashSet<>(back);
-        all.addAll(front);
-        assertEquals(expected, all);
+        Set<String> formationCodes = new HashSet<>();
+        for (String[] item : ZyjdcBoard.FORMATION) {
+            formationCodes.add(item[2]);
+            int row = Integer.parseInt(item[0]);
+            int col = Integer.parseInt(item[1]);
+            assertTrue(row >= 0 && row < ZyjdcBoard.ROWS, "formation row out of board");
+            assertTrue(col >= 0 && col < ZyjdcBoard.COLS, "formation col out of board");
+        }
+        assertEquals(expected, formationCodes);
+        assertEquals(8, ZyjdcBoard.FORMATION.length);
     }
 }

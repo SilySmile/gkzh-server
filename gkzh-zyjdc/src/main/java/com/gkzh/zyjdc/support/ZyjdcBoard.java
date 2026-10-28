@@ -11,7 +11,7 @@ import java.util.Map;
  * 职业角斗场棋盘规则。
  *
  * <p>规则：7 列 × 9 行斗兽棋棋盘，双方各 8 枚棋子（象、狮、虎、豹、狼、狐、猫、鼠各 1 枚）。
- * 学生方棋子位于最下方两行，电脑方位于最上方两行；每次只能上下左右移动一格。
+ * 双方按 2-2-4 三行阵型对称摆放：后排 2 枚、次排 2 枚、前排 4 枚；每次只能上下左右移动一格。
  * 攻击方等级大于等于防守方即可吃掉，老鼠可以吃大象、大象不能吃老鼠。
  * 3 分钟内吃光对方，或到时比较剩余最高等级/数量决定胜负。本版本不设置陷阱和兽穴。</p>
  */
@@ -30,13 +30,16 @@ public final class ZyjdcBoard {
     public static final List<String> CODES = Collections.unmodifiableList(Arrays.asList(
             "elephant", "lion", "tiger", "leopard", "wolf", "fox", "cat", "mouse"));
 
-    /** 靠己方底线的 4 枚棋子，等级较高。 */
-    public static final List<String> BACK_ROW = Collections.unmodifiableList(Arrays.asList(
-            "elephant", "lion", "tiger", "leopard"));
-
-    /** 靠棋盘中央的 4 枚棋子，等级较低。 */
-    public static final List<String> FRONT_ROW = Collections.unmodifiableList(Arrays.asList(
-            "wolf", "fox", "cat", "mouse"));
+    /**
+     * 初始阵型：行偏移、列、动物编码，双方上下镜像摆放。
+     * 参照标准斗兽棋的 2-2-4 形状：后排狮子、老虎分居两侧；
+     * 次排豹子、猫；前排老鼠、狼、狐、大象，中间留出通道。
+     */
+    public static final String[][] FORMATION = {
+            {"0", "0", "lion"}, {"0", "6", "tiger"},
+            {"1", "1", "leopard"}, {"1", "5", "cat"},
+            {"2", "0", "mouse"}, {"2", "2", "wolf"}, {"2", "4", "fox"}, {"2", "6", "elephant"}
+    };
 
     /** 动物编码到中文名称。 */
     private static final Map<String, String> NAMES = new LinkedHashMap<>();
@@ -110,18 +113,19 @@ public final class ZyjdcBoard {
     /**
      * 生成新一局棋盘。
      * 双方各 8 枚，均为完整的 8 种动物；学生所选角色只用于个人解读，不改变棋盘阵容。
-     * 双方棋子各占底线两行、中间四列，其余格子为空。
+     * 双方按 2-2-4 三行阵型上下镜像摆放，其余格子为空。
      */
     public static ZyjdcGameState newState(String playerRole) {
         if (playerRole == null || !CODES.contains(playerRole)) {
             throw new IllegalArgumentException("角色编码无效");
         }
         String[][] board = new String[ROWS][COLS];
-        for (int i = 0; i < BACK_ROW.size(); i++) {
-            board[0][1 + i] = token(ZyjdcGameState.AI, BACK_ROW.get(i));
-            board[1][1 + i] = token(ZyjdcGameState.AI, FRONT_ROW.get(i));
-            board[ROWS - 1][1 + i] = token(ZyjdcGameState.PLAYER, BACK_ROW.get(i));
-            board[ROWS - 2][1 + i] = token(ZyjdcGameState.PLAYER, FRONT_ROW.get(i));
+        for (String[] item : FORMATION) {
+            int row = Integer.parseInt(item[0]);
+            int col = Integer.parseInt(item[1]);
+            String code = item[2];
+            board[row][col] = token(ZyjdcGameState.AI, code);
+            board[ROWS - 1 - row][col] = token(ZyjdcGameState.PLAYER, code);
         }
 
         ZyjdcGameState state = new ZyjdcGameState();

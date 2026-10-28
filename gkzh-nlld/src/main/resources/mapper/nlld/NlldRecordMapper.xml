@@ -120,25 +120,84 @@
         GROUP BY r.top2_dimension_id
     </select>
 
-    <!-- 选择明细导出：每条记录 12 行，包含关卡、选项、物品与维度名称。 -->
-    <select id="selectAnswerDetails" resultType="java.util.LinkedHashMap">
-        SELECT r.record_id AS recordId,
-               r.student_name AS studentName,
-               r.student_no AS studentNo,
-               r.school_id AS schoolId,
-               r.instance_id AS instanceId,
-               r.top1_dimension_name AS top1Name,
-               r.top2_dimension_name AS top2Name,
-               r.result_type AS resultType,
-               a.round_no AS roundNo,
-               a.option_label AS optionLabel,
-               a.option_name AS optionName,
-               d.dimension_name AS dimensionName
+    <!-- 院系汇总：院系取专业所属的父部门，未填写院系单独归组。 -->
+    <select id="selectDepartmentSummary" resultType="java.util.LinkedHashMap">
+        SELECT COALESCE(college.department_id, dept.department_id) AS collegeId,
+               COALESCE(college.title, dept.title, '未填写院系') AS collegeName,
+               COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN r.status = 'finished' THEN 1 ELSE 0 END), 0) AS finished,
+               COALESCE(SUM(CASE WHEN r.result_type = 'top2' THEN 1 ELSE 0 END), 0) AS top2Count,
+               COALESCE(SUM(CASE WHEN r.result_type = 'open' THEN 1 ELSE 0 END), 0) AS openCount
+        FROM gkzh_nlld_record r
+        LEFT JOIN gkzh_school_department dept ON dept.department_id = r.department_id
+        LEFT JOIN gkzh_school_department college ON college.department_id = dept.parent_id
+        <include refid="recordConditions"/>
+        GROUP BY collegeId, collegeName
+        ORDER BY total DESC, collegeName ASC
+    </select>
+
+    <!-- 院系维度被选次数：先按院系和维度聚合选择明细。 -->
+    <select id="selectDepartmentDimensionSelectionCounts" resultType="java.util.LinkedHashMap">
+        SELECT COALESCE(college.department_id, dept.department_id) AS collegeId,
+               COALESCE(college.title, dept.title, '未填写院系') AS collegeName,
+               a.dimension_code AS dimensionCode,
+               COUNT(*) AS selectedCount
         FROM gkzh_nlld_answer a
         JOIN gkzh_nlld_record r ON r.record_id = a.record_id
-        LEFT JOIN gkzh_nlld_dimension d ON d.dimension_id = a.dimension_id
+        LEFT JOIN gkzh_school_department dept ON dept.department_id = r.department_id
+        LEFT JOIN gkzh_school_department college ON college.department_id = dept.parent_id
         <include refid="recordConditions"/>
-        ORDER BY r.record_id DESC, a.round_no ASC, a.option_label ASC
+        GROUP BY collegeId, collegeName, a.dimension_code
+    </select>
+
+    <!-- 院系维度得 2 分人数：先按院系+记录+维度聚合，命中 2 次的再按院系和维度计数。 -->
+    <select id="selectDepartmentDimensionTwoPointCounts" resultType="java.util.LinkedHashMap">
+        SELECT t.collegeId AS collegeId,
+               t.collegeName AS collegeName,
+               t.dimensionCode AS dimensionCode,
+               COUNT(*) AS recordCount
+        FROM (
+            SELECT COALESCE(college.department_id, dept.department_id) AS collegeId,
+                   COALESCE(college.title, dept.title, '未填写院系') AS collegeName,
+                   a.record_id AS recordId,
+                   a.dimension_code AS dimensionCode
+            FROM gkzh_nlld_answer a
+            JOIN gkzh_nlld_record r ON r.record_id = a.record_id
+            LEFT JOIN gkzh_school_department dept ON dept.department_id = r.department_id
+            LEFT JOIN gkzh_school_department college ON college.department_id = dept.parent_id
+            <include refid="recordConditions"/>
+            GROUP BY collegeId, collegeName, a.record_id, a.dimension_code
+            HAVING COUNT(*) = 2
+        ) t
+        GROUP BY t.collegeId, t.collegeName, t.dimensionCode
+    </select>
+
+    <!-- 院系进入 TOP1 的记录数。 -->
+    <select id="selectDepartmentTop1Counts" resultType="java.util.LinkedHashMap">
+        SELECT COALESCE(college.department_id, dept.department_id) AS collegeId,
+               COALESCE(college.title, dept.title, '未填写院系') AS collegeName,
+               r.top1_dimension_id AS dimensionId,
+               COUNT(*) AS recordCount
+        FROM gkzh_nlld_record r
+        LEFT JOIN gkzh_school_department dept ON dept.department_id = r.department_id
+        LEFT JOIN gkzh_school_department college ON college.department_id = dept.parent_id
+        <include refid="recordConditions"/>
+          AND r.top1_dimension_id IS NOT NULL
+        GROUP BY collegeId, collegeName, r.top1_dimension_id
+    </select>
+
+    <!-- 院系进入 TOP2 的记录数。 -->
+    <select id="selectDepartmentTop2Counts" resultType="java.util.LinkedHashMap">
+        SELECT COALESCE(college.department_id, dept.department_id) AS collegeId,
+               COALESCE(college.title, dept.title, '未填写院系') AS collegeName,
+               r.top2_dimension_id AS dimensionId,
+               COUNT(*) AS recordCount
+        FROM gkzh_nlld_record r
+        LEFT JOIN gkzh_school_department dept ON dept.department_id = r.department_id
+        LEFT JOIN gkzh_school_department college ON college.department_id = dept.parent_id
+        <include refid="recordConditions"/>
+          AND r.top2_dimension_id IS NOT NULL
+        GROUP BY collegeId, collegeName, r.top2_dimension_id
     </select>
 
     <!-- 活动查看页只取最近记录，避免历史数据过多导致页面和 PDF 过慢。 -->

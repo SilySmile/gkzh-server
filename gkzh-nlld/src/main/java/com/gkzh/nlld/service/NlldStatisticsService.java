@@ -107,6 +107,91 @@ public class NlldStatisticsService {
         return rows;
     }
 
+    /** 院系维度的选择细化数据：每个院系 × 15 个维度一行，供 Excel 导出使用。 */
+    public List<Map<String, Object>> departmentStats(NlldRecordQuery query) {
+        List<Map<String, Object>> summaryRows = recordMapper.selectDepartmentSummary(query);
+        Map<String, Long> selectedMap = new LinkedHashMap<>();
+        for (Map<String, Object> row : recordMapper.selectDepartmentDimensionSelectionCounts(query)) {
+            selectedMap.put(collegeKey(row.get("collegeId"), row.get("dimensionCode")),
+                    number(row.get("selectedCount")));
+        }
+        Map<String, Long> twoPointMap = new LinkedHashMap<>();
+        for (Map<String, Object> row : recordMapper.selectDepartmentDimensionTwoPointCounts(query)) {
+            twoPointMap.put(collegeKey(row.get("collegeId"), row.get("dimensionCode")),
+                    number(row.get("recordCount")));
+        }
+        Map<String, Long> topMap = new LinkedHashMap<>();
+        for (Map<String, Object> row : recordMapper.selectDepartmentTop1Counts(query)) {
+            topMap.merge(collegeKey(row.get("collegeId"), row.get("dimensionId")),
+                    number(row.get("recordCount")), Long::sum);
+        }
+        for (Map<String, Object> row : recordMapper.selectDepartmentTop2Counts(query)) {
+            topMap.merge(collegeKey(row.get("collegeId"), row.get("dimensionId")),
+                    number(row.get("recordCount")), Long::sum);
+        }
+
+        List<NlldDimension> dimensions = configService.listDimensions();
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Map<String, Object> college : summaryRows) {
+            Long collegeId = longValueOrNull(college.get("collegeId"));
+            String collegeName = college.get("collegeName") == null
+                    ? "未填写院系" : String.valueOf(college.get("collegeName"));
+            long total = number(college.get("total"));
+            long finished = number(college.get("finished"));
+            long top2Count = number(college.get("top2Count"));
+            long openCount = number(college.get("openCount"));
+            long selectedTotal = 0L;
+            for (NlldDimension dimension : dimensions) {
+                selectedTotal += selectedMap.getOrDefault(collegeKey(collegeId, dimension.getDimensionCode()), 0L);
+            }
+            for (NlldDimension dimension : dimensions) {
+                long selected = selectedMap.getOrDefault(
+                        collegeKey(collegeId, dimension.getDimensionCode()), 0L);
+                long twoPoint = twoPointMap.getOrDefault(
+                        collegeKey(collegeId, dimension.getDimensionCode()), 0L);
+                long topDimension = topMap.getOrDefault(
+                        collegeKey(collegeId, dimension.getDimensionId()), 0L);
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("collegeId", collegeId);
+                row.put("collegeName", collegeName);
+                row.put("participantCount", total);
+                row.put("completedCount", finished);
+                row.put("completionRate", percent(finished, total));
+                row.put("collegeTop2Count", top2Count);
+                row.put("collegeTop2Rate", percent(top2Count, finished));
+                row.put("collegeOpenCount", openCount);
+                row.put("collegeOpenRate", percent(openCount, finished));
+                row.put("dimensionId", dimension.getDimensionId());
+                row.put("dimensionName", dimension.getDimensionName());
+                row.put("dimensionGroup", dimension.getDimensionGroup());
+                row.put("selectedCount", selected);
+                row.put("selectedRate", percent(selected, selectedTotal));
+                row.put("twoPointCount", twoPoint);
+                row.put("twoPointRate", percent(twoPoint, finished));
+                row.put("topDimensionCount", topDimension);
+                row.put("topDimensionRate", percent(topDimension, finished));
+                rows.add(row);
+            }
+        }
+        return rows;
+    }
+
+    /** 院系+维度组合的 Map 键；未填写院系的记录归到 0。 */
+    private static String collegeKey(Object collegeId, Object suffix) {
+        return (collegeId == null ? "0" : String.valueOf(collegeId)) + "|" + suffix;
+    }
+
+    private static Long longValueOrNull(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Long.valueOf(String.valueOf(value));
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
     /** 生成学校端偏好分析文本，用于统计页和 PDF。 */
     public String analysis(Map<String, Object> summary, List<Map<String, Object>> dimensionStats,
                            List<Map<String, Object>> resultTypeStats) {

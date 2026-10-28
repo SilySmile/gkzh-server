@@ -12,10 +12,11 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * 能量雷达统计导出回归：工作簿必须包含统计汇总、维度偏好、学生明细、选择明细和数据说明五个工作表。
+ * 能量雷达统计导出回归：工作簿必须包含统计汇总、维度偏好、院系维度偏好、学生明细和数据说明五个工作表，
+ * 不再包含“选择明细”，院系选择数据改为在“院系维度偏好”中细化。
  */
 public class NlldStatisticsExcelTest {
 
@@ -68,29 +69,33 @@ public class NlldStatisticsExcelTest {
         row.put("answeredRounds", 6);
         rows.add(row);
 
-        List<Map<String, Object>> answers = new ArrayList<>();
-        Map<String, Object> answer = new LinkedHashMap<>();
-        answer.put("studentName", "张三");
-        answer.put("studentNo", "20260001");
-        answer.put("top1Name", "智力激发");
-        answer.put("top2Name", "成就满足");
-        answer.put("resultType", "top2");
-        answer.put("roundNo", 1);
-        answer.put("optionLabel", "A");
-        answer.put("optionName", "居民应急供水分配器");
-        answer.put("dimensionName", "利他主义");
-        answers.add(answer);
+        List<Map<String, Object>> departments = new ArrayList<>();
+        Map<String, Object> department = new LinkedHashMap<>();
+        department.put("collegeName", "信息学院");
+        department.put("participantCount", 6);
+        department.put("completedCount", 5);
+        department.put("completionRate", 83.33);
+        department.put("dimensionName", "智力激发");
+        department.put("dimensionGroup", "内在价值");
+        department.put("selectedCount", 8);
+        department.put("selectedRate", 22.22);
+        department.put("twoPointCount", 3);
+        department.put("twoPointRate", 60.0);
+        department.put("topDimensionCount", 3);
+        department.put("topDimensionRate", 60.0);
+        departments.add(department);
 
         NlldStatisticsExcelService service = new NlldStatisticsExcelService();
-        try (SXSSFWorkbook workbook = service.create(summary, dimensions, resultTypes,
-                "本次共 12 人扫码参与，8 人完成测评。", rows, answers, 1L, 21L,
+        try (SXSSFWorkbook workbook = service.create(summary, dimensions, resultTypes, departments,
+                "本次共 12 人扫码参与，8 人完成测评。", rows, 1L, 21L,
                 LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31))) {
             assertEquals(5, workbook.getNumberOfSheets());
             assertNotNull(workbook.getSheet("统计汇总"));
             assertNotNull(workbook.getSheet("维度偏好"));
+            assertNotNull(workbook.getSheet("院系维度偏好"));
             assertNotNull(workbook.getSheet("学生明细"));
-            assertNotNull(workbook.getSheet("选择明细"));
             assertNotNull(workbook.getSheet("数据说明"));
+            assertNull(workbook.getSheet("选择明细"));
 
             Sheet summarySheet = workbook.getSheet("统计汇总");
             assertEquals("能量雷达参与统计", summarySheet.getRow(0).getCell(0).getStringCellValue());
@@ -104,9 +109,10 @@ public class NlldStatisticsExcelTest {
             assertEquals("张三", studentSheet.getRow(3).getCell(1).getStringCellValue());
             assertEquals("TOP2 类型", studentSheet.getRow(3).getCell(10).getStringCellValue());
 
-            Sheet answerSheet = workbook.getSheet("选择明细");
-            assertEquals("居民应急供水分配器", answerSheet.getRow(3).getCell(8).getStringCellValue());
-            assertEquals("利他主义", answerSheet.getRow(3).getCell(9).getStringCellValue());
+            Sheet departmentSheet = workbook.getSheet("院系维度偏好");
+            assertEquals("信息学院", departmentSheet.getRow(3).getCell(1).getStringCellValue());
+            assertEquals("智力激发", departmentSheet.getRow(3).getCell(5).getStringCellValue());
+            assertEquals("60.0%", departmentSheet.getRow(3).getCell(10).getStringCellValue());
         }
     }
 }

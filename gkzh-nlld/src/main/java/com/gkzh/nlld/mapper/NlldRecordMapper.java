@@ -34,8 +34,20 @@ public interface NlldRecordMapper extends BaseMapper<NlldRecord> {
     /** 按维度汇总进入 TOP2 的记录数。 */
     List<Map<String, Object>> selectTop2Counts(@Param("q") NlldRecordQuery query);
 
-    /** 导出“选择明细”工作表：每条记录 12 行，含关卡、物品、维度和学生信息。 */
-    List<Map<String, Object>> selectAnswerDetails(@Param("q") NlldRecordQuery query);
+    /** 按院系汇总参与、完成、TOP2 和多元开放型人数。 */
+    List<Map<String, Object>> selectDepartmentSummary(@Param("q") NlldRecordQuery query);
+
+    /** 按院系和维度汇总被选中次数；院系取专业所属的父部门。 */
+    List<Map<String, Object>> selectDepartmentDimensionSelectionCounts(@Param("q") NlldRecordQuery query);
+
+    /** 按院系和维度汇总“得 2 分”的记录数。 */
+    List<Map<String, Object>> selectDepartmentDimensionTwoPointCounts(@Param("q") NlldRecordQuery query);
+
+    /** 按院系汇总进入 TOP1 的记录数。 */
+    List<Map<String, Object>> selectDepartmentTop1Counts(@Param("q") NlldRecordQuery query);
+
+    /** 按院系汇总进入 TOP2 的记录数。 */
+    List<Map<String, Object>> selectDepartmentTop2Counts(@Param("q") NlldRecordQuery query);
 
     /** 活动查看页使用：按游戏取最近若干条记录，避免一次加载全部历史数据。 */
     List<NlldRecord> selectGameViewRecords(@Param("gameId") Long gameId, @Param("limit") int limit);

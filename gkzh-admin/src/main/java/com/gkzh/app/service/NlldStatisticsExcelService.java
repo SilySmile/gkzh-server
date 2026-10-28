@@ -33,8 +33,9 @@ public class NlldStatisticsExcelService {
      * 生成工作簿；调用方负责写出响应并释放临时文件。
      */
     public SXSSFWorkbook create(Map<String, Object> summary, List<Map<String, Object>> dimensionStats,
-                                List<Map<String, Object>> resultTypeStats, String analysis,
-                                List<Map<String, Object>> rows, List<Map<String, Object>> answerDetails,
+                                List<Map<String, Object>> resultTypeStats,
+                                List<Map<String, Object>> departmentStats, String analysis,
+                                List<Map<String, Object>> rows,
                                 Long schoolId, Long instanceId, LocalDate startDate, LocalDate endDate) {
         SXSSFWorkbook workbook = new SXSSFWorkbook(100);
         CellStyle titleStyle = titleStyle(workbook);
@@ -45,8 +46,8 @@ public class NlldStatisticsExcelService {
         summarySheet(workbook, summary, analysis, schoolId, instanceId, startDate, endDate,
                 titleStyle, headerStyle, bodyStyle, wrapStyle);
         dimensionSheet(workbook, dimensionStats, titleStyle, headerStyle, bodyStyle);
+        departmentSheet(workbook, departmentStats, titleStyle, headerStyle, bodyStyle);
         studentSheets(workbook, rows, titleStyle, headerStyle, bodyStyle);
-        answerSheets(workbook, answerDetails, titleStyle, headerStyle, bodyStyle);
         noteSheet(workbook, titleStyle, headerStyle, wrapStyle);
         return workbook;
     }
@@ -125,7 +126,46 @@ public class NlldStatisticsExcelService {
         }
     }
 
-    /** 第三页及续表：逐名学生明细。 */
+    /** 第三页：院系维度的选择细化；同一院系重复参与/完成人数，便于按院系筛选和透视。 */
+    private void departmentSheet(SXSSFWorkbook workbook, List<Map<String, Object>> departmentStats,
+                                 CellStyle titleStyle, CellStyle headerStyle, CellStyle bodyStyle) {
+        SXSSFSheet sheet = workbook.createSheet("院系维度偏好");
+        int[] widths = {8, 18, 10, 10, 10, 14, 18, 10, 10, 10, 10, 12, 10};
+        for (int i = 0; i < widths.length; i++) {
+            sheet.setColumnWidth(i, widths[i] * 256);
+        }
+        SXSSFRow title = sheet.createRow(0);
+        title.setHeightInPoints(30);
+        title.createCell(0).setCellValue("各院系职业价值观维度偏好细化");
+        title.getCell(0).setCellStyle(titleStyle);
+        sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, widths.length - 1));
+
+        String[] headers = {"序号", "院系", "参与人数", "完成人数", "完成率", "维度", "分组",
+                "被选次数", "选择占比", "得2分人数", "偏好率", "进入TOP2人数", "TOP2占比"};
+        SXSSFRow header = sheet.createRow(2);
+        for (int i = 0; i < headers.length; i++) {
+            header.createCell(i).setCellValue(headers[i]);
+            header.getCell(i).setCellStyle(headerStyle);
+        }
+        int rowIndex = 3;
+        int serial = 1;
+        for (Map<String, Object> item : departmentStats) {
+            SXSSFRow row = sheet.createRow(rowIndex++);
+            String[] values = {String.valueOf(serial++), text(item.get("collegeName")),
+                    String.valueOf(item.get("participantCount")), String.valueOf(item.get("completedCount")),
+                    item.get("completionRate") + "%", text(item.get("dimensionName")),
+                    text(item.get("dimensionGroup")), String.valueOf(item.get("selectedCount")),
+                    item.get("selectedRate") + "%", String.valueOf(item.get("twoPointCount")),
+                    item.get("twoPointRate") + "%", String.valueOf(item.get("topDimensionCount")),
+                    item.get("topDimensionRate") + "%"};
+            for (int i = 0; i < values.length; i++) {
+                row.createCell(i).setCellValue(values[i]);
+                row.getCell(i).setCellStyle(bodyStyle);
+            }
+        }
+    }
+
+    /** 第四页及续表：逐名学生明细。 */
     private void studentSheets(SXSSFWorkbook workbook, List<Map<String, Object>> rows,
                                CellStyle titleStyle, CellStyle headerStyle, CellStyle bodyStyle) {
         String[] headers = {"序号", "学生姓名", "学号", "学校", "院系", "专业", "性别", "活动实例",
@@ -154,33 +194,6 @@ public class NlldStatisticsExcelService {
         }
     }
 
-    /** 第四页及续表：每条记录的 12 条选择明细。 */
-    private void answerSheets(SXSSFWorkbook workbook, List<Map<String, Object>> details,
-                              CellStyle titleStyle, CellStyle headerStyle, CellStyle bodyStyle) {
-        String[] headers = {"序号", "学生姓名", "学号", "TOP1", "TOP2", "结果类型", "关卡", "选项", "物品", "维度"};
-        int[] widths = {7, 12, 16, 14, 14, 14, 8, 8, 30, 14};
-        int page = 1;
-        int rowIndex = 3;
-        SXSSFSheet sheet = newAnswerSheet(workbook, page, headers, widths, titleStyle, headerStyle);
-        int serial = 1;
-        for (Map<String, Object> item : details) {
-            if (rowIndex >= SHEET_ROW_LIMIT) {
-                page++;
-                sheet = newAnswerSheet(workbook, page, headers, widths, titleStyle, headerStyle);
-                rowIndex = 3;
-            }
-            SXSSFRow row = sheet.createRow(rowIndex++);
-            String[] values = {String.valueOf(serial++), text(item.get("studentName")), text(item.get("studentNo")),
-                    text(item.get("top1Name")), text(item.get("top2Name")), text(item.get("resultType")),
-                    text(item.get("roundNo")), text(item.get("optionLabel")), text(item.get("optionName")),
-                    text(item.get("dimensionName"))};
-            for (int i = 0; i < values.length; i++) {
-                row.createCell(i).setCellValue(values[i]);
-                row.getCell(i).setCellStyle(bodyStyle);
-            }
-        }
-    }
-
     private SXSSFSheet newStudentSheet(SXSSFWorkbook workbook, int page, String[] headers, int[] widths,
                                        CellStyle titleStyle, CellStyle headerStyle) {
         String name = page == 1 ? "学生明细" : "学生明细" + page;
@@ -191,26 +204,6 @@ public class NlldStatisticsExcelService {
         SXSSFRow title = sheet.createRow(0);
         title.setHeightInPoints(30);
         title.createCell(0).setCellValue("能量雷达学生参与明细");
-        title.getCell(0).setCellStyle(titleStyle);
-        sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, headers.length - 1));
-        SXSSFRow header = sheet.createRow(2);
-        for (int i = 0; i < headers.length; i++) {
-            header.createCell(i).setCellValue(headers[i]);
-            header.getCell(i).setCellStyle(headerStyle);
-        }
-        return sheet;
-    }
-
-    private SXSSFSheet newAnswerSheet(SXSSFWorkbook workbook, int page, String[] headers, int[] widths,
-                                      CellStyle titleStyle, CellStyle headerStyle) {
-        String name = page == 1 ? "选择明细" : "选择明细" + page;
-        SXSSFSheet sheet = workbook.createSheet(name);
-        for (int i = 0; i < widths.length; i++) {
-            sheet.setColumnWidth(i, widths[i] * 256);
-        }
-        SXSSFRow title = sheet.createRow(0);
-        title.setHeightInPoints(30);
-        title.createCell(0).setCellValue("能量雷达学生选择明细");
         title.getCell(0).setCellStyle(titleStyle);
         sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, headers.length - 1));
         SXSSFRow header = sheet.createRow(2);
@@ -237,6 +230,7 @@ public class NlldStatisticsExcelService {
                 {"计分规则", "6 关、每关从 5 件物品中选择 2 件；15 个维度在全表 30 件物品中各出现 2 次，单维度最高 2 分、总得分恒为 12。"},
                 {"结果类型", "恰好 2 个维度得 2 分为 TOP2；只有 1 个维度得 2 分、3 个及以上并列 2 分、没有任何维度得 2 分统一为多元开放型。"},
                 {"维度偏好", "被选次数按选择明细统计；选择占比 = 该维度被选次数 ÷ 全部维度被选次数。得2分人数 = 该维度被选中 2 次的学生数；偏好率 = 得2分人数 ÷ 完成测评人数。"},
+                {"院系细化", "“院系维度偏好”按学生专业所属的父部门统计；未填写专业或部门缺失的学生归入“未填写院系”。同一院系的参与/完成人数会在该院系每一行重复，便于按院系筛选和透视。"},
                 {"时间范围", "参与日期以扫码时间 scan_time 为准，开始日期含当天零点，结束日期含当天，查询时转换为次日零点之前。"},
                 {"隐私说明", "本表仅用于活动统计和教学复盘，请勿用于与活动无关的个人评价或对外传播。"}
         };

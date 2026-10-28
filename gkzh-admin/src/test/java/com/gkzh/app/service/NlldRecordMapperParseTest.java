@@ -44,7 +44,11 @@ public class NlldRecordMapperParseTest {
         assertNotNull(configuration.getMappedStatement(NAMESPACE + ".selectDimensionTwoPointCounts"));
         assertNotNull(configuration.getMappedStatement(NAMESPACE + ".selectTop1Counts"));
         assertNotNull(configuration.getMappedStatement(NAMESPACE + ".selectTop2Counts"));
-        assertNotNull(configuration.getMappedStatement(NAMESPACE + ".selectAnswerDetails"));
+        assertNotNull(configuration.getMappedStatement(NAMESPACE + ".selectDepartmentSummary"));
+        assertNotNull(configuration.getMappedStatement(NAMESPACE + ".selectDepartmentDimensionSelectionCounts"));
+        assertNotNull(configuration.getMappedStatement(NAMESPACE + ".selectDepartmentDimensionTwoPointCounts"));
+        assertNotNull(configuration.getMappedStatement(NAMESPACE + ".selectDepartmentTop1Counts"));
+        assertNotNull(configuration.getMappedStatement(NAMESPACE + ".selectDepartmentTop2Counts"));
         assertNotNull(configuration.getMappedStatement(NAMESPACE + ".selectGameViewRecords"));
     }
 

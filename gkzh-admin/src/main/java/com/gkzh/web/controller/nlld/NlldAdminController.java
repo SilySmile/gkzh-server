@@ -228,10 +228,10 @@ public class NlldAdminController extends BaseController {
         List<Map<String, Object>> resultTypeStats = statisticsService.resultTypeStats(summary);
         String analysis = statisticsService.analysis(summary, dimensionStats, resultTypeStats);
         List<Map<String, Object>> rows = enrichService.enrich(recordMapper.selectAdminRecords(query));
-        List<Map<String, Object>> answerDetails = recordMapper.selectAnswerDetails(query);
+        List<Map<String, Object>> departmentStats = statisticsService.departmentStats(query);
 
-        try (SXSSFWorkbook workbook = excelService.create(summary, dimensionStats, resultTypeStats, analysis,
-                rows, answerDetails, schoolId, instanceId, startDate, endDate)) {
+        try (SXSSFWorkbook workbook = excelService.create(summary, dimensionStats, resultTypeStats,
+                departmentStats, analysis, rows, schoolId, instanceId, startDate, endDate)) {
             try {
                 response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
                 response.setHeader("Content-Disposition", ContentDisposition.attachment()

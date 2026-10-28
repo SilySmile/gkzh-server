@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.nlld.mapper.NlldRecordMapper">
+
+    <!-- 参与记录通用筛选条件；后台列表、统计汇总、维度偏好和导出共用。 -->
+    <sql id="recordConditions">
+        <where>
+            r.game_type = 'nlld'
+            <if test="q.gameId != null">
+                AND r.game_id = #{q.gameId}
+            </if>
+            <if test="q.instanceId != null">
+                AND r.instance_id = #{q.instanceId}
+            </if>
+            <if test="q.schoolId != null">
+                AND r.school_id = #{q.schoolId}
+            </if>
+            <if test="q.departmentId != null">
+                AND (r.department_id = #{q.departmentId}
+                     OR EXISTS (SELECT 1 FROM gkzh_school_department d
+                                WHERE d.department_id = r.department_id
+                                  AND FIND_IN_SET(#{q.departmentId}, d.ancestors)))
+            </if>
+            <if test="q.major != null and q.major != ''">
+                AND r.major LIKE CONCAT('%', #{q.major}, '%')
+            </if>
+            <if test="q.studentNo != null and q.studentNo != ''">
+                AND r.student_no LIKE CONCAT('%', #{q.studentNo}, '%')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("男")'>
+                AND r.gender IN ('男', '0')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("女")'>
+                AND r.gender IN ('女', '1')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("其他")'>
+                AND (r.gender IS NULL OR TRIM(r.gender) = '' OR r.gender NOT IN ('男', '0', '女', '1'))
+            </if>
+            <if test="q.resultType != null and q.resultType != ''">
+                AND r.result_type = #{q.resultType}
+            </if>
+            <if test="q.dimensionCode != null and q.dimensionCode != ''">
+                AND (r.top1_dimension_id = (SELECT dd.dimension_id FROM gkzh_nlld_dimension dd
+                                            WHERE dd.dimension_code = #{q.dimensionCode})
+                     OR r.top2_dimension_id = (SELECT dd.dimension_id FROM gkzh_nlld_dimension dd
+                                               WHERE dd.dimension_code = #{q.dimensionCode}))
+            </if>
+            <if test="q.status != null and q.status != ''">
+                AND r.status = #{q.status}
+            </if>
+            <if test="q.startDate != null">
+                AND r.scan_time &gt;= #{q.startDate}
+            </if>
+            <if test="q.endDate != null">
+                AND r.scan_time &lt; #{q.endDate}
+            </if>
+        </where>
+    </sql>
+
+    <!-- 后台参与记录分页查询：按活动、结果类型、TOP 维度、学生属性和参与日期动态筛选。 -->
+    <select id="selectAdminRecords" resultType="com.gkzh.nlld.domain.NlldRecord">
+        SELECT r.* FROM gkzh_nlld_record r
+        <include refid="recordConditions"/>
+        ORDER BY r.record_id DESC
+    </select>
+
+    <!-- 统计汇总与列表使用同一筛选条件，保证页面人数、完成率和导出数据一致。 -->
+    <select id="selectAdminSummary" resultType="java.util.LinkedHashMap">
+        SELECT COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN r.status = 'finished' THEN 1 ELSE 0 END), 0) AS finished,
+               COALESCE(SUM(CASE WHEN r.result_type = 'top2' THEN 1 ELSE 0 END), 0) AS top2Count,
+               COALESCE(SUM(CASE WHEN r.result_type = 'open' THEN 1 ELSE 0 END), 0) AS openCount,
+               COALESCE(SUM(CASE WHEN r.answered_rounds &gt; 0 THEN 1 ELSE 0 END), 0) AS startedCount
+        FROM gkzh_nlld_record r
+        <include refid="recordConditions"/>
+    </select>
+
+    <!-- 维度被选次数：与列表同口径筛选记录，再按维度统计选择明细。 -->
+    <select id="selectDimensionSelectionCounts" resultType="java.util.LinkedHashMap">
+        SELECT a.dimension_code AS dimensionCode,
+               COUNT(*) AS selectedCount
+        FROM gkzh_nlld_answer a
+        JOIN gkzh_nlld_record r ON r.record_id = a.record_id
+        <include refid="recordConditions"/>
+        GROUP BY a.dimension_code
+    </select>
+
+    <!-- 维度得 2 分人数：先按记录+维度聚合，命中 2 次的再按维度计数。 -->
+    <select id="selectDimensionTwoPointCounts" resultType="java.util.LinkedHashMap">
+        SELECT t.dimension_code AS dimensionCode,
+               COUNT(*) AS recordCount
+        FROM (
+            SELECT a.record_id, a.dimension_code
+            FROM gkzh_nlld_answer a
+            JOIN gkzh_nlld_record r ON r.record_id = a.record_id
+            <include refid="recordConditions"/>
+            GROUP BY a.record_id, a.dimension_code
+            HAVING COUNT(*) = 2
+        ) t
+        GROUP BY t.dimension_code
+    </select>
+
+    <!-- 进入 TOP1 的记录数。 -->
+    <select id="selectTop1Counts" resultType="java.util.LinkedHashMap">
+        SELECT r.top1_dimension_id AS dimensionId,
+               COUNT(*) AS recordCount
+        FROM gkzh_nlld_record r
+        <include refid="recordConditions"/>
+          AND r.top1_dimension_id IS NOT NULL
+        GROUP BY r.top1_dimension_id
+    </select>
+
+    <!-- 进入 TOP2 的记录数。 -->
+    <select id="selectTop2Counts" resultType="java.util.LinkedHashMap">
+        SELECT r.top2_dimension_id AS dimensionId,
+               COUNT(*) AS recordCount
+        FROM gkzh_nlld_record r
+        <include refid="recordConditions"/>
+          AND r.top2_dimension_id IS NOT NULL
+        GROUP BY r.top2_dimension_id
+    </select>
+
+    <!-- 选择明细导出：每条记录 12 行，包含关卡、选项、物品与维度名称。 -->
+    <select id="selectAnswerDetails" resultType="java.util.LinkedHashMap">
+        SELECT r.record_id AS recordId,
+               r.student_name AS studentName,
+               r.student_no AS studentNo,
+               r.school_id AS schoolId,
+               r.instance_id AS instanceId,
+               r.top1_dimension_name AS top1Name,
+               r.top2_dimension_name AS top2Name,
+               r.result_type AS resultType,
+               a.round_no AS roundNo,
+               a.option_label AS optionLabel,
+               a.option_name AS optionName,
+               d.dimension_name AS dimensionName
+        FROM gkzh_nlld_answer a
+        JOIN gkzh_nlld_record r ON r.record_id = a.record_id
+        LEFT JOIN gkzh_nlld_dimension d ON d.dimension_id = a.dimension_id
+        <include refid="recordConditions"/>
+        ORDER BY r.record_id DESC, a.round_no ASC, a.option_label ASC
+    </select>
+
+    <!-- 活动查看页只取最近记录，避免历史数据过多导致页面和 PDF 过慢。 -->
+    <select id="selectGameViewRecords" resultType="com.gkzh.nlld.domain.NlldRecord">
+        SELECT r.* FROM gkzh_nlld_record r
+        WHERE r.game_type = 'nlld' AND r.game_id = #{gameId}
+        ORDER BY r.record_id DESC
+        LIMIT #{limit}
+    </select>
+
+</mapper>

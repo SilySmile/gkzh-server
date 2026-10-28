@@ -153,6 +153,10 @@ public class WeekAppController extends FrontBaseController {
         if ("zyjdc".equals(game.getGameType())) {
             return AjaxResult.error("请从职业角斗场入口进入");
         }
+        // 能量雷达由自己的 /api/nlld/records/enter 写入参与记录，禁止通用入口重复建记录。
+        if ("nlld".equals(game.getGameType())) {
+            return AjaxResult.error("请从能量雷达入口进入");
+        }
 
         StudentCheckin student = getCurrentStudent();
         Long studentSchoolId = getCurrentStudentSchoolId();
@@ -268,6 +272,10 @@ public class WeekAppController extends FrontBaseController {
         // 职业角斗场只能由对局胜利写入完成状态，禁止通用完成接口绕过胜负判定。
         if ("zyjdc".equals(game.getGameType())) {
             return AjaxResult.error("请完成职业角斗场对局并取得胜利");
+        }
+        // 能量雷达只能由第 6 关提交结算，禁止通用完成接口未答完就标记完成。
+        if ("nlld".equals(game.getGameType())) {
+            return AjaxResult.error("请完成全部关卡并生成职业能量雷达报告");
         }
         GkzhGameParticipation participation = activityWeekService.getLatestParticipation(gameId, student.getUserId());
         if (participation == null) {

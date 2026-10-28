@@ -61,6 +61,10 @@ import com.gkzh.app.service.ZyjdcRecordEnrichService;
 import com.gkzh.zyjdc.domain.ZyjdcRecord;
 import com.gkzh.zyjdc.mapper.ZyjdcRecordMapper;
 import com.gkzh.zyjdc.service.ZyjdcStatisticsService;
+import com.gkzh.app.service.NlldRecordEnrichService;
+import com.gkzh.nlld.domain.NlldRecord;
+import com.gkzh.nlld.mapper.NlldRecordMapper;
+import com.gkzh.nlld.service.NlldStatisticsService;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
@@ -102,6 +106,18 @@ public class GkzhActivityWeekController extends BaseController {
     /** 职业角斗场记录展示字段补全，与后台列表使用同一口径。 */
     @Autowired
     private ZyjdcRecordEnrichService zyjdcRecordEnrichService;
+
+    /** 能量雷达的维度偏好、TOP2/多元开放型分布和完成率统计。 */
+    @Autowired
+    private NlldStatisticsService nlldStatisticsService;
+
+    /** 能量雷达参与记录，查看页只取最近若干条用于展示。 */
+    @Autowired
+    private NlldRecordMapper nlldRecordMapper;
+
+    /** 能量雷达记录展示字段补全，与后台列表使用同一口径。 */
+    @Autowired
+    private NlldRecordEnrichService nlldRecordEnrichService;
 
     @Value("${app.qr-code.base-url}")
     private String qrCodeBaseUrl;
@@ -208,7 +224,8 @@ public class GkzhActivityWeekController extends BaseController {
         try {
             Map<String, Object> gameView = buildGameView(game);
             String viewType = String.valueOf(gameView.get("viewType"));
-            if (!"mind-window".equals(viewType) && !"sszctop".equals(viewType) && !"zyjdc".equals(viewType)) {
+            if (!"mind-window".equals(viewType) && !"sszctop".equals(viewType) && !"zyjdc".equals(viewType)
+                    && !"nlld".equals(viewType)) {
                 return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
             }
             byte[] bytes = createGameViewPdf(gameView);
@@ -237,12 +254,15 @@ public class GkzhActivityWeekController extends BaseController {
         if ("sszctop".equals(type)) viewType = "sszctop";
         // 职业角斗场同样固定使用专属三页模板，配置缺失时也不降级为通用空白页。
         if ("zyjdc".equals(type)) viewType = "zyjdc";
+        // 能量雷达固定使用专属两页模板，配置缺失时也不降级为通用空白页。
+        if ("nlld".equals(type)) viewType = "nlld";
         view.put("gameId", game.getGameId());
         view.put("gameTitle", game.getTitle());
         view.put("gameType", type);
         view.put("viewType", viewType);
         if ("sszctop".equals(viewType)) return buildSszctopGameView(game, view);
         if ("zyjdc".equals(viewType)) return buildZyjdcGameView(game, view);
+        if ("nlld".equals(viewType)) return buildNlldGameView(game, view);
         if (!"mind-window".equals(viewType)) {
             view.put("message", "该游戏暂未配置查看模板");
             view.put("pages", new ArrayList<>());
@@ -342,6 +362,20 @@ public class GkzhActivityWeekController extends BaseController {
         view.putAll(stats);
         List<ZyjdcRecord> records = zyjdcRecordMapper.selectGameViewRecords(game.getGameId(), 50);
         view.put("records", zyjdcRecordEnrichService.enrich(records));
+        view.put("recordLimit", 50);
+        return view;
+    }
+
+    /**
+     * 构建能量雷达活动查看数据：
+     * 第一页展示整体参与、完成率和最近学生选择，第二页展示 15 个维度的偏好占比，
+     * 并附 TOP2/多元开放型分布与简要分析。
+     */
+    private Map<String, Object> buildNlldGameView(GkzhActivityGame game, Map<String, Object> view) {
+        Map<String, Object> stats = nlldStatisticsService.gameViewStats(game.getGameId());
+        view.putAll(stats);
+        List<NlldRecord> records = nlldRecordMapper.selectGameViewRecords(game.getGameId(), 50);
+        view.put("records", nlldRecordEnrichService.enrich(records));
         view.put("recordLimit", 50);
         return view;
     }
@@ -467,6 +501,12 @@ public class GkzhActivityWeekController extends BaseController {
                     (List<Map<String, Object>>) view.get("records"), title));
             pages.add(drawZyjdcRoleStatsPage((List<Map<String, Object>>) view.get("roleStats"), title));
             pages.add(drawTextAnalysisPage(String.valueOf(view.get("analysis")), title, "整体偏好分析"));
+        } else if ("nlld".equals(view.get("viewType"))) {
+            pages.add(drawNlldOverviewPage((Map<String, Object>) view.get("summary"),
+                    (List<Map<String, Object>>) view.get("records"), title));
+            pages.add(drawNlldDimensionStatsPage((List<Map<String, Object>>) view.get("dimensionStats"),
+                    (List<Map<String, Object>>) view.get("resultTypeStats"),
+                    String.valueOf(view.get("analysis")), title));
         } else {
             pages.add(drawHollandPage((List<HollandCode>) view.get("hollandCodes"), title));
             pages.add(drawCodeStatsPage((List<Map<String, Object>>) view.get("codeStats"), title));
@@ -582,6 +622,129 @@ public class GkzhActivityWeekController extends BaseController {
             g.drawString(String.valueOf(row.get("completionRate")) + "%", xs[6], y + 35);
             y += 56;
         }
+        g.dispose();
+        return image;
+    }
+
+    /** 能量雷达 PDF 第一页：整体参与情况 + 最近学生的 TOP2 选择明细。 */
+    private BufferedImage drawNlldOverviewPage(Map<String, Object> summary, List<Map<String, Object>> records,
+                                               String title) {
+        List<Map<String, Object>> rows = records == null ? new ArrayList<>() : records;
+        int show = Math.min(rows.size(), 18);
+        int height = Math.max(1527, 240 + show * 50);
+        BufferedImage image = newViewImage(height);
+        Graphics2D g = image.createGraphics();
+        g.setColor(new Color(26, 44, 74));
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 42));
+        g.drawString(title + "—学生职业价值观整体数据", 48, 72);
+
+        Map<String, Object> value = summary == null ? new LinkedHashMap<>() : summary;
+        g.setColor(new Color(52, 73, 94));
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 21));
+        g.drawString("扫码参与：" + text(value.get("enteredCount")) + " 人    完成测评：" + text(value.get("completedCount"))
+                + " 人    完成率：" + text(value.get("completionRate")) + "%    TOP2："
+                + text(value.get("top2Count")) + " 人    多元开放型：" + text(value.get("openCount")) + " 人", 48, 118);
+
+        int y = 150;
+        String[] headers = {"序号", "学生", "学号", "院系", "专业", "TOP1", "TOP2", "类型", "参与时间"};
+        int[] xs = {66, 120, 235, 350, 465, 580, 685, 790, 880};
+        g.setColor(new Color(22, 119, 255));
+        g.fillRect(48, y, 984, 44);
+        g.setColor(Color.WHITE);
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 18));
+        for (int i = 0; i < headers.length; i++) {
+            g.drawString(headers[i], xs[i], y + 28);
+        }
+        y += 44;
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 17));
+        for (int i = 0; i < show; i++) {
+            Map<String, Object> row = rows.get(i);
+            g.setColor(i % 2 == 0 ? Color.WHITE : new Color(248, 250, 253));
+            g.fillRect(48, y, 984, 50);
+            g.setColor(new Color(52, 73, 94));
+            g.drawString(String.valueOf(i + 1), xs[0], y + 31);
+            g.drawString(cut(text(row.get("studentName")), 8), xs[1], y + 31);
+            g.drawString(cut(text(row.get("studentNo")), 9), xs[2], y + 31);
+            g.drawString(cut(text(row.get("departmentName")), 8), xs[3], y + 31);
+            g.drawString(cut(text(row.get("major")), 8), xs[4], y + 31);
+            g.drawString(cut(text(row.get("top1DimensionName")), 6), xs[5], y + 31);
+            g.drawString(cut(text(row.get("top2DimensionName")), 6), xs[6], y + 31);
+            g.drawString(cut(text(row.get("resultTypeName")), 7), xs[7], y + 31);
+            g.drawString(cut(timeText(row.get("scanTime")), 16), xs[8], y + 31);
+            y += 50;
+        }
+        if (rows.size() > show) {
+            g.setColor(new Color(120, 130, 140));
+            g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 16));
+            g.drawString("仅展示最近 " + show + " 条记录，完整数据请在 Web 参与记录或 Excel 中查看。", 70, y + 34);
+        }
+        g.dispose();
+        return image;
+    }
+
+    /** 能量雷达 PDF 第二页：15 个维度的偏好占比、结果类型分布和简要分析。 */
+    private BufferedImage drawNlldDimensionStatsPage(List<Map<String, Object>> rows,
+                                                     List<Map<String, Object>> resultTypes,
+                                                     String analysis, String title) {
+        List<Map<String, Object>> list = rows == null ? new ArrayList<>() : rows;
+        int height = Math.max(1527, 300 + list.size() * 52 + 220);
+        BufferedImage image = newViewImage(height);
+        Graphics2D g = image.createGraphics();
+        g.setColor(new Color(26, 44, 74));
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 42));
+        g.drawString(title + "—各价值观维度偏好占比统计", 48, 72);
+
+        long top2 = 0;
+        long open = 0;
+        if (resultTypes != null) {
+            for (Map<String, Object> row : resultTypes) {
+                if ("top2".equals(String.valueOf(row.get("resultType")))) {
+                    top2 = number(row.get("userCount"));
+                } else if ("open".equals(String.valueOf(row.get("resultType")))) {
+                    open = number(row.get("userCount"));
+                }
+            }
+        }
+        g.setColor(new Color(52, 73, 94));
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 23));
+        g.drawString("完成测评：" + (top2 + open) + " 人    TOP2 类型：" + top2 + " 人    多元开放型：" + open + " 人", 48, 112);
+
+        int y = 148;
+        String[] headers = {"序号", "维度", "分组", "被选次数", "选择占比", "得2分人数", "偏好率", "进入TOP2", "TOP2占比"};
+        int[] xs = {66, 120, 300, 470, 570, 665, 770, 855, 950};
+        g.setColor(new Color(103, 194, 58));
+        g.fillRect(48, y, 984, 50);
+        g.setColor(Color.WHITE);
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 19));
+        for (int i = 0; i < headers.length; i++) {
+            g.drawString(headers[i], xs[i], y + 32);
+        }
+        y += 50;
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 19));
+        for (Map<String, Object> row : list) {
+            g.setColor(y % 104 == 0 ? new Color(248, 250, 253) : Color.WHITE);
+            g.fillRect(48, y, 984, 52);
+            g.setColor(new Color(52, 73, 94));
+            g.drawString(String.valueOf(row.get("serialNo")), xs[0], y + 33);
+            g.drawString(cut(text(row.get("dimensionName")), 6), xs[1], y + 33);
+            g.drawString(cut(text(row.get("dimensionGroup")), 9), xs[2], y + 33);
+            g.drawString(String.valueOf(number(row.get("selectedCount"))), xs[3], y + 33);
+            g.drawString(String.valueOf(row.get("selectedRate")) + "%", xs[4], y + 33);
+            g.drawString(String.valueOf(number(row.get("twoPointCount"))), xs[5], y + 33);
+            g.drawString(String.valueOf(row.get("twoPointRate")) + "%", xs[6], y + 33);
+            g.drawString(String.valueOf(number(row.get("top2Count"))), xs[7], y + 33);
+            g.drawString(String.valueOf(row.get("top2Rate")) + "%", xs[8], y + 33);
+            y += 52;
+        }
+        y += 18;
+        g.setColor(Color.WHITE);
+        g.fillRoundRect(48, y, 984, 170, 20, 20);
+        g.setColor(new Color(26, 44, 74));
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 22));
+        g.drawString("整体偏好分析", 70, y + 34);
+        g.setColor(new Color(52, 73, 94));
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 20));
+        drawWrapped(g, analysis == null ? "" : analysis, 70, y + 70, 940, 28);
         g.dispose();
         return image;
     }

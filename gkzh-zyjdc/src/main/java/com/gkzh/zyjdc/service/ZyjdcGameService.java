@@ -244,7 +244,7 @@ public class ZyjdcGameService {
         if (role == null) {
             throw new ServiceException("所选角色已不存在，请重新选择");
         }
-        ZyjdcGameState state = ZyjdcBoard.newState(role.getRoleCode(), random);
+        ZyjdcGameState state = ZyjdcBoard.newState(role.getRoleCode());
         Date now = DateUtils.getNowDate();
         // 从上一局失败/平局结果直接重新开始时，同样累计尝试次数。
         int attempt = record.getAttemptNo() == null ? 1 : record.getAttemptNo();
@@ -374,7 +374,7 @@ public class ZyjdcGameService {
         if (role == null) {
             throw new ServiceException("所选角色已不存在，请重新选择");
         }
-        ZyjdcGameState state = ZyjdcBoard.newState(role.getRoleCode(), random);
+        ZyjdcGameState state = ZyjdcBoard.newState(role.getRoleCode());
         int attempt = record.getAttemptNo() == null ? 1 : record.getAttemptNo() + 1;
         Date now = DateUtils.getNowDate();
         recordMapper.update(null, new UpdateWrapper<ZyjdcRecord>().eq("record_id", recordId)

@@ -74,7 +74,7 @@ public class ZyjdcRecord {
     /** 当前第几局，从 1 开始。 */
     private Integer attemptNo;
 
-    /** 当前棋盘状态 JSON：4×4 棋子、回合、开始时间、落子记录。 */
+    /** 当前棋盘状态 JSON：7×9 棋子、回合、开始时间、落子记录。 */
     private String boardJson;
 
     /** 对局结果：win 胜利，lose 失败，draw 平局，未结束为空。 */

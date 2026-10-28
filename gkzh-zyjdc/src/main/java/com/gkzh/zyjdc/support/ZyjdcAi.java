@@ -78,8 +78,10 @@ public final class ZyjdcAi {
     private static double evaluate(String[][] board) {
         double material = 0;
         double advance = 0;
-        for (int row = 0; row < ZyjdcBoard.SIZE; row++) {
-            for (int col = 0; col < ZyjdcBoard.SIZE; col++) {
+        int centerRow = ZyjdcBoard.ROWS / 2;
+        int centerCol = ZyjdcBoard.COLS / 2;
+        for (int row = 0; row < ZyjdcBoard.ROWS; row++) {
+            for (int col = 0; col < ZyjdcBoard.COLS; col++) {
                 String token = board[row][col];
                 String side = ZyjdcBoard.sideOf(token);
                 if (side == null) {
@@ -92,9 +94,9 @@ public final class ZyjdcAi {
                     advance += row * 3.0;
                 } else {
                     material -= ZyjdcBoard.valueOf(code);
-                    advance -= (ZyjdcBoard.SIZE - 1 - row) * 3.0;
+                    advance -= (ZyjdcBoard.ROWS - 1 - row) * 3.0;
                 }
-                if (row >= 1 && row <= 2 && col >= 1 && col <= 2) {
+                if (Math.abs(row - centerRow) <= 1 && Math.abs(col - centerCol) <= 1) {
                     advance += ZyjdcGameState.AI.equals(side) ? 1.5 : -1.5;
                 }
             }

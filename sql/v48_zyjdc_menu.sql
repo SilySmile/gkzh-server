@@ -14,7 +14,7 @@ VALUES('zyjdc','职业角斗场','pages/zyjdc/start','complete','0',NOW(),NOW())
 ON DUPLICATE KEY UPDATE game_name=VALUES(game_name),front_component=VALUES(front_component),result_type=VALUES(result_type),status='0',update_time=NOW();
 
 INSERT INTO gkzh_game_config(game_type,category,route,game_name,description,config_json,participate_portrait,view_type,status,create_time,update_time)
-SELECT 'zyjdc','choice','zyjdc','职业角斗场','选择动物角色进行4×4斗兽棋对弈，3分钟内吃光对方或剩余最大棋子等级高者获胜','{}','0','zyjdc','0',NOW(),NOW()
+SELECT 'zyjdc','choice','zyjdc','职业角斗场','选择动物角色进行7×9斗兽棋对弈，双方各8枚动物棋子，3分钟内吃光对方或剩余最大棋子等级高者获胜','{}','0','zyjdc','0',NOW(),NOW()
 WHERE NOT EXISTS (SELECT 1 FROM gkzh_game_config WHERE game_type='zyjdc');
 
 UPDATE gkzh_game_config

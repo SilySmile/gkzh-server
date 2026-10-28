@@ -19,7 +19,7 @@ public class ZyjdcGameState {
     /** 电脑方标识。 */
     public static final String AI = "ai";
 
-    /** 4×4 棋盘；空格为 null，棋子 token 形如 player:elephant、ai:mouse。 */
+    /** 7 列 × 9 行棋盘；空格为 null，棋子 token 形如 player:elephant、ai:mouse。 */
     private String[][] board;
 
     /** 当前轮到哪一方：player 或 ai。 */
@@ -37,9 +37,9 @@ public class ZyjdcGameState {
     /** 学生所选角色编码。 */
     private String playerRole;
 
-    /** 学生方 4 枚动物编码。 */
+    /** 学生方 8 枚动物编码，完整包含 8 种动物。 */
     private List<String> playerRoles = new ArrayList<>();
 
-    /** 电脑方 4 枚动物编码。 */
+    /** 电脑方 8 枚动物编码，完整包含 8 种动物。 */
     private List<String> aiRoles = new ArrayList<>();
 }

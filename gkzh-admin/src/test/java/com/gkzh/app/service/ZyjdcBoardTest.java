@@ -6,6 +6,8 @@ import com.gkzh.zyjdc.support.ZyjdcBoard;
 import com.gkzh.zyjdc.support.ZyjdcGameState;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
@@ -16,30 +18,51 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTimeout;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 职业角斗场棋盘规则回归：初始布局、等级吃子、老鼠克大象、合法走法、超时结算和棋盘快照往返。
+ * 职业角斗场棋盘规则回归：7×9 初始布局、双方各 8 枚、等级吃子、老鼠克大象、
+ * 合法走法、超时结算、棋盘快照往返和 AI 走子合法性。
  */
 public class ZyjdcBoardTest {
 
     @Test
-    public void initialStateContainsAllEightAnimalsOnceAndPlayerRole() {
-        ZyjdcGameState state = ZyjdcBoard.newState("fox", new Random(7));
-        Set<String> all = new HashSet<>(state.getPlayerRoles());
-        all.addAll(state.getAiRoles());
-        assertEquals(8, all.size());
-        assertTrue(all.containsAll(ZyjdcBoard.CODES));
-        assertTrue(state.getPlayerRoles().contains("fox"));
-        assertEquals(4, ZyjdcBoard.count(state.getBoard(), ZyjdcGameState.PLAYER));
-        assertEquals(4, ZyjdcBoard.count(state.getBoard(), ZyjdcGameState.AI));
-        for (int col = 0; col < 4; col++) {
-            assertEquals(ZyjdcGameState.PLAYER, ZyjdcBoard.sideOf(state.getBoard()[3][col]));
-            assertEquals(ZyjdcGameState.AI, ZyjdcBoard.sideOf(state.getBoard()[0][col]));
-            assertNull(state.getBoard()[1][col]);
-            assertNull(state.getBoard()[2][col]);
-        }
+    public void initialStateHasEightPiecesPerSideAndAllAnimals() {
+        ZyjdcGameState state = ZyjdcBoard.newState("fox");
+        assertEquals(9, state.getBoard().length);
+        assertEquals(7, state.getBoard()[0].length);
+        assertEquals(8, state.getPlayerRoles().size());
+        assertEquals(8, state.getAiRoles().size());
+        assertEquals(8, new HashSet<>(state.getPlayerRoles()).size());
+        assertEquals(8, new HashSet<>(state.getAiRoles()).size());
+        assertTrue(state.getPlayerRoles().containsAll(ZyjdcBoard.CODES));
+        assertTrue(state.getAiRoles().containsAll(ZyjdcBoard.CODES));
+        assertEquals("fox", state.getPlayerRole());
         assertEquals(ZyjdcGameState.PLAYER, state.getTurn());
+        assertEquals(8, ZyjdcBoard.count(state.getBoard(), ZyjdcGameState.PLAYER));
+        assertEquals(8, ZyjdcBoard.count(state.getBoard(), ZyjdcGameState.AI));
+
+        for (int row = 0; row <= 1; row++) {
+            assertRowFilled(state, row);
+        }
+        for (int row = 7; row <= 8; row++) {
+            assertRowFilled(state, row);
+        }
+        for (int row = 2; row <= 6; row++) {
+            for (int col = 0; col < 7; col++) {
+                assertNull(state.getBoard()[row][col], "row " + row + " col " + col + " should be empty");
+            }
+        }
+    }
+
+    private static void assertRowFilled(ZyjdcGameState state, int row) {
+        for (int col = 1; col <= 4; col++) {
+            assertNotNull(state.getBoard()[row][col], "row " + row + " col " + col + " should have a piece");
+        }
+        assertNull(state.getBoard()[row][0]);
+        assertNull(state.getBoard()[row][5]);
+        assertNull(state.getBoard()[row][6]);
     }
 
     @Test
@@ -54,23 +77,21 @@ public class ZyjdcBoardTest {
 
     @Test
     public void legalMovesAreOrthogonalAndRespectOwnPiecesAndCaptureRules() {
-        String[][] board = new String[4][4];
-        board[3][3] = "player:elephant";
-        List<int[]> moves = ZyjdcBoard.legalMoves(board, "player");
-        assertEquals(2, moves.size());
-        assertEquals(2, movesFrom(board, "player", 3, 3));
+        String[][] board = new String[9][7];
+        board[8][3] = "player:elephant";
+        assertEquals(3, movesFrom(board, "player", 8, 3));
+        assertFalse(ZyjdcBoard.isLegal(board, "player", 8, 3, 7, 2));
 
-        board[2][3] = "player:lion";
-        assertEquals(1, movesFrom(board, "player", 3, 3));
-        assertFalse(ZyjdcBoard.isLegal(board, "player", 3, 3, 2, 2));
+        board[7][3] = "player:lion";
+        assertEquals(2, movesFrom(board, "player", 8, 3));
 
-        board[3][2] = "ai:mouse";
-        assertEquals(0, movesFrom(board, "player", 3, 3));
-        assertFalse(ZyjdcBoard.isLegal(board, "player", 3, 3, 3, 2));
+        board[8][2] = "ai:mouse";
+        assertEquals(1, movesFrom(board, "player", 8, 3));
+        assertFalse(ZyjdcBoard.isLegal(board, "player", 8, 3, 8, 2));
 
-        board[3][2] = "ai:lion";
-        assertEquals(1, movesFrom(board, "player", 3, 3));
-        assertTrue(ZyjdcBoard.isLegal(board, "player", 3, 3, 3, 2));
+        board[8][2] = "ai:lion";
+        assertEquals(2, movesFrom(board, "player", 8, 3));
+        assertTrue(ZyjdcBoard.isLegal(board, "player", 8, 3, 8, 2));
     }
 
     /** 统计指定格子上的棋子有多少个合法落点，避免把其他棋子的走法算进来。 */
@@ -86,19 +107,19 @@ public class ZyjdcBoardTest {
 
     @Test
     public void applyingMoveCapturesAndSwitchesTurn() {
-        String[][] board = new String[4][4];
-        board[3][3] = "player:elephant";
-        board[2][3] = "ai:lion";
+        String[][] board = new String[9][7];
+        board[8][3] = "player:elephant";
+        board[7][3] = "ai:lion";
         ZyjdcGameState state = new ZyjdcGameState();
         state.setBoard(board);
         state.setTurn(ZyjdcGameState.PLAYER);
         state.setStartedAt(System.currentTimeMillis());
         state.setMoves(new java.util.ArrayList<>());
 
-        String captured = ZyjdcBoard.apply(state, 3, 3, 2, 3);
+        String captured = ZyjdcBoard.apply(state, 8, 3, 7, 3);
         assertEquals("lion", captured);
-        assertEquals("player:elephant", state.getBoard()[2][3]);
-        assertNull(state.getBoard()[3][3]);
+        assertEquals("player:elephant", state.getBoard()[7][3]);
+        assertNull(state.getBoard()[8][3]);
         assertEquals(ZyjdcGameState.AI, state.getTurn());
         assertEquals(1, state.getMoveCount());
         assertEquals(1, state.getMoves().size());
@@ -107,36 +128,36 @@ public class ZyjdcBoardTest {
 
     @Test
     public void timeoutComparesHighestRankThenCountThenDraw() {
-        String[][] winByRank = new String[4][4];
-        winByRank[3][0] = "player:elephant";
+        String[][] winByRank = new String[9][7];
+        winByRank[8][0] = "player:elephant";
         winByRank[0][0] = "ai:lion";
         assertEquals("win", ZyjdcBoard.timeoutResult(winByRank));
 
-        String[][] loseByRank = new String[4][4];
-        loseByRank[3][0] = "player:cat";
+        String[][] loseByRank = new String[9][7];
+        loseByRank[8][0] = "player:cat";
         loseByRank[0][0] = "ai:tiger";
         assertEquals("lose", ZyjdcBoard.timeoutResult(loseByRank));
 
-        String[][] winByCount = new String[4][4];
-        winByCount[3][0] = "player:lion";
-        winByCount[3][1] = "player:cat";
+        String[][] winByCount = new String[9][7];
+        winByCount[8][0] = "player:lion";
+        winByCount[8][1] = "player:cat";
         winByCount[0][0] = "ai:lion";
         assertEquals("win", ZyjdcBoard.timeoutResult(winByCount));
 
-        String[][] draw = new String[4][4];
-        draw[3][0] = "player:lion";
+        String[][] draw = new String[9][7];
+        draw[8][0] = "player:lion";
         draw[0][0] = "ai:lion";
         assertEquals("draw", ZyjdcBoard.timeoutResult(draw));
     }
 
     @Test
     public void stateJsonRoundTripKeepsBoardAndTimer() {
-        ZyjdcGameState state = ZyjdcBoard.newState("mouse", new Random(3));
+        ZyjdcGameState state = ZyjdcBoard.newState("mouse");
         String json = JSON.toJSONString(state);
         ZyjdcGameState parsed = JSON.parseObject(json, ZyjdcGameState.class);
         assertNotNull(parsed);
         assertArrayEquals(state.getBoard()[0], parsed.getBoard()[0]);
-        assertArrayEquals(state.getBoard()[3], parsed.getBoard()[3]);
+        assertArrayEquals(state.getBoard()[8], parsed.getBoard()[8]);
         assertEquals(state.getTurn(), parsed.getTurn());
         assertEquals(state.getStartedAt(), parsed.getStartedAt());
         assertEquals(state.getPlayerRole(), parsed.getPlayerRole());
@@ -145,18 +166,34 @@ public class ZyjdcBoardTest {
     }
 
     @Test
-    public void aiReturnsLegalMoveAndHandlesNoMove() {
-        String[][] board = new String[4][4];
-        board[0][0] = "ai:elephant";
-        board[3][3] = "player:mouse";
-        int[] move = ZyjdcAi.choose(board, new Random(1));
-        assertNotNull(move);
-        assertTrue(ZyjdcBoard.isLegal(board, ZyjdcGameState.AI, move[0], move[1], move[2], move[3]));
+    public void aiReturnsLegalMoveOnInitialBoardQuickly() {
+        ZyjdcGameState state = ZyjdcBoard.newState("elephant");
+        assertTimeout(Duration.ofSeconds(3), () -> {
+            int[] move = ZyjdcAi.choose(state.getBoard(), new Random(1));
+            assertNotNull(move);
+            assertTrue(ZyjdcBoard.isLegal(state.getBoard(), ZyjdcGameState.AI,
+                    move[0], move[1], move[2], move[3]));
+        });
+    }
 
-        String[][] noMove = new String[4][4];
+    @Test
+    public void aiHandlesNoMove() {
+        String[][] noMove = new String[9][7];
         noMove[0][0] = "ai:cat";
         noMove[1][0] = "player:lion";
         noMove[0][1] = "player:tiger";
         assertNull(ZyjdcAi.choose(noMove, new Random(1)));
+    }
+
+    @Test
+    public void codesContainAllEightAnimals() {
+        Set<String> expected = new HashSet<>(Arrays.asList(
+                "elephant", "lion", "tiger", "leopard", "wolf", "fox", "cat", "mouse"));
+        assertEquals(expected, new HashSet<>(ZyjdcBoard.CODES));
+        List<String> back = ZyjdcBoard.BACK_ROW;
+        List<String> front = ZyjdcBoard.FRONT_ROW;
+        Set<String> all = new HashSet<>(back);
+        all.addAll(front);
+        assertEquals(expected, all);
     }
 }

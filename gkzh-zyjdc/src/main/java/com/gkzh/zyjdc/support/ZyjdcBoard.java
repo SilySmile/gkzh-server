@@ -6,19 +6,22 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 
 /**
  * 职业角斗场棋盘规则。
  *
- * <p>规则：4×4 棋盘，双方各 4 枚棋子；学生棋子在最下方一行，电脑棋子在最上方一行，
- * 中间两行为空。每次只能上下左右移动一格；攻击方等级大于等于防守方即可吃掉，
- * 老鼠可以吃大象、大象不能吃老鼠。3 分钟内吃光对方或到时比较剩余最大棋子等级。</p>
+ * <p>规则：7 列 × 9 行斗兽棋棋盘，双方各 8 枚棋子（象、狮、虎、豹、狼、狐、猫、鼠各 1 枚）。
+ * 学生方棋子位于最下方两行，电脑方位于最上方两行；每次只能上下左右移动一格。
+ * 攻击方等级大于等于防守方即可吃掉，老鼠可以吃大象、大象不能吃老鼠。
+ * 3 分钟内吃光对方，或到时比较剩余最高等级/数量决定胜负。本版本不设置陷阱和兽穴。</p>
  */
 public final class ZyjdcBoard {
 
-    /** 棋盘边长。 */
-    public static final int SIZE = 4;
+    /** 棋盘行数。 */
+    public static final int ROWS = 9;
+
+    /** 棋盘列数。 */
+    public static final int COLS = 7;
 
     /** 每局总时长（秒）。 */
     public static final int TOTAL_SECONDS = 180;
@@ -26,6 +29,14 @@ public final class ZyjdcBoard {
     /** 8 种动物，按等级从高到低排列。 */
     public static final List<String> CODES = Collections.unmodifiableList(Arrays.asList(
             "elephant", "lion", "tiger", "leopard", "wolf", "fox", "cat", "mouse"));
+
+    /** 靠己方底线的 4 枚棋子，等级较高。 */
+    public static final List<String> BACK_ROW = Collections.unmodifiableList(Arrays.asList(
+            "elephant", "lion", "tiger", "leopard"));
+
+    /** 靠棋盘中央的 4 枚棋子，等级较低。 */
+    public static final List<String> FRONT_ROW = Collections.unmodifiableList(Arrays.asList(
+            "wolf", "fox", "cat", "mouse"));
 
     /** 动物编码到中文名称。 */
     private static final Map<String, String> NAMES = new LinkedHashMap<>();
@@ -98,30 +109,19 @@ public final class ZyjdcBoard {
 
     /**
      * 生成新一局棋盘。
-     * 学生所选角色必在学生方，其余 3 种从剩余动物随机补齐；电脑获得剩下 4 种。
-     * 双方合计恰好包含 8 种动物各 1 枚。
+     * 双方各 8 枚，均为完整的 8 种动物；学生所选角色只用于个人解读，不改变棋盘阵容。
+     * 双方棋子各占底线两行、中间四列，其余格子为空。
      */
-    public static ZyjdcGameState newState(String playerRole, Random random) {
+    public static ZyjdcGameState newState(String playerRole) {
         if (playerRole == null || !CODES.contains(playerRole)) {
             throw new IllegalArgumentException("角色编码无效");
         }
-        Random rnd = random == null ? new Random() : random;
-        List<String> remaining = new ArrayList<>(CODES);
-        remaining.remove(playerRole);
-        Collections.shuffle(remaining, rnd);
-
-        List<String> playerRoles = new ArrayList<>();
-        playerRoles.add(playerRole);
-        playerRoles.addAll(remaining.subList(0, 3));
-        Collections.shuffle(playerRoles, rnd);
-
-        List<String> aiRoles = new ArrayList<>(remaining.subList(3, remaining.size()));
-        Collections.shuffle(aiRoles, rnd);
-
-        String[][] board = new String[SIZE][SIZE];
-        for (int col = 0; col < SIZE; col++) {
-            board[SIZE - 1][col] = token(ZyjdcGameState.PLAYER, playerRoles.get(col));
-            board[0][col] = token(ZyjdcGameState.AI, aiRoles.get(col));
+        String[][] board = new String[ROWS][COLS];
+        for (int i = 0; i < BACK_ROW.size(); i++) {
+            board[0][1 + i] = token(ZyjdcGameState.AI, BACK_ROW.get(i));
+            board[1][1 + i] = token(ZyjdcGameState.AI, FRONT_ROW.get(i));
+            board[ROWS - 1][1 + i] = token(ZyjdcGameState.PLAYER, BACK_ROW.get(i));
+            board[ROWS - 2][1 + i] = token(ZyjdcGameState.PLAYER, FRONT_ROW.get(i));
         }
 
         ZyjdcGameState state = new ZyjdcGameState();
@@ -130,8 +130,8 @@ public final class ZyjdcBoard {
         state.setStartedAt(System.currentTimeMillis());
         state.setMoveCount(0);
         state.setPlayerRole(playerRole);
-        state.setPlayerRoles(playerRoles);
-        state.setAiRoles(aiRoles);
+        state.setPlayerRoles(new ArrayList<>(CODES));
+        state.setAiRoles(new ArrayList<>(CODES));
         state.setMoves(new ArrayList<>());
         return state;
     }
@@ -142,8 +142,8 @@ public final class ZyjdcBoard {
         if (board == null) {
             return moves;
         }
-        for (int row = 0; row < SIZE; row++) {
-            for (int col = 0; col < SIZE; col++) {
+        for (int row = 0; row < ROWS; row++) {
+            for (int col = 0; col < COLS; col++) {
                 String token = board[row][col];
                 if (!side.equals(sideOf(token))) {
                     continue;
@@ -153,7 +153,7 @@ public final class ZyjdcBoard {
                 for (int[] direction : directions) {
                     int toRow = row + direction[0];
                     int toCol = col + direction[1];
-                    if (toRow < 0 || toRow >= SIZE || toCol < 0 || toCol >= SIZE) {
+                    if (toRow < 0 || toRow >= ROWS || toCol < 0 || toCol >= COLS) {
                         continue;
                     }
                     String target = board[toRow][toCol];
@@ -170,8 +170,8 @@ public final class ZyjdcBoard {
 
     /** 判断一步移动是否合法。 */
     public static boolean isLegal(String[][] board, String side, int fromRow, int fromCol, int toRow, int toCol) {
-        if (board == null || fromRow < 0 || fromRow >= SIZE || fromCol < 0 || fromCol >= SIZE
-                || toRow < 0 || toRow >= SIZE || toCol < 0 || toCol >= SIZE) {
+        if (board == null || fromRow < 0 || fromRow >= ROWS || fromCol < 0 || fromCol >= COLS
+                || toRow < 0 || toRow >= ROWS || toCol < 0 || toCol >= COLS) {
             return false;
         }
         if (Math.abs(fromRow - toRow) + Math.abs(fromCol - toCol) != 1) {
@@ -222,8 +222,8 @@ public final class ZyjdcBoard {
     /** 统计某一方棋子数量。 */
     public static int count(String[][] board, String side) {
         int total = 0;
-        for (int row = 0; row < SIZE; row++) {
-            for (int col = 0; col < SIZE; col++) {
+        for (int row = 0; row < ROWS; row++) {
+            for (int col = 0; col < COLS; col++) {
                 if (side.equals(sideOf(board[row][col]))) {
                     total++;
                 }
@@ -235,8 +235,8 @@ public final class ZyjdcBoard {
     /** 返回某一方剩余棋子中的最高等级；无棋子返回 0。 */
     public static int maxRank(String[][] board, String side) {
         int max = 0;
-        for (int row = 0; row < SIZE; row++) {
-            for (int col = 0; col < SIZE; col++) {
+        for (int row = 0; row < ROWS; row++) {
+            for (int col = 0; col < COLS; col++) {
                 if (side.equals(sideOf(board[row][col]))) {
                     max = Math.max(max, rankOf(codeOf(board[row][col])));
                 }
@@ -277,9 +277,9 @@ public final class ZyjdcBoard {
 
     /** 深拷贝棋盘，供 AI 推演使用。 */
     public static String[][] copyBoard(String[][] board) {
-        String[][] copy = new String[SIZE][SIZE];
-        for (int row = 0; row < SIZE; row++) {
-            System.arraycopy(board[row], 0, copy[row], 0, SIZE);
+        String[][] copy = new String[ROWS][COLS];
+        for (int row = 0; row < ROWS; row++) {
+            System.arraycopy(board[row], 0, copy[row], 0, COLS);
         }
         return copy;
     }

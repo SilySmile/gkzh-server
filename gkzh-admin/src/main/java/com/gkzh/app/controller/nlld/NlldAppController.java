@@ -80,6 +80,13 @@ public class NlldAppController extends FrontBaseController {
         return AjaxResult.success(gameService.answer(id, currentUserId(), roundNo, optionIds));
     }
 
+    /** 记录当前学生首次点击“保存截图”；每场活动游戏只记一次，重复调用幂等。 */
+    @PostMapping("/records/{id}/poster")
+    public AjaxResult poster(@PathVariable Long id) {
+        gameService.markPosterSaved(id, currentUserId());
+        return AjaxResult.success();
+    }
+
     private Long currentUserId() {
         StudentCheckin student = getCurrentStudent();
         if (student == null || student.getUserId() == null) {

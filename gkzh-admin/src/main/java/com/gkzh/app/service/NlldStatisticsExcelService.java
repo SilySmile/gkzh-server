@@ -80,6 +80,8 @@ public class NlldStatisticsExcelService {
         rowIndex = metric(sheet, rowIndex, "TOP2 类型占比", summary.get("top2Rate") + "%", headerStyle, bodyStyle);
         rowIndex = metric(sheet, rowIndex, "多元开放型人数", summary.get("openCount"), headerStyle, bodyStyle);
         rowIndex = metric(sheet, rowIndex, "多元开放型占比", summary.get("openRate") + "%", headerStyle, bodyStyle);
+        rowIndex = metric(sheet, rowIndex, "保存截图人数", summary.get("savedCount"), headerStyle, bodyStyle);
+        rowIndex = metric(sheet, rowIndex, "保存截图率", summary.get("savedRate") + "%", headerStyle, bodyStyle);
 
         rowIndex += 1;
         SXSSFRow analysisRow = sheet.createRow(rowIndex);
@@ -169,8 +171,8 @@ public class NlldStatisticsExcelService {
     private void studentSheets(SXSSFWorkbook workbook, List<Map<String, Object>> rows,
                                CellStyle titleStyle, CellStyle headerStyle, CellStyle bodyStyle) {
         String[] headers = {"序号", "学生姓名", "学号", "学校", "院系", "专业", "性别", "活动实例",
-                "TOP1", "TOP2", "结果类型", "已答关数", "参与时间", "完成时间"};
-        int[] widths = {7, 12, 16, 20, 20, 18, 8, 24, 14, 14, 14, 10, 20, 20};
+                "TOP1", "TOP2", "结果类型", "已答关数", "参与时间", "完成时间", "保存截图", "保存时间"};
+        int[] widths = {7, 12, 16, 20, 20, 18, 8, 24, 14, 14, 14, 10, 20, 20, 10, 20};
         int page = 1;
         int rowIndex = 3;
         SXSSFSheet sheet = newStudentSheet(workbook, page, headers, widths, titleStyle, headerStyle);
@@ -186,7 +188,8 @@ public class NlldStatisticsExcelService {
                     text(item.get("schoolName")), text(item.get("departmentName")), text(item.get("major")),
                     text(item.get("gender")), text(item.get("instanceName")), text(item.get("top1DimensionName")),
                     text(item.get("top2DimensionName")), text(item.get("resultTypeName")),
-                    text(item.get("answeredRounds")), time(item.get("scanTime")), time(item.get("finishTime"))};
+                    text(item.get("answeredRounds")), time(item.get("scanTime")), time(item.get("finishTime")),
+                    text(item.get("posterSavedName")), time(item.get("posterSaveTime"))};
             for (int i = 0; i < values.length; i++) {
                 row.createCell(i).setCellValue(values[i]);
                 row.getCell(i).setCellStyle(bodyStyle);
@@ -231,6 +234,7 @@ public class NlldStatisticsExcelService {
                 {"结果类型", "恰好 2 个维度得 2 分为 TOP2；只有 1 个维度得 2 分、3 个及以上并列 2 分、没有任何维度得 2 分统一为多元开放型。"},
                 {"维度偏好", "被选次数按选择明细统计；选择占比 = 该维度被选次数 ÷ 全部维度被选次数。得2分人数 = 该维度被选中 2 次的学生数；偏好率 = 得2分人数 ÷ 完成测评人数。"},
                 {"院系细化", "“院系维度偏好”按学生专业所属的父部门统计；未填写专业或部门缺失的学生归入“未填写院系”。同一院系的参与/完成人数会在该院系每一行重复，便于按院系筛选和透视。"},
+                {"保存截图", "保存截图人数按参与记录 poster_saved=1 去重统计；每场活动游戏只记录首次点击，重复点击不重复计数；保存截图率 = 保存截图人数 ÷ 完成测评人数。"},
                 {"时间范围", "参与日期以扫码时间 scan_time 为准，开始日期含当天零点，结束日期含当天，查询时转换为次日零点之前。"},
                 {"隐私说明", "本表仅用于活动统计和教学复盘，请勿用于与活动无关的个人评价或对外传播。"}
         };

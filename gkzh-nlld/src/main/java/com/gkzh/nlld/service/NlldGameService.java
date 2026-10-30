@@ -252,6 +252,26 @@ public class NlldGameService {
         return finish(record, now);
     }
 
+    /**
+     * 记录学生首次点击“保存截图”。
+     * 每场活动游戏只有一条参与记录，重复点击只保留首次时间，不新增记录。
+     */
+    @Transactional
+    public void markPosterSaved(Long recordId, Long userId) {
+        NlldRecord record = lockRecord(recordId, userId);
+        if (!"finished".equals(record.getStatus())) {
+            throw new ServiceException("测评尚未完成，无法保存截图");
+        }
+        if ("1".equals(record.getPosterSaved())) {
+            return;
+        }
+        Date now = DateUtils.getNowDate();
+        recordMapper.update(null, new UpdateWrapper<NlldRecord>().eq("record_id", record.getRecordId())
+                .set("poster_saved", "1")
+                .set("poster_save_time", now)
+                .set("update_time", now));
+    }
+
     /** 后台删除参与记录：同步清理选择明细和该活动游戏的全部活动参与行。 */
     @Transactional
     public void deleteRecord(Long recordId) {
@@ -353,6 +373,8 @@ public class NlldGameService {
         data.put("top2Name", record.getTop2DimensionName());
         data.put("scanTime", record.getScanTime());
         data.put("finishTime", record.getFinishTime());
+        data.put("posterSaved", "1".equals(record.getPosterSaved()));
+        data.put("posterSaveTime", record.getPosterSaveTime());
         GkzhActivityWeekInstance instance = record.getInstanceId() == null ? null
                 : activityWeekService.getInstance(record.getInstanceId());
         data.put("bizType", instance == null ? null : instance.getBizType());

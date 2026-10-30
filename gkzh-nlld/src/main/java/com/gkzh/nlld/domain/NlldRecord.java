@@ -77,6 +77,12 @@ public class NlldRecord {
     /** 结果类型：top2 两个维度并列最高分，open 多元开放型；未结束为空。 */
     private String resultType;
 
+    /** 是否点击保存截图：0 未保存，1 已保存；每场活动游戏只记一次。 */
+    private String posterSaved;
+
+    /** 首次点击保存截图时间。 */
+    private Date posterSaveTime;
+
     /** 15 个维度得分与结果类型快照 JSON，供报告和统计稳定展示。 */
     private String scoreJson;
 

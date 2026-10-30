@@ -36,15 +36,18 @@ public class NlldStatisticsService {
         long finished = number(raw == null ? null : raw.get("finished"));
         long top2 = number(raw == null ? null : raw.get("top2Count"));
         long open = number(raw == null ? null : raw.get("openCount"));
+        long saved = number(raw == null ? null : raw.get("savedCount"));
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("enteredCount", total);
         data.put("startedCount", started);
         data.put("completedCount", finished);
         data.put("top2Count", top2);
         data.put("openCount", open);
+        data.put("savedCount", saved);
         data.put("completionRate", percent(finished, total));
         data.put("top2Rate", percent(top2, finished));
         data.put("openRate", percent(open, finished));
+        data.put("savedRate", percent(saved, finished));
         return data;
     }
 

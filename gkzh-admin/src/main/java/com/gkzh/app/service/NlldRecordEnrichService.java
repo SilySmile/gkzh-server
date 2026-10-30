@@ -66,6 +66,9 @@ public class NlldRecordEnrichService {
             row.put("top2DimensionName", record.getTop2DimensionName());
             row.put("resultType", record.getResultType());
             row.put("resultTypeName", resultText(record.getResultType()));
+            row.put("posterSaved", "1".equals(record.getPosterSaved()));
+            row.put("posterSavedName", "1".equals(record.getPosterSaved()) ? "已保存" : "未保存");
+            row.put("posterSaveTime", record.getPosterSaveTime());
             row.put("status", record.getStatus());
             row.put("stage", record.getStage());
             row.put("scanTime", record.getScanTime());

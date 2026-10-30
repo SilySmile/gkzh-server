@@ -31,6 +31,8 @@ public class NlldStatisticsExcelTest {
         summary.put("top2Rate", 37.5);
         summary.put("openCount", 5);
         summary.put("openRate", 62.5);
+        summary.put("savedCount", 2);
+        summary.put("savedRate", 25.0);
 
         List<Map<String, Object>> dimensions = new ArrayList<>();
         Map<String, Object> dimension = new LinkedHashMap<>();
@@ -100,6 +102,7 @@ public class NlldStatisticsExcelTest {
             Sheet summarySheet = workbook.getSheet("统计汇总");
             assertEquals("能量雷达参与统计", summarySheet.getRow(0).getCell(0).getStringCellValue());
             assertEquals("扫码参与人数", summarySheet.getRow(5).getCell(0).getStringCellValue());
+            assertEquals("保存截图人数", summarySheet.getRow(13).getCell(0).getStringCellValue());
 
             Sheet dimensionSheet = workbook.getSheet("维度偏好");
             assertEquals("智力激发", dimensionSheet.getRow(3).getCell(1).getStringCellValue());

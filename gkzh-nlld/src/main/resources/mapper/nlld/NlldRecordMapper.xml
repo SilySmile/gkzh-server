@@ -70,7 +70,8 @@
                COALESCE(SUM(CASE WHEN r.status = 'finished' THEN 1 ELSE 0 END), 0) AS finished,
                COALESCE(SUM(CASE WHEN r.result_type = 'top2' THEN 1 ELSE 0 END), 0) AS top2Count,
                COALESCE(SUM(CASE WHEN r.result_type = 'open' THEN 1 ELSE 0 END), 0) AS openCount,
-               COALESCE(SUM(CASE WHEN r.answered_rounds &gt; 0 THEN 1 ELSE 0 END), 0) AS startedCount
+               COALESCE(SUM(CASE WHEN r.answered_rounds &gt; 0 THEN 1 ELSE 0 END), 0) AS startedCount,
+               COALESCE(SUM(CASE WHEN r.poster_saved = '1' THEN 1 ELSE 0 END), 0) AS savedCount
         FROM gkzh_nlld_record r
         <include refid="recordConditions"/>
     </select>

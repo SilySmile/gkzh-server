@@ -36,6 +36,10 @@ public final class ZyjdcAi {
         double bestScore = -Double.MAX_VALUE;
         for (int[] move : moves) {
             String[][] next = simulate(board, move);
+            // 能直接踏上对方兽穴时立即结束，优先于普通吃子。
+            if (ZyjdcBoard.onDen(next, ZyjdcGameState.AI)) {
+                return move;
+            }
             if (ZyjdcBoard.wipedOut(next, ZyjdcGameState.PLAYER)) {
                 return move;
             }
@@ -44,10 +48,14 @@ public final class ZyjdcAi {
                 return move;
             }
 
-            // 学生最佳回应后的最差局面；两层推演可避免明显送子。
+            // 学生最佳回应后的最差局面；两层推演可避免明显送子，也会防守自己的兽穴。
             double worst = Double.MAX_VALUE;
             for (int[] reply : replies) {
                 String[][] after = simulate(next, reply);
+                if (ZyjdcBoard.onDen(after, ZyjdcGameState.PLAYER)) {
+                    worst = -WIN_SCORE;
+                    break;
+                }
                 worst = Math.min(worst, evaluate(after));
             }
             double score = evaluate(next) * 0.45 + worst * 0.55 + rnd.nextDouble() * 3.0;
@@ -76,8 +84,16 @@ public final class ZyjdcAi {
 
     /** 从电脑视角评估局面，分值越高对电脑越有利。 */
     private static double evaluate(String[][] board) {
+        // 已经站上兽穴直接视为终局，避免推演层数较浅时漏判。
+        if (ZyjdcBoard.onDen(board, ZyjdcGameState.AI)) {
+            return WIN_SCORE;
+        }
+        if (ZyjdcBoard.onDen(board, ZyjdcGameState.PLAYER)) {
+            return -WIN_SCORE;
+        }
         double material = 0;
         double advance = 0;
+        double denPressure = 0;
         int centerRow = ZyjdcBoard.ROWS / 2;
         int centerCol = ZyjdcBoard.COLS / 2;
         for (int row = 0; row < ZyjdcBoard.ROWS; row++) {
@@ -92,9 +108,13 @@ public final class ZyjdcAi {
                     material += ZyjdcBoard.valueOf(code);
                     // 电脑棋子越靠近学生底线越有压迫力。
                     advance += row * 3.0;
+                    // 距离学生兽穴越近，越有机会直接取胜。
+                    denPressure -= distance(row, col, ZyjdcBoard.ROWS - 1, ZyjdcBoard.DEN_COL) * 3.0;
                 } else {
                     material -= ZyjdcBoard.valueOf(code);
                     advance -= (ZyjdcBoard.ROWS - 1 - row) * 3.0;
+                    // 学生棋子越靠近电脑兽穴，电脑越需要防守。
+                    denPressure += distance(row, col, 0, ZyjdcBoard.DEN_COL) * 3.0;
                 }
                 if (Math.abs(row - centerRow) <= 1 && Math.abs(col - centerCol) <= 1) {
                     advance += ZyjdcGameState.AI.equals(side) ? 1.5 : -1.5;
@@ -103,6 +123,11 @@ public final class ZyjdcAi {
         }
         int aiMoves = ZyjdcBoard.legalMoves(board, ZyjdcGameState.AI).size();
         int playerMoves = ZyjdcBoard.legalMoves(board, ZyjdcGameState.PLAYER).size();
-        return material + advance + (aiMoves - playerMoves) * 2.5;
+        return material + advance + denPressure + (aiMoves - playerMoves) * 2.5;
+    }
+
+    /** 计算两个格子之间的曼哈顿距离。 */
+    private static int distance(int row, int col, int targetRow, int targetCol) {
+        return Math.abs(row - targetRow) + Math.abs(col - targetCol);
     }
 }

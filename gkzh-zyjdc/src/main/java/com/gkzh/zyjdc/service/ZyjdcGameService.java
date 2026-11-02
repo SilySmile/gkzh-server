@@ -58,6 +58,9 @@ public class ZyjdcGameService {
     /** 结束原因：无子可动。 */
     public static final String REASON_NO_MOVE = "no_move";
 
+    /** 结束原因：率先踏上对方兽穴。 */
+    public static final String REASON_DEN = "den";
+
     private final ZyjdcRecordMapper recordMapper;
     private final ZyjdcRoleMapper roleMapper;
     private final IActivityWeekService activityWeekService;
@@ -308,6 +311,10 @@ public class ZyjdcGameService {
 
         ZyjdcBoard.apply(state, fromRow, fromCol, toRow, toCol);
         Map<String, Object> playerMove = lastMove(state);
+        // 踏上 AI 兽穴立即获胜，优先于普通吃子结算。
+        if (ZyjdcBoard.onDen(state.getBoard(), ZyjdcGameState.PLAYER)) {
+            return finishAndView(record, state, RESULT_WIN, REASON_DEN, playerMove, null);
+        }
         if (ZyjdcBoard.wipedOut(state.getBoard(), ZyjdcGameState.AI)) {
             return finishAndView(record, state, RESULT_WIN, REASON_CAPTURE, playerMove, null);
         }
@@ -319,6 +326,10 @@ public class ZyjdcGameService {
         }
         ZyjdcBoard.apply(state, aiChoice[0], aiChoice[1], aiChoice[2], aiChoice[3]);
         Map<String, Object> aiMove = lastMove(state);
+        // 电脑踏上学生兽穴立即判学生失败。
+        if (ZyjdcBoard.onDen(state.getBoard(), ZyjdcGameState.AI)) {
+            return finishAndView(record, state, RESULT_LOSE, REASON_DEN, playerMove, aiMove);
+        }
         if (ZyjdcBoard.wipedOut(state.getBoard(), ZyjdcGameState.PLAYER)) {
             return finishAndView(record, state, RESULT_LOSE, REASON_CAPTURE, playerMove, aiMove);
         }
@@ -469,8 +480,27 @@ public class ZyjdcGameService {
                 data.put("legalMoves", new ArrayList<>());
             }
         }
+        data.put("dens", dens());
         data.put("completed", RESULT_WIN.equals(record.getResult()));
         return data;
+    }
+
+    /** 双方底线中央的兽穴位置，供小程序绘制兽穴格。 */
+    private List<Map<String, Object>> dens() {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        Map<String, Object> ai = new LinkedHashMap<>();
+        ai.put("row", 0);
+        ai.put("col", ZyjdcBoard.DEN_COL);
+        ai.put("side", ZyjdcGameState.AI);
+        ai.put("label", "电脑兽穴");
+        rows.add(ai);
+        Map<String, Object> player = new LinkedHashMap<>();
+        player.put("row", ZyjdcBoard.ROWS - 1);
+        player.put("col", ZyjdcBoard.DEN_COL);
+        player.put("side", ZyjdcGameState.PLAYER);
+        player.put("label", "你的兽穴");
+        rows.add(player);
+        return rows;
     }
 
     /** 解析棋盘快照；损坏时返回 null，由调用方提示重新开始。 */

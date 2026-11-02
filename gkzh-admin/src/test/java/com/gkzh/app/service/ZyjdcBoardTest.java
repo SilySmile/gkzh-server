@@ -42,6 +42,9 @@ public class ZyjdcBoardTest {
         assertEquals(ZyjdcGameState.PLAYER, state.getTurn());
         assertEquals(8, ZyjdcBoard.count(state.getBoard(), ZyjdcGameState.PLAYER));
         assertEquals(8, ZyjdcBoard.count(state.getBoard(), ZyjdcGameState.AI));
+        assertEquals(3, ZyjdcBoard.DEN_COL);
+        assertFalse(ZyjdcBoard.onDen(state.getBoard(), ZyjdcGameState.PLAYER));
+        assertFalse(ZyjdcBoard.onDen(state.getBoard(), ZyjdcGameState.AI));
 
         // 2-2-4 阵型：后排狮子、老虎，次排豹子、猫，前排老鼠、狼、狐、大象。
         assertPiece(state, 0, 0, ZyjdcGameState.AI, "lion");
@@ -88,20 +91,22 @@ public class ZyjdcBoardTest {
     @Test
     public void legalMovesAreOrthogonalAndRespectOwnPiecesAndCaptureRules() {
         String[][] board = new String[9][7];
-        board[8][3] = "player:elephant";
-        assertEquals(3, movesFrom(board, "player", 8, 3));
-        assertFalse(ZyjdcBoard.isLegal(board, "player", 8, 3, 7, 2));
+        board[7][3] = "player:elephant";
+        // 向下是自己的兽穴，不能进入；上、左、右三个方向可走。
+        assertEquals(3, movesFrom(board, "player", 7, 3));
+        assertFalse(ZyjdcBoard.isLegal(board, "player", 7, 3, 8, 3));
+        assertFalse(ZyjdcBoard.isLegal(board, "player", 7, 3, 6, 2));
 
-        board[7][3] = "player:lion";
-        assertEquals(2, movesFrom(board, "player", 8, 3));
+        board[6][3] = "player:lion";
+        assertEquals(2, movesFrom(board, "player", 7, 3));
 
-        board[8][2] = "ai:mouse";
-        assertEquals(1, movesFrom(board, "player", 8, 3));
-        assertFalse(ZyjdcBoard.isLegal(board, "player", 8, 3, 8, 2));
+        board[7][2] = "ai:mouse";
+        assertEquals(1, movesFrom(board, "player", 7, 3));
+        assertFalse(ZyjdcBoard.isLegal(board, "player", 7, 3, 7, 2));
 
-        board[8][2] = "ai:lion";
-        assertEquals(2, movesFrom(board, "player", 8, 3));
-        assertTrue(ZyjdcBoard.isLegal(board, "player", 8, 3, 8, 2));
+        board[7][2] = "ai:lion";
+        assertEquals(2, movesFrom(board, "player", 7, 3));
+        assertTrue(ZyjdcBoard.isLegal(board, "player", 7, 3, 7, 2));
     }
 
     /** 统计指定格子上的棋子有多少个合法落点，避免把其他棋子的走法算进来。 */
@@ -118,22 +123,58 @@ public class ZyjdcBoardTest {
     @Test
     public void applyingMoveCapturesAndSwitchesTurn() {
         String[][] board = new String[9][7];
-        board[8][3] = "player:elephant";
-        board[7][3] = "ai:lion";
+        board[7][3] = "player:elephant";
+        board[6][3] = "ai:lion";
         ZyjdcGameState state = new ZyjdcGameState();
         state.setBoard(board);
         state.setTurn(ZyjdcGameState.PLAYER);
         state.setStartedAt(System.currentTimeMillis());
         state.setMoves(new java.util.ArrayList<>());
 
-        String captured = ZyjdcBoard.apply(state, 8, 3, 7, 3);
+        String captured = ZyjdcBoard.apply(state, 7, 3, 6, 3);
         assertEquals("lion", captured);
-        assertEquals("player:elephant", state.getBoard()[7][3]);
-        assertNull(state.getBoard()[8][3]);
+        assertEquals("player:elephant", state.getBoard()[6][3]);
+        assertNull(state.getBoard()[7][3]);
         assertEquals(ZyjdcGameState.AI, state.getTurn());
         assertEquals(1, state.getMoveCount());
         assertEquals(1, state.getMoves().size());
         assertEquals("lion", state.getMoves().get(0).getCaptured());
+    }
+
+    @Test
+    public void enteringOpponentDenWinsButOwnDenIsBlocked() {
+        String[][] board = new String[9][7];
+        board[7][3] = "player:elephant";
+        assertFalse(ZyjdcBoard.isLegal(board, "player", 7, 3, 8, 3));
+        assertFalse(ZyjdcBoard.onDen(board, ZyjdcGameState.PLAYER));
+
+        board[1][3] = "player:mouse";
+        assertTrue(ZyjdcBoard.isLegal(board, "player", 1, 3, 0, 3));
+        ZyjdcGameState state = new ZyjdcGameState();
+        state.setBoard(board);
+        state.setTurn(ZyjdcGameState.PLAYER);
+        state.setStartedAt(System.currentTimeMillis());
+        ZyjdcBoard.apply(state, 1, 3, 0, 3);
+        assertTrue(ZyjdcBoard.onDen(state.getBoard(), ZyjdcGameState.PLAYER));
+        assertFalse(ZyjdcBoard.onDen(state.getBoard(), ZyjdcGameState.AI));
+    }
+
+    @Test
+    public void aiTakesOpponentDenWhenAvailable() {
+        String[][] board = new String[9][7];
+        board[7][3] = "ai:lion";
+        board[8][0] = "player:mouse";
+        int[] move = ZyjdcAi.choose(board, new Random(1));
+        assertNotNull(move);
+        assertEquals(8, move[2]);
+        assertEquals(3, move[3]);
+
+        ZyjdcGameState state = new ZyjdcGameState();
+        state.setBoard(board);
+        state.setTurn(ZyjdcGameState.AI);
+        state.setStartedAt(System.currentTimeMillis());
+        ZyjdcBoard.apply(state, move[0], move[1], move[2], move[3]);
+        assertTrue(ZyjdcBoard.onDen(state.getBoard(), ZyjdcGameState.AI));
     }
 
     @Test

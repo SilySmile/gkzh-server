@@ -13,7 +13,8 @@ import java.util.Map;
  * <p>规则：7 列 × 9 行斗兽棋棋盘，双方各 8 枚棋子（象、狮、虎、豹、狼、狐、猫、鼠各 1 枚）。
  * 双方按 2-2-4 三行阵型对称摆放：后排 2 枚、次排 2 枚、前排 4 枚；每次只能上下左右移动一格。
  * 攻击方等级大于等于防守方即可吃掉，老鼠可以吃大象、大象不能吃老鼠。
- * 3 分钟内吃光对方，或到时比较剩余最高等级/数量决定胜负。本版本不设置陷阱和兽穴。</p>
+ * 双方底线中央各有一个兽穴，率先踏上对方兽穴立即获胜；3 分钟内吃光对方，
+ * 或到时比较剩余最高等级/数量决定胜负。本版本不设置陷阱。</p>
  */
 public final class ZyjdcBoard {
 
@@ -40,6 +41,9 @@ public final class ZyjdcBoard {
             {"1", "1", "leopard"}, {"1", "5", "cat"},
             {"2", "0", "mouse"}, {"2", "2", "wolf"}, {"2", "4", "fox"}, {"2", "6", "elephant"}
     };
+
+    /** 兽穴所在列：棋盘正中央，初始为空。 */
+    public static final int DEN_COL = COLS / 2;
 
     /** 动物编码到中文名称。 */
     private static final Map<String, String> NAMES = new LinkedHashMap<>();
@@ -111,9 +115,43 @@ public final class ZyjdcBoard {
     }
 
     /**
+     * 返回兽穴归属方：AI 底线中央（行 0）属于 AI，学生底线中央（最后一行）属于学生。
+     * 其余位置返回 null。兽穴初始为空，任何一方都不能进入自己的兽穴。
+     */
+    public static String denOwner(int row, int col) {
+        if (col != DEN_COL) {
+            return null;
+        }
+        if (row == 0) {
+            return ZyjdcGameState.AI;
+        }
+        if (row == ROWS - 1) {
+            return ZyjdcGameState.PLAYER;
+        }
+        return null;
+    }
+
+    /** 判断指定格子是否为某一方的兽穴。 */
+    public static boolean isDen(int row, int col) {
+        return denOwner(row, col) != null;
+    }
+
+    /**
+     * 判断某一方是否已经踏上对方兽穴。
+     * 学生踏上 AI 底线中央、AI 踏上学生底线中央即立即获胜。
+     */
+    public static boolean onDen(String[][] board, String side) {
+        if (board == null) {
+            return false;
+        }
+        int row = ZyjdcGameState.AI.equals(side) ? ROWS - 1 : 0;
+        return side.equals(sideOf(board[row][DEN_COL]));
+    }
+
+    /**
      * 生成新一局棋盘。
      * 双方各 8 枚，均为完整的 8 种动物；学生所选角色只用于个人解读，不改变棋盘阵容。
-     * 双方按 2-2-4 三行阵型上下镜像摆放，其余格子为空。
+     * 双方按 2-2-4 三行阵型上下镜像摆放，其余格子为空；双方底线中央的兽穴保持为空。
      */
     public static ZyjdcGameState newState(String playerRole) {
         if (playerRole == null || !CODES.contains(playerRole)) {
@@ -162,7 +200,11 @@ public final class ZyjdcBoard {
                     }
                     String target = board[toRow][toCol];
                     if (target == null) {
-                        moves.add(new int[]{row, col, toRow, toCol});
+                        // 可以踏上对方兽穴，但不能进入自己的兽穴。
+                        String owner = denOwner(toRow, toCol);
+                        if (owner == null || !owner.equals(side)) {
+                            moves.add(new int[]{row, col, toRow, toCol});
+                        }
                     } else if (!side.equals(sideOf(target)) && canCapture(code, codeOf(target))) {
                         moves.add(new int[]{row, col, toRow, toCol});
                     }
@@ -187,7 +229,9 @@ public final class ZyjdcBoard {
         }
         String target = board[toRow][toCol];
         if (target == null) {
-            return true;
+            // 可以踏上对方兽穴，但不能进入自己的兽穴。
+            String owner = denOwner(toRow, toCol);
+            return owner == null || !owner.equals(side);
         }
         return !side.equals(sideOf(target)) && canCapture(codeOf(source), codeOf(target));
     }

@@ -222,7 +222,7 @@ public class ZyjdcGameService {
         record.setJobTitle(role.getJobTitle());
         record.setStage("role_selected");
         record.setUpdateTime(now);
-        return view(record);
+        return view(record, false);
     }
 
     /** 开始对局；重复调用时返回当前进行中的棋盘。 */
@@ -230,7 +230,7 @@ public class ZyjdcGameService {
     public Map<String, Object> start(Long recordId, Long userId) {
         ZyjdcRecord record = lockRecord(recordId, userId);
         if ("finished".equals(record.getStatus())) {
-            return view(record);
+            return view(record, false);
         }
         if (record.getRoleId() == null) {
             throw new ServiceException("请先选择角色");
@@ -239,10 +239,10 @@ public class ZyjdcGameService {
             ZyjdcGameState state = parseState(record.getBoardJson());
             if (state != null && ZyjdcBoard.remainingSeconds(state, System.currentTimeMillis()) <= 0) {
                 settleTimeout(record, state);
-                return view(record);
+                return view(record, false);
             }
             if (state != null) {
-                return view(record);
+                return view(record, false);
             }
         }
         ZyjdcRole role = roleMapper.selectById(record.getRoleId());
@@ -279,7 +279,7 @@ public class ZyjdcGameService {
         record.setStartTime(now);
         record.setFinishTime(null);
         record.setUpdateTime(now);
-        return view(record);
+        return view(record, false);
     }
 
     /**
@@ -303,11 +303,11 @@ public class ZyjdcGameService {
         }
         if (ZyjdcBoard.remainingSeconds(state, System.currentTimeMillis()) <= 0) {
             settleTimeout(record, state);
-            return view(record);
+            return view(record, false);
         }
         // 客户端携带落子前的步数：重复提交/网络重试/双击时直接返回当前棋局，避免多走一步。
         if (expectedMoveCount != null && expectedMoveCount != state.getMoveCount()) {
-            Map<String, Object> current = view(record);
+            Map<String, Object> current = view(record, false);
             current.put("stale", true);
             return current;
         }
@@ -356,7 +356,7 @@ public class ZyjdcGameService {
         record.setMoveCount(state.getMoveCount());
         record.setUpdateTime(now);
 
-        Map<String, Object> data = view(record);
+        Map<String, Object> data = view(record, false);
         data.put("playerMove", playerMove);
         data.put("aiMove", aiMove);
         return data;
@@ -388,7 +388,7 @@ public class ZyjdcGameService {
         }
         // 超时结算刚好获胜时不允许再重开；返回结算结果并提交事务，避免抛错回滚刚写入的胜利状态。
         if ("finished".equals(record.getStatus())) {
-            return view(record);
+            return view(record, false);
         }
         ZyjdcRole role = roleMapper.selectById(record.getRoleId());
         if (role == null) {
@@ -420,7 +420,7 @@ public class ZyjdcGameService {
         record.setStartTime(now);
         record.setFinishTime(null);
         record.setUpdateTime(now);
-        return view(record);
+        return view(record, false);
     }
 
     /** 后台删除参与记录：同步清理该活动游戏的全部活动参与行。 */
@@ -437,8 +437,17 @@ public class ZyjdcGameService {
         recordMapper.deleteById(recordId);
     }
 
-    /** 组装学生端展示数据：记录状态、角色内容、棋盘、剩余时间、合法走法和结果。 */
+    /** 组装完整展示数据；结果页/角色档案需要角色正文和活动类型。 */
     public Map<String, Object> view(ZyjdcRecord record) {
+        return view(record, true);
+    }
+
+    /**
+     * 组装学生端展示数据。
+     * full=false 时跳过角色正文和活动类型查询，供落子等高频写接口使用，
+     * 减少行锁持有期间的数据库往返；结果页随后会调用完整查询。
+     */
+    private Map<String, Object> view(ZyjdcRecord record, boolean full) {
         ZyjdcGameState state = parseState(record.getBoardJson());
         if (state != null && "playing".equals(record.getStage())
                 && ZyjdcBoard.remainingSeconds(state, System.currentTimeMillis()) <= 0) {
@@ -449,11 +458,13 @@ public class ZyjdcGameService {
         data.put("recordId", record.getRecordId());
         data.put("instanceId", record.getInstanceId());
         data.put("gameId", record.getGameId());
-        GkzhActivityWeekInstance instance = record.getInstanceId() == null ? null
-                : activityWeekService.getInstance(record.getInstanceId());
-        if (instance != null) {
-            // 结果页据此返回对应的生涯活动或就业活动页面。
-            data.put("bizType", instance.getBizType());
+        if (full) {
+            GkzhActivityWeekInstance instance = record.getInstanceId() == null ? null
+                    : activityWeekService.getInstance(record.getInstanceId());
+            if (instance != null) {
+                // 结果页据此返回对应的生涯活动或就业活动页面。
+                data.put("bizType", instance.getBizType());
+            }
         }
         data.put("status", record.getStatus());
         data.put("stage", record.getStage());
@@ -466,11 +477,21 @@ public class ZyjdcGameService {
         data.put("remainingSeconds", record.getRemainingSeconds());
         data.put("moveCount", record.getMoveCount());
 
-        ZyjdcRole role = record.getRoleId() == null ? null : roleMapper.selectById(record.getRoleId());
+        ZyjdcRole role = full && record.getRoleId() != null ? roleMapper.selectById(record.getRoleId()) : null;
+        String roleName = record.getRoleName();
+        String jobTitle = record.getJobTitle();
+        if (role != null) {
+            if (roleName == null) {
+                roleName = role.getRoleName();
+            }
+            if (jobTitle == null) {
+                jobTitle = role.getJobTitle();
+            }
+        }
         data.put("roleId", record.getRoleId());
         data.put("roleCode", record.getRoleCode());
-        data.put("roleName", record.getRoleName() == null && role != null ? role.getRoleName() : record.getRoleName());
-        data.put("jobTitle", record.getJobTitle() == null && role != null ? role.getJobTitle() : record.getJobTitle());
+        data.put("roleName", roleName);
+        data.put("jobTitle", jobTitle);
         if (role != null) {
             data.put("role", role);
         }
@@ -593,7 +614,7 @@ public class ZyjdcGameService {
         if (win) {
             completeParticipation(record, reason);
         }
-        Map<String, Object> data = view(record);
+        Map<String, Object> data = view(record, false);
         data.put("playerMove", playerMove);
         data.put("aiMove", aiMove);
         return data;

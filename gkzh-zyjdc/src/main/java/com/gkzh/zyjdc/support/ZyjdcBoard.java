@@ -27,6 +27,9 @@ public final class ZyjdcBoard {
     /** 每局总时长（秒）。 */
     public static final int TOTAL_SECONDS = 180;
 
+    /** 单局最多保留的落子记录数，避免 board_json 随对局无限增长。 */
+    private static final int MAX_STORED_MOVES = 40;
+
     /** 8 种动物，按等级从高到低排列。 */
     public static final List<String> CODES = Collections.unmodifiableList(Arrays.asList(
             "elephant", "lion", "tiger", "leopard", "wolf", "fox", "cat", "mouse"));
@@ -264,6 +267,9 @@ public final class ZyjdcBoard {
             state.setMoves(new ArrayList<>());
         }
         state.getMoves().add(move);
+        if (state.getMoves().size() > MAX_STORED_MOVES) {
+            state.getMoves().remove(0);
+        }
         return captured;
     }
 

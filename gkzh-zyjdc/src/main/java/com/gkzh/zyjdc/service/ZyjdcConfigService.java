@@ -7,7 +7,9 @@ import com.gkzh.zyjdc.domain.ZyjdcRole;
 import com.gkzh.zyjdc.mapper.ZyjdcRoleMapper;
 import org.springframework.stereotype.Service;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 职业角斗场角色配置服务。
@@ -16,7 +18,16 @@ import java.util.List;
 @Service
 public class ZyjdcConfigService {
 
+    /** 棋子元数据缓存有效期：配置保存后会立即清除，未保存时最多缓存 60 秒。 */
+    private static final long META_CACHE_MILLIS = 60_000L;
+
     private final ZyjdcRoleMapper roleMapper;
+
+    /** 棋子头像、名称和等级缓存，避免每一步落子都查询角色表。 */
+    private volatile Map<String, Object> pieceMetaCache;
+
+    /** 棋子元数据缓存加载时间。 */
+    private volatile long pieceMetaLoadedAt;
 
     public ZyjdcConfigService(ZyjdcRoleMapper roleMapper) {
         this.roleMapper = roleMapper;
@@ -40,6 +51,35 @@ public class ZyjdcConfigService {
     /** 按编号查询角色；不存在返回 null。 */
     public ZyjdcRole get(Long roleId) {
         return roleId == null ? null : roleMapper.selectById(roleId);
+    }
+
+    /**
+     * 棋子头像、名称、等级和职场定位的轻量元数据。
+     * 每一步落子都需要返回给小程序，使用短期缓存减少角色表查询。
+     */
+    public Map<String, Object> pieceMeta() {
+        long now = System.currentTimeMillis();
+        Map<String, Object> cache = pieceMetaCache;
+        if (cache != null && now - pieceMetaLoadedAt < META_CACHE_MILLIS) {
+            return cache;
+        }
+        synchronized (this) {
+            if (pieceMetaCache != null && System.currentTimeMillis() - pieceMetaLoadedAt < META_CACHE_MILLIS) {
+                return pieceMetaCache;
+            }
+            Map<String, Object> meta = new LinkedHashMap<>();
+            for (ZyjdcRole item : listAll()) {
+                Map<String, Object> value = new LinkedHashMap<>();
+                value.put("roleName", item.getRoleName());
+                value.put("imageUrl", item.getImageUrl());
+                value.put("rankLevel", item.getRankLevel());
+                value.put("jobTitle", item.getJobTitle());
+                meta.put(item.getRoleCode(), value);
+            }
+            pieceMetaCache = meta;
+            pieceMetaLoadedAt = System.currentTimeMillis();
+            return meta;
+        }
     }
 
     /**
@@ -79,7 +119,10 @@ public class ZyjdcConfigService {
         existing.setSortOrder(input.getSortOrder() == null ? existing.getSortOrder() : input.getSortOrder());
         existing.setStatus(status);
         existing.setUpdateTime(DateUtils.getNowDate());
-        return roleMapper.updateById(existing);
+        int rows = roleMapper.updateById(existing);
+        // 后台保存头像/名称后立即清空缓存，下一步落子即可看到新素材。
+        pieceMetaCache = null;
+        return rows;
     }
 
     private static boolean isBlank(String value) {

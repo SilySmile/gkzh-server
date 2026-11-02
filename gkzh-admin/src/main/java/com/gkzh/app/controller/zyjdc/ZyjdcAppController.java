@@ -9,6 +9,7 @@ import com.gkzh.school.mapper.GkzhStudentMapper;
 import com.gkzh.zyjdc.domain.ZyjdcRecord;
 import com.gkzh.zyjdc.service.ZyjdcConfigService;
 import com.gkzh.zyjdc.service.ZyjdcGameService;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -59,11 +60,26 @@ public class ZyjdcAppController extends FrontBaseController {
             throw new ServiceException("学生档案与当前学校不一致，请重新登录后扫码");
         }
         // department_id 是专业（二级部门）编号，专业名称由学生查询关联部门给出。
-        ZyjdcRecord record = gameService.enter(schoolId, id(data.get("instanceId")), id(data.get("gameId")),
-                student.getUserId(), profile.getStudentId(), profile.getStudentNo(), profile.getStudentName(),
-                profile.getDepartmentId(), profile.getDepartmentName(), profile.getGender());
+        ZyjdcRecord record = enterWithRetry(schoolId, id(data.get("instanceId")), id(data.get("gameId")),
+                student.getUserId(), profile);
         // 再次扫码可能恢复进行中的对局；通过事务读取方法补做超时结算，避免在事务外更新记录。
         return AjaxResult.success(gameService.viewRecord(record.getRecordId(), student.getUserId()));
+    }
+
+    /**
+     * 扫码进入的并发兜底：同一学生重复扫码时唯一键可能让其中一个事务失败，
+     * 失败事务回滚后重试一次即可读到已提交记录，避免活动开始时的重复扫码报错。
+     */
+    private ZyjdcRecord enterWithRetry(Long schoolId, Long instanceId, Long gameId, Long userId, GkzhStudent profile) {
+        try {
+            return gameService.enter(schoolId, instanceId, gameId, userId, profile.getStudentId(),
+                    profile.getStudentNo(), profile.getStudentName(), profile.getDepartmentId(),
+                    profile.getDepartmentName(), profile.getGender());
+        } catch (DataIntegrityViolationException duplicate) {
+            return gameService.enter(schoolId, instanceId, gameId, userId, profile.getStudentId(),
+                    profile.getStudentNo(), profile.getStudentName(), profile.getDepartmentId(),
+                    profile.getDepartmentName(), profile.getGender());
+        }
     }
 
     /** 查询本人对局进度；携带活动或游戏参数时再次核对归属。 */
@@ -100,7 +116,8 @@ public class ZyjdcAppController extends FrontBaseController {
         int fromCol = integer(body, "fromCol");
         int toRow = integer(body, "toRow");
         int toCol = integer(body, "toCol");
-        return AjaxResult.success(gameService.move(id, currentUserId(), fromRow, fromCol, toRow, toCol));
+        Integer expectedMoveCount = optionalInteger(body, "moveCount");
+        return AjaxResult.success(gameService.move(id, currentUserId(), fromRow, fromCol, toRow, toCol, expectedMoveCount));
     }
 
     /** 失败或平局后重开一局。 */
@@ -126,6 +143,19 @@ public class ZyjdcAppController extends FrontBaseController {
             return Integer.parseInt(String.valueOf(value).trim());
         } catch (NumberFormatException e) {
             throw new ServiceException("棋盘位置参数无效，请重新选择");
+        }
+    }
+
+    /** 读取可选的落子前步数；旧客户端不传时返回 null，保持兼容。 */
+    private static Integer optionalInteger(Map<String, Object> body, String key) {
+        Object value = body == null ? null : body.get(key);
+        if (value == null || String.valueOf(value).trim().isEmpty()) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(String.valueOf(value).trim());
+        } catch (NumberFormatException e) {
+            throw new ServiceException("棋局进度参数无效，请重新进入");
         }
     }
 

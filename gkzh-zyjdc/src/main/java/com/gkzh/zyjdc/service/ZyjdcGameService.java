@@ -63,13 +63,15 @@ public class ZyjdcGameService {
 
     private final ZyjdcRecordMapper recordMapper;
     private final ZyjdcRoleMapper roleMapper;
+    private final ZyjdcConfigService configService;
     private final IActivityWeekService activityWeekService;
     private final Random random = new Random();
 
     public ZyjdcGameService(ZyjdcRecordMapper recordMapper, ZyjdcRoleMapper roleMapper,
-                            IActivityWeekService activityWeekService) {
+                            ZyjdcConfigService configService, IActivityWeekService activityWeekService) {
         this.recordMapper = recordMapper;
         this.roleMapper = roleMapper;
+        this.configService = configService;
         this.activityWeekService = activityWeekService;
     }
 
@@ -286,7 +288,8 @@ public class ZyjdcGameService {
      */
     @Transactional
     public Map<String, Object> move(Long recordId, Long userId,
-                                    int fromRow, int fromCol, int toRow, int toCol) {
+                                    int fromRow, int fromCol, int toRow, int toCol,
+                                    Integer expectedMoveCount) {
         ZyjdcRecord record = lockRecord(recordId, userId);
         if ("finished".equals(record.getStatus())) {
             throw new ServiceException("本局已通关，结果仅可查看");
@@ -301,6 +304,12 @@ public class ZyjdcGameService {
         if (ZyjdcBoard.remainingSeconds(state, System.currentTimeMillis()) <= 0) {
             settleTimeout(record, state);
             return view(record);
+        }
+        // 客户端携带落子前的步数：重复提交/网络重试/双击时直接返回当前棋局，避免多走一步。
+        if (expectedMoveCount != null && expectedMoveCount != state.getMoveCount()) {
+            Map<String, Object> current = view(record);
+            current.put("stale", true);
+            return current;
         }
         if (!ZyjdcGameState.PLAYER.equals(state.getTurn())) {
             throw new ServiceException("当前不是你的回合");
@@ -472,7 +481,11 @@ public class ZyjdcGameService {
             data.put("turn", state.getTurn());
             data.put("playerRoles", state.getPlayerRoles());
             data.put("aiRoles", state.getAiRoles());
-            data.put("moves", state.getMoves());
+            // 只返回最近 10 步，避免每步响应随对局变长；完整状态仍保存在 board_json。
+            List<ZyjdcMove> storedMoves = state.getMoves() == null ? new ArrayList<>() : state.getMoves();
+            int moveFrom = Math.max(0, storedMoves.size() - 10);
+            data.put("moves", new ArrayList<>(storedMoves.subList(moveFrom, storedMoves.size())));
+            data.put("moveCount", state.getMoveCount());
             data.put("remainingSeconds", ZyjdcBoard.remainingSeconds(state, System.currentTimeMillis()));
             if ("playing".equals(record.getStage()) && ZyjdcGameState.PLAYER.equals(state.getTurn())) {
                 data.put("legalMoves", legalMoves(state));
@@ -515,18 +528,9 @@ public class ZyjdcGameService {
         }
     }
 
-    /** 电脑棋子与等级信息，供小程序绘制棋子头像。 */
+    /** 电脑棋子与等级信息，供小程序绘制棋子头像；由配置服务做短期缓存。 */
     private Map<String, Object> pieceMeta() {
-        Map<String, Object> meta = new LinkedHashMap<>();
-        for (ZyjdcRole item : roleMapper.selectList(new QueryWrapper<ZyjdcRole>().orderByAsc("sort_order"))) {
-            Map<String, Object> value = new LinkedHashMap<>();
-            value.put("roleName", item.getRoleName());
-            value.put("imageUrl", item.getImageUrl());
-            value.put("rankLevel", item.getRankLevel());
-            value.put("jobTitle", item.getJobTitle());
-            meta.put(item.getRoleCode(), value);
-        }
-        return meta;
+        return configService.pieceMeta();
     }
 
     /** 学生当前全部合法走法，客户端直接用于高亮提示。 */

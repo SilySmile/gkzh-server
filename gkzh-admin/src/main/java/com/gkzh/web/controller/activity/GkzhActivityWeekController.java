@@ -65,6 +65,10 @@ import com.gkzh.app.service.NlldRecordEnrichService;
 import com.gkzh.nlld.domain.NlldRecord;
 import com.gkzh.nlld.mapper.NlldRecordMapper;
 import com.gkzh.nlld.service.NlldStatisticsService;
+import com.gkzh.app.service.ZyfxqRecordEnrichService;
+import com.gkzh.zyfxq.domain.ZyfxqRecord;
+import com.gkzh.zyfxq.mapper.ZyfxqRecordMapper;
+import com.gkzh.zyfxq.service.ZyfxqStatisticsService;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
@@ -118,6 +122,18 @@ public class GkzhActivityWeekController extends BaseController {
     /** 能量雷达记录展示字段补全，与后台列表使用同一口径。 */
     @Autowired
     private NlldRecordEnrichService nlldRecordEnrichService;
+
+    /** 职业飞行棋的学校端统计：参与、通过率、平均耗时、掷骰次数与题目正确率。 */
+    @Autowired
+    private ZyfxqStatisticsService zyfxqStatisticsService;
+
+    /** 职业飞行棋参与记录，查看页只取最近若干条用于展示。 */
+    @Autowired
+    private ZyfxqRecordMapper zyfxqRecordMapper;
+
+    /** 职业飞行棋记录展示字段补全，与后台列表使用同一口径。 */
+    @Autowired
+    private ZyfxqRecordEnrichService zyfxqRecordEnrichService;
 
     @Value("${app.qr-code.base-url}")
     private String qrCodeBaseUrl;
@@ -225,7 +241,7 @@ public class GkzhActivityWeekController extends BaseController {
             Map<String, Object> gameView = buildGameView(game);
             String viewType = String.valueOf(gameView.get("viewType"));
             if (!"mind-window".equals(viewType) && !"sszctop".equals(viewType) && !"zyjdc".equals(viewType)
-                    && !"nlld".equals(viewType)) {
+                    && !"nlld".equals(viewType) && !"zyfxq".equals(viewType)) {
                 return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
             }
             byte[] bytes = createGameViewPdf(gameView);
@@ -256,6 +272,8 @@ public class GkzhActivityWeekController extends BaseController {
         if ("zyjdc".equals(type)) viewType = "zyjdc";
         // 能量雷达固定使用专属两页模板，配置缺失时也不降级为通用空白页。
         if ("nlld".equals(type)) viewType = "nlld";
+        // 职业飞行棋固定使用专属两页模板，配置缺失时也不降级为通用空白页。
+        if ("zyfxq".equals(type)) viewType = "zyfxq";
         view.put("gameId", game.getGameId());
         view.put("gameTitle", game.getTitle());
         view.put("gameType", type);
@@ -263,6 +281,7 @@ public class GkzhActivityWeekController extends BaseController {
         if ("sszctop".equals(viewType)) return buildSszctopGameView(game, view);
         if ("zyjdc".equals(viewType)) return buildZyjdcGameView(game, view);
         if ("nlld".equals(viewType)) return buildNlldGameView(game, view);
+        if ("zyfxq".equals(viewType)) return buildZyfxqGameView(game, view);
         if (!"mind-window".equals(viewType)) {
             view.put("message", "该游戏暂未配置查看模板");
             view.put("pages", new ArrayList<>());
@@ -380,8 +399,21 @@ public class GkzhActivityWeekController extends BaseController {
         return view;
     }
 
-    /** 从学生结算快照中还原其本次选择的维度；历史损坏数据直接跳过，不影响其他统计。 */
-    private SszctopDimension reportDimension(SszctopStudentReport report) {
+    /**
+     * 构建职业飞行棋活动查看数据（结果输出-学校端）：
+     * 第一页展示参与总人数、平均单局耗时、累计掷骰次数、通过人数与最近记录；
+     * 第二页展示各知识点正确率、超时答题占比、各题目正确率与高频错题。
+     */
+    private Map<String, Object> buildZyfxqGameView(GkzhActivityGame game, Map<String, Object> view) {
+        Map<String, Object> stats = zyfxqStatisticsService.gameViewStats(game.getGameId());
+        view.putAll(stats);
+        List<ZyfxqRecord> records = zyfxqRecordMapper.selectGameViewRecords(game.getGameId(), 50);
+        view.put("records", zyfxqRecordEnrichService.enrich(records));
+        view.put("recordLimit", 50);
+        return view;
+    }
+
+    /** 从学生结算快照中还原其本次选择的维度；历史损坏数据直接跳过，不影响其他统计。 */    private SszctopDimension reportDimension(SszctopStudentReport report) {
         try {
             return JSON.parseObject(report.getDimensionSnapshot(), SszctopDimension.class);
         } catch (Exception ignored) {
@@ -506,6 +538,13 @@ public class GkzhActivityWeekController extends BaseController {
                     (List<Map<String, Object>>) view.get("records"), title));
             pages.add(drawNlldDimensionStatsPage((List<Map<String, Object>>) view.get("dimensionStats"),
                     (List<Map<String, Object>>) view.get("resultTypeStats"),
+                    String.valueOf(view.get("analysis")), title));
+        } else if ("zyfxq".equals(view.get("viewType"))) {
+            pages.add(drawZyfxqOverviewPage((Map<String, Object>) view.get("summary"),
+                    (List<Map<String, Object>>) view.get("records"), title));
+            pages.add(drawZyfxqQuestionStatsPage((List<Map<String, Object>>) view.get("questionTypeStats"),
+                    (List<Map<String, Object>>) view.get("questionStats"),
+                    (List<Map<String, Object>>) view.get("wrongQuestions"),
                     String.valueOf(view.get("analysis")), title));
         } else {
             pages.add(drawHollandPage((List<HollandCode>) view.get("hollandCodes"), title));
@@ -745,6 +784,176 @@ public class GkzhActivityWeekController extends BaseController {
         g.setColor(new Color(52, 73, 94));
         g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 20));
         drawWrapped(g, analysis == null ? "" : analysis, 70, y + 70, 940, 28);
+        g.dispose();
+        return image;
+    }
+
+    /** 职业飞行棋 PDF 第一页：参与总人数、平均单局耗时、累计掷骰次数、通过人数与最近记录。 */
+    private BufferedImage drawZyfxqOverviewPage(Map<String, Object> summary, List<Map<String, Object>> records,
+                                                 String title) {
+        List<Map<String, Object>> rows = records == null ? new ArrayList<>() : records;
+        int show = Math.min(rows.size(), 16);
+        int height = Math.max(1527, 280 + show * 50);
+        BufferedImage image = newViewImage(height);
+        Graphics2D g = image.createGraphics();
+        g.setColor(new Color(26, 44, 74));
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 42));
+        g.drawString(title + "—结果输出（学校端）", 48, 72);
+
+        Map<String, Object> value = summary == null ? new LinkedHashMap<>() : summary;
+        g.setColor(new Color(52, 73, 94));
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 22));
+        g.drawString("参与总人数：" + text(value.get("participantCount")) + " 人    对局结束：" + text(value.get("finishedCount"))
+                + " 人    整体通过：" + text(value.get("winCount")) + " 人    通过率：" + text(value.get("passRate"))
+                + "%    平均单局耗时：" + text(value.get("avgDurationSeconds")) + " 秒", 48, 118);
+        g.drawString("累计掷骰总次数：" + text(value.get("rollTotal")) + " 次    累计行进总步数：" + text(value.get("stepTotal"))
+                + " 步    作答题次：" + text(value.get("answerTotal")) + "    整体正确率：" + text(value.get("correctRate"))
+                + "%    超时答题占比：" + text(value.get("timeoutRate")) + "%", 48, 154);
+
+        int y = 190;
+        String[] headers = {"序号", "学生", "学号", "院系", "专业", "结果", "掷骰次数", "耗时(秒)", "参与时间"};
+        int[] xs = {62, 120, 240, 360, 490, 620, 700, 810, 890};
+        g.setColor(new Color(22, 119, 255));
+        g.fillRect(48, y, 984, 44);
+        g.setColor(Color.WHITE);
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 18));
+        for (int i = 0; i < headers.length; i++) {
+            g.drawString(headers[i], xs[i], y + 28);
+        }
+        y += 44;
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 17));
+        for (int i = 0; i < show; i++) {
+            Map<String, Object> row = rows.get(i);
+            g.setColor(i % 2 == 0 ? Color.WHITE : new Color(248, 250, 253));
+            g.fillRect(48, y, 984, 50);
+            g.setColor(new Color(52, 73, 94));
+            g.drawString(String.valueOf(i + 1), xs[0], y + 31);
+            g.drawString(cut(text(row.get("studentName")), 8), xs[1], y + 31);
+            g.drawString(cut(text(row.get("studentNo")), 10), xs[2], y + 31);
+            g.drawString(cut(text(row.get("departmentName")), 8), xs[3], y + 31);
+            g.drawString(cut(text(row.get("major")), 9), xs[4], y + 31);
+            g.drawString(cut(text(row.get("resultName")), 5), xs[5], y + 31);
+            g.drawString(String.valueOf(number(row.get("rollCount"))), xs[6], y + 31);
+            g.drawString(text(row.get("durationSeconds")), xs[7], y + 31);
+            g.drawString(cut(timeText(row.get("scanTime")), 18), xs[8], y + 31);
+            y += 50;
+        }
+        if (rows.size() > show) {
+            g.setColor(new Color(120, 130, 140));
+            g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 16));
+            g.drawString("仅展示最近 " + show + " 条记录，完整数据请在 Web 参与记录或 Excel 中查看。", 70, y + 34);
+        }
+        g.dispose();
+        return image;
+    }
+
+    /** 职业飞行棋 PDF 第二页：知识点正确率、各题目正确率、高频错题与整体分析。 */
+    private BufferedImage drawZyfxqQuestionStatsPage(List<Map<String, Object>> typeStats,
+                                                     List<Map<String, Object>> questionStats,
+                                                     List<Map<String, Object>> wrongQuestions,
+                                                     String analysis, String title) {
+        List<Map<String, Object>> types = typeStats == null ? new ArrayList<>() : typeStats;
+        List<Map<String, Object>> questions = questionStats == null ? new ArrayList<>() : questionStats;
+        int show = Math.min(questions.size(), 12);
+        int height = Math.max(1527, 520 + types.size() * 50 + show * 50);
+        BufferedImage image = newViewImage(height);
+        Graphics2D g = image.createGraphics();
+        g.setColor(new Color(26, 44, 74));
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 42));
+        g.drawString(title + "—知识点与题目正确率", 48, 72);
+
+        int y = 106;
+        g.setColor(new Color(26, 44, 74));
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 24));
+        g.drawString("各知识点正确率", 48, y);
+        y += 22;
+        String[] typeHeaders = {"序号", "知识点", "作答次数", "答对次数", "正确率", "超时次数", "超时占比", "平均作答用时"};
+        int[] typeXs = {66, 120, 330, 470, 610, 710, 820, 900};
+        g.setColor(new Color(22, 119, 255));
+        g.fillRect(48, y, 984, 46);
+        g.setColor(Color.WHITE);
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 18));
+        for (int i = 0; i < typeHeaders.length; i++) {
+            g.drawString(typeHeaders[i], typeXs[i], y + 29);
+        }
+        y += 46;
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 18));
+        for (Map<String, Object> row : types) {
+            g.setColor(Color.WHITE);
+            g.fillRect(48, y, 984, 50);
+            g.setColor(new Color(52, 73, 94));
+            g.drawString(String.valueOf(row.get("serialNo")), typeXs[0], y + 31);
+            g.drawString(text(row.get("questionTypeName")), typeXs[1], y + 31);
+            g.drawString(String.valueOf(number(row.get("answerCount"))), typeXs[2], y + 31);
+            g.drawString(String.valueOf(number(row.get("correctCount"))), typeXs[3], y + 31);
+            g.drawString(text(row.get("correctRate")) + "%", typeXs[4], y + 31);
+            g.drawString(String.valueOf(number(row.get("timeoutCount"))), typeXs[5], y + 31);
+            g.drawString(text(row.get("timeoutRate")) + "%", typeXs[6], y + 31);
+            g.drawString(text(row.get("avgCostSeconds")) + " 秒", typeXs[7], y + 31);
+            y += 50;
+        }
+
+        y += 34;
+        g.setColor(new Color(26, 44, 74));
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 24));
+        g.drawString("各题目正确率（按作答次数排序）", 48, y);
+        y += 22;
+        String[] headers = {"序号", "知识点", "题目", "作答", "答对", "答错", "正确率", "平均用时"};
+        int[] xs = {66, 120, 250, 660, 730, 800, 860, 960};
+        g.setColor(new Color(103, 194, 58));
+        g.fillRect(48, y, 984, 46);
+        g.setColor(Color.WHITE);
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 18));
+        for (int i = 0; i < headers.length; i++) {
+            g.drawString(headers[i], xs[i], y + 29);
+        }
+        y += 46;
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 17));
+        for (int i = 0; i < show; i++) {
+            Map<String, Object> row = questions.get(i);
+            g.setColor(i % 2 == 0 ? Color.WHITE : new Color(248, 250, 253));
+            g.fillRect(48, y, 984, 50);
+            g.setColor(new Color(52, 73, 94));
+            g.drawString(String.valueOf(row.get("serialNo")), xs[0], y + 31);
+            g.drawString(cut(text(row.get("questionTypeName")), 6), xs[1], y + 31);
+            g.drawString(cut(text(row.get("title")), 22), xs[2], y + 31);
+            g.drawString(String.valueOf(number(row.get("answerCount"))), xs[3], y + 31);
+            g.drawString(String.valueOf(number(row.get("correctCount"))), xs[4], y + 31);
+            g.drawString(String.valueOf(number(row.get("wrongCount"))), xs[5], y + 31);
+            g.drawString(text(row.get("correctRate")) + "%", xs[6], y + 31);
+            g.drawString(text(row.get("avgCostSeconds")) + " 秒", xs[7], y + 31);
+            y += 50;
+        }
+        if (questions.size() > show) {
+            g.setColor(new Color(120, 130, 140));
+            g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 16));
+            g.drawString("仅展示前 " + show + " 题，完整题目统计请导出 Excel 查看。", 70, y + 30);
+            y += 46;
+        }
+
+        y += 20;
+        g.setColor(Color.WHITE);
+        g.fillRoundRect(48, y, 984, 260, 20, 20);
+        g.setColor(new Color(26, 44, 74));
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 22));
+        g.drawString("高频错题与整体分析", 70, y + 34);
+        int textY = y + 70;
+        g.setColor(new Color(52, 73, 94));
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 19));
+        List<Map<String, Object>> wrong = wrongQuestions == null ? new ArrayList<>() : wrongQuestions;
+        if (wrong.isEmpty()) {
+            g.drawString("当前没有答错记录。", 70, textY);
+            textY += 30;
+        } else {
+            for (int i = 0; i < Math.min(wrong.size(), 3); i++) {
+                Map<String, Object> row = wrong.get(i);
+                g.drawString((i + 1) + ". " + cut(text(row.get("title")), 34) + "  答错 "
+                        + number(row.get("wrongCount")) + " 次，正确率 " + text(row.get("correctRate")) + "%", 70, textY);
+                textY += 30;
+            }
+        }
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 19));
+        drawWrapped(g, analysis == null ? "" : analysis, 70, textY + 10, 940, 28);
         g.dispose();
         return image;
     }

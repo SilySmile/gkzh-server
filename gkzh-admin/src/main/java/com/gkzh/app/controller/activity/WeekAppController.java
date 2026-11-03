@@ -157,6 +157,10 @@ public class WeekAppController extends FrontBaseController {
         if ("nlld".equals(game.getGameType())) {
             return AjaxResult.error("请从能量雷达入口进入");
         }
+        // 职业飞行棋由自己的 /api/zyfxq/records/enter 写入参与记录，禁止通用入口重复建记录。
+        if ("zyfxq".equals(game.getGameType())) {
+            return AjaxResult.error("请从职业飞行棋入口进入");
+        }
 
         StudentCheckin student = getCurrentStudent();
         Long studentSchoolId = getCurrentStudentSchoolId();
@@ -276,6 +280,10 @@ public class WeekAppController extends FrontBaseController {
         // 能量雷达只能由第 6 关提交结算，禁止通用完成接口未答完就标记完成。
         if ("nlld".equals(game.getGameType())) {
             return AjaxResult.error("请完成全部关卡并生成职业能量雷达报告");
+        }
+        // 职业飞行棋只有抵达终点通关才写完成状态，禁止通用完成接口直接标记完成。
+        if ("zyfxq".equals(game.getGameType())) {
+            return AjaxResult.error("请在 3 分钟内抵达终点完成职业飞行棋");
         }
         GkzhGameParticipation participation = activityWeekService.getLatestParticipation(gameId, student.getUserId());
         if (participation == null) {

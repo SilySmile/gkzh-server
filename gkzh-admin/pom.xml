@@ -119,6 +119,10 @@
             <artifactId>gkzh-nlld</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.gkzh</groupId>
+            <artifactId>gkzh-zyfxq</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-websocket</artifactId>
         </dependency>

@@ -97,4 +97,10 @@ public class GkzhStudent extends BaseEntity {
 
     /** 入学年份 */
     private String enrollmentYear;
+
+    /** 最高/当前学历 */
+    private String education;
+
+    /** 预计毕业时间（YYYY-MM） */
+    private String graduationTime;
 }

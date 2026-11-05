@@ -18,7 +18,11 @@ public class ReportCachePublicController {
         if (System.currentTimeMillis() - file.lastModified() > 24 * 60 * 60 * 1000L) return ResponseEntity.status(HttpStatus.GONE).build();
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType("pdf".equals(type) ? MediaType.APPLICATION_PDF : ("zip".equals(type) ? MediaType.APPLICATION_OCTET_STREAM : MediaType.TEXT_HTML));
-        if (!"html".equals(type)) headers.setContentDisposition(ContentDisposition.attachment().filename("职业兴趣测评报告." + type, java.nio.charset.StandardCharsets.UTF_8).build());
+        if (!"html".equals(type)) {
+            String filename = "zip".equals(type) ? "全部个人游戏报告.zip" : "个人游戏报告.pdf";
+            headers.setContentDisposition(ContentDisposition.attachment()
+                    .filename(filename, java.nio.charset.StandardCharsets.UTF_8).build());
+        }
         headers.setCacheControl(CacheControl.noStore());
         headers.setContentLength(file.length());
         return new ResponseEntity<>(new FileSystemResource(file), headers, HttpStatus.OK);

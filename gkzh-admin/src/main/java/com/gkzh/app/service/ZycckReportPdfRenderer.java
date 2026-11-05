@@ -5,6 +5,7 @@ import com.gkzh.zycck.domain.ZycckRecord;
 import org.apache.pdfbox.pdmodel.*;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
+import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 
 import java.awt.*;
 import java.awt.image.BufferedImage;
@@ -48,29 +49,55 @@ public final class ZycckReportPdfRenderer {
     }
 
     public static byte[] render(ZycckRecord record, List<ZycckCareerQuestion> careers, List<ZycckCareerQuestion> further, Map<Long, String> categoryNames, String studentName) throws IOException {
-        try (PDDocument document = new PDDocument(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            ZycckReportPdfRenderer writer = new ZycckReportPdfRenderer(document);
-            try {
-                writer.newPage();
-                writer.studentName(studentName);
-                writer.text("我的未来职业探索清单", 44, true);
-                writer.text("进一步了解的职业：" + careers.size() + " 个", 30, true);
-                writer.pie(further, categoryNames);
-                if (careers.isEmpty()) {
-                    writer.text("本次没有记录到职业信息。", 28, false);
-                }
-                for (int i = 0; i < careers.size(); i++) {
-                    ZycckCareerQuestion career = careers.get(i);
-                    writer.careerLine(i + 1, career);
-                }
-                writer.flushPage();
-                document.getDocumentInformation().setTitle("我的未来职业探索清单");
-                document.save(out);
-                return out.toByteArray();
-            } finally {
-                if (writer.graphics != null) writer.graphics.dispose();
+        StringBuilder html = new StringBuilder("<!DOCTYPE html><html><head><meta charset='UTF-8'/><style>")
+                .append("@page{size:A4;margin:18mm}body{font-family:GKZH,sans-serif;color:#26384d;font-size:12pt;line-height:1.6}")
+                .append("h1{font-size:23pt;color:#244e87;border-bottom:2px solid #78a9d8;padding-bottom:10px}")
+                .append("h2{font-size:15pt;color:#244e87;margin:22px 0 8px;page-break-after:avoid}")
+                .append(".meta{color:#65758a;margin:4px 0 18px}.row{padding:10px 12px;border-bottom:1px solid #e5eaf0;page-break-inside:avoid}")
+                .append(".name{font-weight:bold;color:#24364b}.intro{color:#53657a;margin-top:4px}.tag{display:inline-block;margin:4px 8px 4px 0;padding:4px 10px;border:1px solid #d6e2f0;border-radius:12px}")
+                .append("</style></head><body><h1>我的未来职业探索清单</h1>");
+        if (studentName != null && !studentName.trim().isEmpty()) {
+            html.append("<div class='meta'>学生：").append(escapeHtml(studentName)).append("</div>");
+        }
+        html.append("<div class='meta'>进一步了解的职业：").append(careers.size()).append(" 个</div>");
+        html.append("<h2>职业大类比例</h2>");
+        if (further.isEmpty()) html.append("<div class='row'>本次没有记录到职业信息。</div>");
+        else {
+            Map<String, Integer> counts = new java.util.LinkedHashMap<>();
+            for (ZycckCareerQuestion career : further) {
+                String category = categoryNames.get(career.getCategoryId());
+                if (category == null || category.trim().isEmpty()) category = "其他";
+                counts.put(category, counts.getOrDefault(category, 0) + 1);
+            }
+            for (Map.Entry<String, Integer> entry : counts.entrySet()) {
+                int percent = Math.round(entry.getValue() * 100f / further.size());
+                html.append("<span class='tag'>").append(escapeHtml(entry.getKey())).append(" ")
+                        .append(percent).append("%</span>");
             }
         }
+        html.append("<h2>进一步了解的职业</h2>");
+        if (careers.isEmpty()) html.append("<div class='row'>本次没有记录到职业信息。</div>");
+        for (int i = 0; i < careers.size(); i++) {
+            ZycckCareerQuestion career = careers.get(i);
+            html.append("<div class='row'><div class='name'>").append(i + 1).append(". ")
+                    .append(escapeHtml(value(career.getCareerName()))).append("</div><div class='intro'>")
+                    .append(escapeHtml(value(career.getOneLineIntro()))).append("</div></div>");
+        }
+        html.append("</body></html>");
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            PdfRendererBuilder builder = new PdfRendererBuilder().withHtmlContent(html.toString(), null).toStream(out);
+            ReportPdfFont.register(builder);
+            builder.run();
+            return out.toByteArray();
+        } catch (Exception e) {
+            throw new IOException("未来职业报告 PDF 生成失败", e);
+        }
+    }
+
+    private static String escapeHtml(String value) {
+        if (value == null) return "";
+        return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                .replace("\"", "&quot;").replace("'", "&#39;");
     }
 
     /**

@@ -33,10 +33,12 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="registered"     column="registered"      />
         <result property="className"      column="class_name"      />
         <result property="enrollmentYear" column="enrollment_year" />
+        <result property="education" column="education" />
+        <result property="graduationTime" column="graduation_time" />
 </resultMap>
 
     <sql id="selectGkzhStudentVo">
-        select s.student_id, s.school_id,s.syd, s.grade,s.lqfs,s.department_id, s.student_no, s.student_name, s.gender, s.phone, s.email, s.status, s.del_flag, s.create_by, s.create_time, s.update_by, s.update_time, s.remark,s.user_id,s.password,s.class_name,s.enrollment_year, case when s.password is null or s.password = '' then 0 else 1 end as registered,
+        select s.student_id, s.school_id,s.syd, s.grade,s.lqfs,s.department_id, s.student_no, s.student_name, s.gender, s.phone, s.email, s.status, s.del_flag, s.create_by, s.create_time, s.update_by, s.update_time, s.remark,s.user_id,s.password,s.class_name,s.enrollment_year,s.education,s.graduation_time, case when s.password is null or s.password = '' then 0 else 1 end as registered,
                sch.title as school_name, d.title as department_name, college.title as college_name,college.department_id as college_id
         from gkzh_student s
         left join gkzh_school sch on s.school_id = sch.school_id
@@ -101,6 +103,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="studentName != null and studentName != ''">student_name,</if>
             <if test="gender != null">gender,</if>
             <if test="grade != null">grade,</if>
+            <if test="education != null">education,</if>
+            <if test="graduationTime != null">graduation_time,</if>
             <if test="lqfs != null">lqfs,</if>
             <if test="syd != null">syd,</if>
             <if test="className != null">class_name,</if>
@@ -123,6 +127,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="studentName != null and studentName != ''">#{studentName},</if>
             <if test="gender != null">#{gender},</if>
             <if test="grade != null">#{grade},</if>
+            <if test="education != null">#{education},</if>
+            <if test="graduationTime != null">#{graduationTime},</if>
             <if test="lqfs != null">#{lqfs},</if>
             <if test="syd != null">#{syd},</if>
             <if test="className != null">#{className},</if>
@@ -162,6 +168,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="password != null">password = #{password},</if>
             <if test="className != null">class_name = #{className},</if>
             <if test="enrollmentYear != null">enrollment_year = #{enrollmentYear},</if>
+            <if test="grade != null">grade = #{grade},</if>
+            <if test="education != null">education = #{education},</if>
+            <if test="graduationTime != null">graduation_time = #{graduationTime},</if>
         
 
     </trim>

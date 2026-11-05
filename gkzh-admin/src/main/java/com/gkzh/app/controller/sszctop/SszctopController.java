@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.gkzh.activity.domain.week.GkzhActivityGame;
+import com.gkzh.activity.domain.week.GkzhActivityWeekInstance;
 import com.gkzh.activity.service.IActivityWeekService;
 import com.gkzh.app.websocket.GameRoomSocketHandler;
 import com.gkzh.common.core.controller.FrontBaseController;
@@ -50,7 +51,7 @@ public class SszctopController extends FrontBaseController {
     @GetMapping("/rooms/{code}/qrcode") public AjaxResult qrcode(@PathVariable String code) { try { SszctopRoom r=service.room(code); String content="GKZH_MP:/pages/sszctop/index?instanceId="+r.getInstanceId()+"&activityId="+r.getInstanceId()+"&gameId="+r.getGameId()+"&gameType=sszctop&roomCode="+r.getRoomCode(); byte[] bytes=QRCodeUtils.generateQRCode(content,360,360); return AjaxResult.success("data:image/png;base64,"+Base64.getEncoder().encodeToString(bytes)); } catch (WriterException|IOException e) { return AjaxResult.error("房间二维码生成失败"); } }
     @PostMapping("/rooms/{code}/socket-ticket") public AjaxResult socketTicket(@PathVariable String code) { StudentCheckin s=getCurrentStudent(); SszctopRoom r=service.room(code); SszctopRoomMember m=service.member(r.getRoomId(),s.getUserId()); if(m==null||m.getRemovedTime()!=null)return AjaxResult.error("你不在当前房间"); String channel="sszctop/"+r.getGameId()+"/"+r.getRoomCode(); return AjaxResult.success(Collections.singletonMap("ticket",socketHandler.ticket(channel,s.getUserId(),s.getStuName()))); }
     /** 返回个人报告及“维度排序及文案”中职业对应的排序说明快照。 */
-    @GetMapping("/report/{gameId}") public AjaxResult report(@PathVariable Long gameId) { StudentCheckin s=getCurrentStudent(); SszctopStudentReport r=reportMapper.selectOne(new QueryWrapper<SszctopStudentReport>().eq("game_id",gameId).eq("user_id",s.getUserId()).orderByDesc("report_id").last("limit 1")); if(r==null)return AjaxResult.error("未找到个人报告"); r.setRankDetails(reportRankDetails(r)); return AjaxResult.success(r); }
+    @GetMapping("/report/{gameId}") public AjaxResult report(@PathVariable Long gameId) { StudentCheckin s=getCurrentStudent(); SszctopStudentReport r=reportMapper.selectOne(new QueryWrapper<SszctopStudentReport>().eq("game_id",gameId).eq("user_id",s.getUserId()).orderByDesc("report_id").last("limit 1")); if(r==null)return AjaxResult.error("未找到个人报告"); r.setRankDetails(reportRankDetails(r)); GkzhActivityWeekInstance instance=weekService.getInstance(r.getInstanceId()); if(instance!=null)r.setBizType(instance.getBizType()); return AjaxResult.success(r); }
 
     /**
      * 新报告读取结算时保存的排序说明快照；旧报告没有快照时，按其历史维度和职业补齐当前对应说明。

@@ -24,6 +24,9 @@ import com.gkzh.zcyltzj.service.ZcyltzjRecordService;
 import com.gkzh.zyfxq.domain.ZyfxqRecord;
 import com.gkzh.zyfxq.mapper.ZyfxqRecordMapper;
 import com.gkzh.zyfxq.service.ZyfxqGameService;
+import com.gkzh.jlcz.domain.JlczRecord;
+import com.gkzh.jlcz.mapper.JlczRecordMapper;
+import com.gkzh.jlcz.service.JlczGameService;
 import com.gkzh.zyjdc.domain.ZyjdcRecord;
 import com.gkzh.zyjdc.domain.ZyjdcRole;
 import com.gkzh.zyjdc.mapper.ZyjdcRecordMapper;
@@ -69,6 +72,8 @@ public class ReportCacheController extends FrontBaseController {
     private final ZcyltzjRecordService zcyltzjRecordService;
     private final ZyfxqRecordMapper zyfxqRecordMapper;
     private final ZyfxqGameService zyfxqGameService;
+    private final JlczRecordMapper jlczRecordMapper;
+    private final JlczGameService jlczGameService;
     private final ZyjdcRecordMapper zyjdcRecordMapper;
     private final ZyjdcGameService zyjdcGameService;
     private final IGkzhMbtiStudentChoiceService mbtiStudentChoiceService;
@@ -84,6 +89,7 @@ public class ReportCacheController extends FrontBaseController {
                                  NlldRecordMapper nlldRecordMapper, NlldGameService nlldGameService,
                                  ZcyltzjRecordMapper zcyltzjRecordMapper, ZcyltzjRecordService zcyltzjRecordService,
                                  ZyfxqRecordMapper zyfxqRecordMapper, ZyfxqGameService zyfxqGameService,
+                                 JlczRecordMapper jlczRecordMapper, JlczGameService jlczGameService,
                                  ZyjdcRecordMapper zyjdcRecordMapper, ZyjdcGameService zyjdcGameService,
                                  IGkzhMbtiStudentChoiceService mbtiStudentChoiceService) {
         this.patternComboService = patternComboService;
@@ -96,6 +102,8 @@ public class ReportCacheController extends FrontBaseController {
         this.zcyltzjRecordService = zcyltzjRecordService;
         this.zyfxqRecordMapper = zyfxqRecordMapper;
         this.zyfxqGameService = zyfxqGameService;
+        this.jlczRecordMapper = jlczRecordMapper;
+        this.jlczGameService = jlczGameService;
         this.zyjdcRecordMapper = zyjdcRecordMapper;
         this.zyjdcGameService = zyjdcGameService;
         this.mbtiStudentChoiceService = mbtiStudentChoiceService;
@@ -145,6 +153,9 @@ public class ReportCacheController extends FrontBaseController {
                         if (pdf == null) pdf = createGamePdf(instance, area, game, participation);
                     } else if ("zyfxq".equals(game.getGameType())) {
                         pdf = createZyfxqPdf(activityId, game.getGameId(), userId);
+                        if (pdf == null) pdf = createGamePdf(instance, area, game, participation);
+                    } else if ("jlcz".equals(game.getGameType())) {
+                        pdf = createJlczPdf(activityId, game.getGameId(), userId);
                         if (pdf == null) pdf = createGamePdf(instance, area, game, participation);
                     } else if ("zyjdc".equals(game.getGameType())) {
                         pdf = createZyjdcPdf(activityId, game.getGameId(), userId);
@@ -317,6 +328,67 @@ public class ReportCacheController extends FrontBaseController {
                 lines.add("正确答案：" + (correctLabel.isEmpty() ? correct : correctLabel + ". " + correct));
             }
         }
+        return createTextPdf(lines);
+    }
+
+    /** 简历称重个人报告：与小程序结果页同源，输出总重、分类小计、缺口与建议。 */
+    private byte[] createJlczPdf(Long activityId, Long gameId, Long userId) throws Exception {
+        JlczRecord record = jlczRecordMapper.selectOne(new QueryWrapper<JlczRecord>()
+                .eq("instance_id", activityId).eq("game_id", gameId).eq("user_id", userId)
+                .eq("status", "finished").last("LIMIT 1"));
+        if (record == null) return null;
+        Map<String, Object> view = jlczGameService.view(record);
+        List<String> lines = new java.util.ArrayList<>();
+        Map<?, ?> result = view.get("result") instanceof Map ? (Map<?, ?>) view.get("result") : new java.util.HashMap<>();
+        Map<?, ?> setting = view.get("setting") instanceof Map ? (Map<?, ?>) view.get("setting") : new java.util.HashMap<>();
+        boolean pass = Boolean.TRUE.equals(result.get("pass"));
+        boolean balanced = Boolean.TRUE.equals(result.get("balanced"));
+        lines.add("简历称重报告");
+        lines.add(pass ? (balanced ? "你的简历分量刚好达到通关标准" : "你的简历分量达到了通关标准")
+                : "你的简历分量还差一点");
+        lines.add("总重量：" + numberOrZero(result.get("totalWeight")) + "g（标准 "
+                + numberOrZero(result.get("passWeight")) + "g）");
+        if (!pass) {
+            lines.add("距通关还差：" + numberOrZero(result.get("gap")) + "g");
+        }
+        lines.add("本次勾选：" + numberOrZero(result.get("selectedCount")) + " 项");
+        lines.add("称重用时：" + zyfxqDuration(result.get("durationMs")));
+        lines.add("称重次数：第 " + numberOrDefault(result.get("attemptNo"), 1) + " 次");
+        lines.add("左侧标准砝码：" + numberOrZero(setting.get("leftWeightG")) + "g");
+        lines.add("分类小计");
+        Object rawCategories = result.get("categoryTotals");
+        if (rawCategories instanceof List) {
+            for (Object raw : (List<?>) rawCategories) {
+                if (!(raw instanceof Map)) continue;
+                Map<?, ?> category = (Map<?, ?>) raw;
+                lines.add(textValue(category.get("categoryName"), "类别") + "："
+                        + numberOrZero(category.get("totalWeight")) + "g");
+            }
+        }
+        lines.add("本次勾选的砝码");
+        Object rawSelected = view.get("selected");
+        if (!(rawSelected instanceof List) || ((List<?>) rawSelected).isEmpty()) {
+            lines.add("本次没有勾选任何砝码，可以重新称重后再试。");
+        } else {
+            for (Object raw : (List<?>) rawSelected) {
+                if (!(raw instanceof Map)) continue;
+                Map<?, ?> weight = (Map<?, ?>) raw;
+                lines.add("第 " + textValue(weight.get("weightNo"), "-") + " 号 · "
+                        + textValue(weight.get("label"), "-") + " · " + numberOrZero(weight.get("weightG")) + "g");
+            }
+        }
+        Object rawSuggestions = result.get("suggestions");
+        if (!pass && rawSuggestions instanceof List && !((List<?>) rawSuggestions).isEmpty()) {
+            lines.add("优先补充建议");
+            for (Object raw : (List<?>) rawSuggestions) {
+                if (!(raw instanceof Map)) continue;
+                Map<?, ?> weight = (Map<?, ?>) raw;
+                lines.add("第 " + textValue(weight.get("weightNo"), "-") + " 号 · "
+                        + textValue(weight.get("label"), "-") + "（" + numberOrZero(weight.get("weightG")) + "g）");
+            }
+        }
+        lines.add("提示：通关标准为总重达到 " + numberOrZero(setting.get("passWeightG"))
+                + "g；本结果为简历自查，仅用于活动体验与简历改进参考。");
         return createTextPdf(lines);
     }
 

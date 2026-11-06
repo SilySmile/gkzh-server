@@ -307,6 +307,11 @@
                 <artifactId>gkzh-zyfxq</artifactId>
                 <version>${gkzh.version}</version>
             </dependency>
+            <dependency>
+                <groupId>com.gkzh</groupId>
+                <artifactId>gkzh-jlcz</artifactId>
+                <version>${gkzh.version}</version>
+            </dependency>
             <!-- 二维码生成 -->
             <dependency>
                 <groupId>com.google.zxing</groupId>
@@ -355,6 +360,7 @@
         <module>gkzh-zyjdc</module>
         <module>gkzh-nlld</module>
         <module>gkzh-zyfxq</module>
+        <module>gkzh-jlcz</module>
         <module>gkzh-zyxxz</module>
     </modules>
     <packaging>pom</packaging>

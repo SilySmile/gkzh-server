@@ -161,6 +161,10 @@ public class WeekAppController extends FrontBaseController {
         if ("zyfxq".equals(game.getGameType())) {
             return AjaxResult.error("请从职业飞行棋入口进入");
         }
+        // 简历称重由自己的 /api/jlcz/records/enter 写入参与记录，禁止通用入口重复建记录。
+        if ("jlcz".equals(game.getGameType())) {
+            return AjaxResult.error("请从简历称重入口进入");
+        }
 
         StudentCheckin student = getCurrentStudent();
         Long studentSchoolId = getCurrentStudentSchoolId();
@@ -284,6 +288,10 @@ public class WeekAppController extends FrontBaseController {
         // 职业飞行棋只有抵达终点通关才写完成状态，禁止通用完成接口直接标记完成。
         if ("zyfxq".equals(game.getGameType())) {
             return AjaxResult.error("请在 3 分钟内抵达终点完成职业飞行棋");
+        }
+        // 简历称重只有提交勾选并生成结果后才写完成状态，禁止通用完成接口直接标记完成。
+        if ("jlcz".equals(game.getGameType())) {
+            return AjaxResult.error("请完成简历称重并查看称重结果");
         }
         GkzhGameParticipation participation = activityWeekService.getLatestParticipation(gameId, student.getUserId());
         if (participation == null) {

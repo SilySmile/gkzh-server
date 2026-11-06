@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.jlcz.mapper.JlczRecordMapper">
+
+    <!-- 参与记录通用筛选条件，列表、汇总、砝码统计和导出共用同一口径。 -->
+    <sql id="recordConditions">
+        <where>
+            r.game_type = 'jlcz'
+            <if test="q.instanceId != null">
+                AND r.instance_id = #{q.instanceId}
+            </if>
+            <if test="q.gameId != null">
+                AND r.game_id = #{q.gameId}
+            </if>
+            <if test="q.schoolId != null">
+                AND r.school_id = #{q.schoolId}
+            </if>
+            <if test="q.startDate != null">
+                AND r.scan_time &gt;= #{q.startDate}
+            </if>
+            <if test="q.endDate != null">
+                AND r.scan_time &lt; #{q.endDate}
+            </if>
+            <if test="q.departmentId != null">
+                AND (r.department_id = #{q.departmentId}
+                     OR EXISTS (SELECT 1 FROM gkzh_school_department d
+                                WHERE d.department_id = r.department_id
+                                  AND FIND_IN_SET(#{q.departmentId}, d.ancestors)))
+            </if>
+            <if test="q.major != null and q.major != ''">
+                AND r.major LIKE CONCAT('%', #{q.major}, '%')
+            </if>
+            <if test="q.studentNo != null and q.studentNo != ''">
+                AND r.student_no LIKE CONCAT('%', #{q.studentNo}, '%')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("男")'>
+                AND r.gender IN ('男', '0')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("女")'>
+                AND r.gender IN ('女', '1')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("其他")'>
+                AND (r.gender IS NULL OR TRIM(r.gender) = '' OR r.gender NOT IN ('男', '0', '女', '1'))
+            </if>
+            <if test='q.resultValue != null and q.resultValue.equals("pass")'>
+                AND r.result = 'pass'
+            </if>
+            <if test='q.resultValue != null and q.resultValue.equals("fail")'>
+                AND r.result = 'fail'
+            </if>
+            <if test='q.status != null and q.status.equals("finished")'>
+                AND r.status = 'finished'
+            </if>
+            <if test='q.status != null and q.status.equals("inProgress")'>
+                AND r.status &lt;&gt; 'finished'
+            </if>
+        </where>
+    </sql>
+
+    <!-- 后台参与记录查询：按活动、结果、学生属性和参与日期动态筛选。 -->
+    <select id="selectAdminRecords" resultType="com.gkzh.jlcz.domain.JlczRecord">
+        SELECT r.* FROM gkzh_jlcz_record r
+        <include refid="recordConditions"/>
+        ORDER BY r.record_id DESC
+    </select>
+
+    <!-- 统计汇总与列表使用同一筛选条件；总重区间只统计已提交的记录。 -->
+    <select id="selectAdminSummary" resultType="java.util.LinkedHashMap">
+        SELECT COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN r.status = 'finished' THEN 1 ELSE 0 END), 0) AS finished,
+               COALESCE(SUM(CASE WHEN r.status = 'finished' AND r.result = 'pass' THEN 1 ELSE 0 END), 0) AS passCount,
+               COALESCE(SUM(CASE WHEN r.status = 'finished' AND r.result = 'fail' THEN 1 ELSE 0 END), 0) AS failCount,
+               COALESCE(ROUND(AVG(CASE WHEN r.status = 'finished' THEN r.total_weight END), 1), 0) AS avgTotalWeight,
+               COALESCE(ROUND(AVG(CASE WHEN r.status = 'finished' THEN r.selected_count END), 1), 0) AS avgSelectedCount,
+               COALESCE(ROUND(AVG(CASE WHEN r.status = 'finished' THEN r.duration_ms END), 0), 0) AS avgDurationMs,
+               COALESCE(SUM(CASE WHEN r.status = 'finished' AND r.total_weight &lt; 60 THEN 1 ELSE 0 END), 0) AS lt60,
+               COALESCE(SUM(CASE WHEN r.status = 'finished' AND r.total_weight &gt;= 60 AND r.total_weight &lt; 70 THEN 1 ELSE 0 END), 0) AS b60,
+               COALESCE(SUM(CASE WHEN r.status = 'finished' AND r.total_weight &gt;= 70 AND r.total_weight &lt; 80 THEN 1 ELSE 0 END), 0) AS b70,
+               COALESCE(SUM(CASE WHEN r.status = 'finished' AND r.total_weight &gt;= 80 AND r.total_weight &lt; 90 THEN 1 ELSE 0 END), 0) AS b80,
+               COALESCE(SUM(CASE WHEN r.status = 'finished' AND r.total_weight &gt;= 90 AND r.total_weight &lt;= 100 THEN 1 ELSE 0 END), 0) AS b90,
+               COALESCE(SUM(CASE WHEN r.status = 'finished' AND r.total_weight &gt; 100 THEN 1 ELSE 0 END), 0) AS gt100
+        FROM gkzh_jlcz_record r
+        <include refid="recordConditions"/>
+    </select>
+
+    <!-- 20 个砝码的勾选人数；只统计每条记录当前称重次数，避免重试历史重复计数。 -->
+    <select id="selectWeightStats" resultType="java.util.LinkedHashMap">
+        SELECT c.weight_no AS weightNo,
+               c.weight_label AS weightLabel,
+               c.weight_g AS weightG,
+               c.category_code AS categoryCode,
+               COUNT(DISTINCT c.record_id) AS selectedCount
+        FROM gkzh_jlcz_choice c
+        JOIN gkzh_jlcz_record r ON r.record_id = c.record_id AND c.attempt_no = r.attempt_no
+        <include refid="recordConditions"/>
+        GROUP BY c.weight_no, c.weight_label, c.weight_g, c.category_code
+        ORDER BY c.weight_no
+    </select>
+
+    <!-- 活动查看页只取最近若干条记录，限制数据量。 -->
+    <select id="selectGameViewRecords" resultType="com.gkzh.jlcz.domain.JlczRecord">
+        SELECT * FROM gkzh_jlcz_record
+        WHERE game_id = #{gameId} AND game_type = 'jlcz'
+        ORDER BY record_id DESC
+        LIMIT #{limit}
+    </select>
+
+</mapper>

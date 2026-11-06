@@ -69,6 +69,10 @@ import com.gkzh.app.service.ZyfxqRecordEnrichService;
 import com.gkzh.zyfxq.domain.ZyfxqRecord;
 import com.gkzh.zyfxq.mapper.ZyfxqRecordMapper;
 import com.gkzh.zyfxq.service.ZyfxqStatisticsService;
+import com.gkzh.app.service.JlczRecordEnrichService;
+import com.gkzh.jlcz.domain.JlczRecord;
+import com.gkzh.jlcz.mapper.JlczRecordMapper;
+import com.gkzh.jlcz.service.JlczStatisticsService;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
@@ -134,6 +138,18 @@ public class GkzhActivityWeekController extends BaseController {
     /** 职业飞行棋记录展示字段补全，与后台列表使用同一口径。 */
     @Autowired
     private ZyfxqRecordEnrichService zyfxqRecordEnrichService;
+
+    /** 简历称重的学校端统计：参与、通关率、平均分量、砝码选择率与缺口。 */
+    @Autowired
+    private JlczStatisticsService jlczStatisticsService;
+
+    /** 简历称重参与记录，查看页只取最近若干条用于展示。 */
+    @Autowired
+    private JlczRecordMapper jlczRecordMapper;
+
+    /** 简历称重记录展示字段补全，与后台列表使用同一口径。 */
+    @Autowired
+    private JlczRecordEnrichService jlczRecordEnrichService;
 
     @Value("${app.qr-code.base-url}")
     private String qrCodeBaseUrl;
@@ -241,7 +257,7 @@ public class GkzhActivityWeekController extends BaseController {
             Map<String, Object> gameView = buildGameView(game);
             String viewType = String.valueOf(gameView.get("viewType"));
             if (!"mind-window".equals(viewType) && !"sszctop".equals(viewType) && !"zyjdc".equals(viewType)
-                    && !"nlld".equals(viewType) && !"zyfxq".equals(viewType)) {
+                    && !"nlld".equals(viewType) && !"zyfxq".equals(viewType) && !"jlcz".equals(viewType)) {
                 return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
             }
             byte[] bytes = createGameViewPdf(gameView);
@@ -274,6 +290,8 @@ public class GkzhActivityWeekController extends BaseController {
         if ("nlld".equals(type)) viewType = "nlld";
         // 职业飞行棋固定使用专属两页模板，配置缺失时也不降级为通用空白页。
         if ("zyfxq".equals(type)) viewType = "zyfxq";
+        // 简历称重固定使用专属两页模板，配置缺失时也不降级为通用空白页。
+        if ("jlcz".equals(type)) viewType = "jlcz";
         view.put("gameId", game.getGameId());
         view.put("gameTitle", game.getTitle());
         view.put("gameType", type);
@@ -282,6 +300,7 @@ public class GkzhActivityWeekController extends BaseController {
         if ("zyjdc".equals(viewType)) return buildZyjdcGameView(game, view);
         if ("nlld".equals(viewType)) return buildNlldGameView(game, view);
         if ("zyfxq".equals(viewType)) return buildZyfxqGameView(game, view);
+        if ("jlcz".equals(viewType)) return buildJlczGameView(game, view);
         if (!"mind-window".equals(viewType)) {
             view.put("message", "该游戏暂未配置查看模板");
             view.put("pages", new ArrayList<>());
@@ -409,6 +428,20 @@ public class GkzhActivityWeekController extends BaseController {
         view.putAll(stats);
         List<ZyfxqRecord> records = zyfxqRecordMapper.selectGameViewRecords(game.getGameId(), 50);
         view.put("records", zyfxqRecordEnrichService.enrich(records));
+        view.put("recordLimit", 50);
+        return view;
+    }
+
+    /**
+     * 构建简历称重活动查看数据（结果输出-学校端）：
+     * 第一页展示参与人数、完成称重人数、通关率、平均简历分量与最近记录；
+     * 第二页展示 20 个砝码选择率、四大类获得情况、总重区间分布与简要分析。
+     */
+    private Map<String, Object> buildJlczGameView(GkzhActivityGame game, Map<String, Object> view) {
+        Map<String, Object> stats = jlczStatisticsService.gameViewStats(game.getGameId());
+        view.putAll(stats);
+        List<JlczRecord> records = jlczRecordMapper.selectGameViewRecords(game.getGameId(), 50);
+        view.put("records", jlczRecordEnrichService.enrich(records));
         view.put("recordLimit", 50);
         return view;
     }
@@ -545,6 +578,14 @@ public class GkzhActivityWeekController extends BaseController {
             pages.add(drawZyfxqQuestionStatsPage((List<Map<String, Object>>) view.get("questionTypeStats"),
                     (List<Map<String, Object>>) view.get("questionStats"),
                     (List<Map<String, Object>>) view.get("wrongQuestions"),
+                    String.valueOf(view.get("analysis")), title));
+        } else if ("jlcz".equals(view.get("viewType"))) {
+            pages.add(drawJlczOverviewPage((Map<String, Object>) view.get("summary"),
+                    (List<Map<String, Object>>) view.get("records"), title));
+            pages.add(drawJlczWeightStatsPage((Map<String, Object>) view.get("summary"),
+                    (List<Map<String, Object>>) view.get("weightStats"),
+                    (List<Map<String, Object>>) view.get("categoryStats"),
+                    (List<Map<String, Object>>) view.get("distribution"),
                     String.valueOf(view.get("analysis")), title));
         } else {
             pages.add(drawHollandPage((List<HollandCode>) view.get("hollandCodes"), title));
@@ -1028,6 +1069,145 @@ public class GkzhActivityWeekController extends BaseController {
     /** 生成职场 TOP 第三页：与 Web 查看页相同的简要分析文本。 */
     private BufferedImage drawTextAnalysisPage(String analysis, String title, String pageTitle) {
         BufferedImage image = newViewImage(1527); Graphics2D g = image.createGraphics(); g.setColor(new Color(26, 44, 74)); g.setFont(new Font("Microsoft YaHei", Font.BOLD, 42)); g.drawString(title + "—" + pageTitle, 48, 72); g.setColor(Color.WHITE); g.fillRoundRect(48, 128, 984, 520, 24, 24); g.setColor(new Color(52, 73, 94)); g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 28)); drawWrapped(g, analysis, 88, 210, 900, 48); g.dispose(); return image;
+    }
+
+    /** 简历称重 PDF 第一页：整体参与数据 + 最近学生称重明细。 */
+    private BufferedImage drawJlczOverviewPage(Map<String, Object> summary, List<Map<String, Object>> records,
+                                               String title) {
+        List<Map<String, Object>> rows = records == null ? new ArrayList<>() : records;
+        int show = Math.min(rows.size(), 18);
+        int height = Math.max(1527, 240 + show * 50);
+        BufferedImage image = newViewImage(height);
+        Graphics2D g = image.createGraphics();
+        g.setColor(new Color(26, 44, 74));
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 42));
+        g.drawString(title + "—简历称重整体数据", 48, 72);
+
+        Map<String, Object> value = summary == null ? new LinkedHashMap<>() : summary;
+        g.setColor(new Color(52, 73, 94));
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 22));
+        g.drawString("扫码参与：" + text(value.get("participantCount")) + " 人    完成称重：" + text(value.get("finishedCount"))
+                + " 人    通关：" + text(value.get("passCount")) + " 人    通关率：" + text(value.get("passRate"))
+                + "%    平均分量：" + text(value.get("avgTotalWeight")) + "g", 48, 118);
+
+        int y = 150;
+        String[] headers = {"序号", "学生", "学号", "院系", "专业", "总量", "结果", "提交时间"};
+        int[] xs = {70, 130, 250, 370, 500, 650, 760, 850};
+        g.setColor(new Color(22, 119, 255));
+        g.fillRect(48, y, 984, 44);
+        g.setColor(Color.WHITE);
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 18));
+        for (int i = 0; i < headers.length; i++) {
+            g.drawString(headers[i], xs[i], y + 28);
+        }
+        y += 44;
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 17));
+        for (int i = 0; i < show; i++) {
+            Map<String, Object> row = rows.get(i);
+            g.setColor(i % 2 == 0 ? new Color(248, 250, 253) : Color.WHITE);
+            g.fillRect(48, y, 984, 50);
+            g.setColor(new Color(52, 73, 94));
+            g.drawString(String.valueOf(i + 1), xs[0], y + 31);
+            g.drawString(cut(text(row.get("studentName")), 5), xs[1], y + 31);
+            g.drawString(cut(text(row.get("studentNo")), 10), xs[2], y + 31);
+            g.drawString(cut(text(row.get("departmentName")), 7), xs[3], y + 31);
+            g.drawString(cut(text(row.get("major")), 7), xs[4], y + 31);
+            g.drawString(row.get("totalWeight") == null ? "-" : row.get("totalWeight") + "g", xs[5], y + 31);
+            g.drawString(cut(jlczResultText(text(row.get("status")), text(row.get("result"))), 4), xs[6], y + 31);
+            g.drawString(timeText(row.get("finishTime")), xs[7], y + 31);
+            y += 50;
+        }
+        g.dispose();
+        return image;
+    }
+
+    /** 简历称重 PDF 第二页：20 个砝码选择率、四大类获得情况、总重分布与简要分析。 */
+    private BufferedImage drawJlczWeightStatsPage(Map<String, Object> summary, List<Map<String, Object>> weightStats,
+                                                  List<Map<String, Object>> categoryStats,
+                                                  List<Map<String, Object>> distribution,
+                                                  String analysis, String title) {
+        List<Map<String, Object>> weights = weightStats == null ? new ArrayList<>() : weightStats;
+        List<Map<String, Object>> categories = categoryStats == null ? new ArrayList<>() : categoryStats;
+        List<Map<String, Object>> buckets = distribution == null ? new ArrayList<>() : distribution;
+        Map<String, Object> value = summary == null ? new LinkedHashMap<>() : summary;
+        int height = Math.max(1527, 210 + weights.size() * 40 + 120 + categories.size() * 36 + 320);
+        BufferedImage image = newViewImage(height);
+        Graphics2D g = image.createGraphics();
+        g.setColor(new Color(26, 44, 74));
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 42));
+        g.drawString(title + "—砝码选择率与缺口", 48, 72);
+        g.setColor(new Color(52, 73, 94));
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 21));
+        g.drawString("已称重 " + text(value.get("finishedCount")) + " 人    通关 "
+                + text(value.get("passCount")) + " 人    平均勾选 " + text(value.get("avgSelectedCount"))
+                + " 项    平均用时 " + text(value.get("avgDurationSeconds")) + " 秒", 48, 112);
+
+        int y = 140;
+        String[] headers = {"挂钩号", "砝码标签", "类别", "重量", "勾选人数", "选择率", "未勾选"};
+        int[] xs = {70, 150, 320, 640, 720, 830, 930};
+        g.setColor(new Color(22, 119, 255));
+        g.fillRect(48, y, 984, 42);
+        g.setColor(Color.WHITE);
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 17));
+        for (int i = 0; i < headers.length; i++) {
+            g.drawString(headers[i], xs[i], y + 27);
+        }
+        y += 42;
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 17));
+        for (int i = 0; i < weights.size(); i++) {
+            Map<String, Object> row = weights.get(i);
+            g.setColor(i % 2 == 0 ? new Color(248, 250, 253) : Color.WHITE);
+            g.fillRect(48, y, 984, 40);
+            g.setColor(new Color(52, 73, 94));
+            g.drawString(String.valueOf(row.get("weightNo")), xs[0], y + 26);
+            g.drawString(cut(text(row.get("label")), 8), xs[1], y + 26);
+            g.drawString(cut(text(row.get("categoryName")), 10), xs[2], y + 26);
+            g.drawString(row.get("weightG") + "g", xs[3], y + 26);
+            g.drawString(String.valueOf(row.get("selectedCount")), xs[4], y + 26);
+            g.drawString(row.get("selectedRate") + "%", xs[5], y + 26);
+            g.drawString(String.valueOf(row.get("gapCount")), xs[6], y + 26);
+            y += 40;
+        }
+
+        y += 30;
+        g.setColor(new Color(26, 44, 74));
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 22));
+        g.drawString("四大类获得情况与总重区间分布", 48, y);
+        y += 28;
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 18));
+        g.setColor(new Color(52, 73, 94));
+        for (Map<String, Object> category : categories) {
+            g.drawString(text(category.get("categoryName")) + "：可获 " + text(category.get("availableWeight"))
+                    + "g，人均获得 " + text(category.get("avgWeightPerParticipant"))
+                    + "g，类别选择率 " + text(category.get("selectionRate")) + "%", 72, y);
+            y += 32;
+        }
+        StringBuilder bucketText = new StringBuilder("总重区间：");
+        for (Map<String, Object> bucket : buckets) {
+            if (bucketText.length() > 5) {
+                bucketText.append("；");
+            }
+            bucketText.append(bucket.get("label")).append(" ").append(bucket.get("count")).append(" 人");
+        }
+        y += 6;
+        g.drawString(bucketText.toString(), 72, y);
+        y += 36;
+
+        g.setColor(Color.WHITE);
+        g.fillRoundRect(48, y, 984, 240, 20, 20);
+        g.setColor(new Color(52, 73, 94));
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 22));
+        drawWrapped(g, analysis, 76, y + 40, 928, 36);
+        g.dispose();
+        return image;
+    }
+
+    /** 简历称重记录结果文案，供 PDF 明细使用。 */
+    private String jlczResultText(String status, String result) {
+        if (!"finished".equals(status)) {
+            return "进行中";
+        }
+        return "pass".equals(result) ? "通关" : "未通关";
     }
 
     private int drawWrapped(Graphics2D g, String text, int x, int y, int maxWidth, int lineHeight) { FontMetrics fm = g.getFontMetrics(); StringBuilder line = new StringBuilder(); for (int i = 0; text != null && i < text.length(); i++) { String candidate = line.toString() + text.charAt(i); if (fm.stringWidth(candidate) > maxWidth && line.length() > 0) { g.drawString(line.toString(), x, y); y += lineHeight; line.setLength(0); } line.append(text.charAt(i)); } if (line.length() > 0) { g.drawString(line.toString(), x, y); y += lineHeight; } return y; }

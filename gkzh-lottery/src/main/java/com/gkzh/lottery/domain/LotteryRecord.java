@@ -47,6 +47,13 @@ public class LotteryRecord extends BaseEntity
     @Excel(name = "奖品名称")
     private String prizeTitle;
 
+    /** 中奖时奖品是否需要核销（1-需核销，0-无需核销；历史记录默认需核销） */
+    @Excel(name = "是否需核销", readConverterExp = "1=需核销,0=无需核销")
+    private String needRedemption;
+
+    /** 中奖奖品类型（1-实物奖品，2-虚拟奖品，3-谢谢参与） */
+    private Integer prizeType;
+
     /** 抽奖时间 */
     @JsonFormat(pattern = "yyyy-MM-dd")
     @Excel(name = "抽奖时间", width = 30, dateFormat = "yyyy-MM-dd")

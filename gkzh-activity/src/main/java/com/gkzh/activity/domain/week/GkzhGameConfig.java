@@ -30,6 +30,9 @@ public class GkzhGameConfig {
 
     private String configJson;
 
+    /** 是否将该游戏记录纳入后续人物画像，当前 zycck 仅保存标记。 */
+    private String participatePortrait;
+
     /** Web 端查看模板：generic=通用，mind-window=心愿橱窗统计。 */
     private String viewType;
 

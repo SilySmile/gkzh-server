@@ -5,6 +5,7 @@ import java.util.Date;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
 
@@ -45,4 +46,8 @@ public class GkzhActivityWeekInstance {
     private Date updateTime;
 
     private String remark;
+
+    /** 创建活动时选择的学校，仅用于请求参数，不落实例表。 */
+    @TableField(exist = false)
+    private Long schoolId;
 }

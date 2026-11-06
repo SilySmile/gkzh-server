@@ -269,6 +269,11 @@
             </dependency>
             <dependency>
                 <groupId>com.gkzh</groupId>
+                <artifactId>gkzh-zycck</artifactId>
+                <version>${gkzh.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.gkzh</groupId>
                 <artifactId>gkzh-wjyd</artifactId>
                 <version>${gkzh.version}</version>
             </dependency>
@@ -280,6 +285,31 @@
             <dependency>
                 <groupId>com.gkzh</groupId>
                 <artifactId>gkzh-zyxxz</artifactId>
+                <version>${gkzh.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.gkzh</groupId>
+                <artifactId>gkzh-zcyltzj</artifactId>
+                <version>${gkzh.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.gkzh</groupId>
+                <artifactId>gkzh-zyjdc</artifactId>
+                <version>${gkzh.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.gkzh</groupId>
+                <artifactId>gkzh-nlld</artifactId>
+                <version>${gkzh.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.gkzh</groupId>
+                <artifactId>gkzh-zyfxq</artifactId>
+                <version>${gkzh.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.gkzh</groupId>
+                <artifactId>gkzh-jlcz</artifactId>
                 <version>${gkzh.version}</version>
             </dependency>
             <!-- 二维码生成 -->
@@ -325,6 +355,12 @@
         <module>gkzh-cyzs</module>
         <module>gkzh-zytj</module>
         <module>gkzh-sszctop</module>
+        <module>gkzh-zycck</module>
+        <module>gkzh-zcyltzj</module>
+        <module>gkzh-zyjdc</module>
+        <module>gkzh-nlld</module>
+        <module>gkzh-zyfxq</module>
+        <module>gkzh-jlcz</module>
         <module>gkzh-zyxxz</module>
     </modules>
     <packaging>pom</packaging>

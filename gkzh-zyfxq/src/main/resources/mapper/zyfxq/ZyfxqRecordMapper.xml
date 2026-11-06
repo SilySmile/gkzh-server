@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.zyfxq.mapper.ZyfxqRecordMapper">
+
+    <!-- 参与记录通用筛选条件；后台列表、统计汇总、题目统计、活动查看和导出共用。 -->
+    <sql id="recordConditions">
+        <where>
+            r.game_type = 'zyfxq'
+            <if test="q.gameId != null">
+                AND r.game_id = #{q.gameId}
+            </if>
+            <if test="q.instanceId != null">
+                AND r.instance_id = #{q.instanceId}
+            </if>
+            <if test="q.schoolId != null">
+                AND r.school_id = #{q.schoolId}
+            </if>
+            <if test="q.departmentId != null">
+                AND (r.department_id = #{q.departmentId}
+                     OR EXISTS (SELECT 1 FROM gkzh_school_department d
+                                WHERE d.department_id = r.department_id
+                                  AND FIND_IN_SET(#{q.departmentId}, d.ancestors)))
+            </if>
+            <if test="q.major != null and q.major != ''">
+                AND r.major LIKE CONCAT('%', #{q.major}, '%')
+            </if>
+            <if test="q.studentNo != null and q.studentNo != ''">
+                AND r.student_no LIKE CONCAT('%', #{q.studentNo}, '%')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("男")'>
+                AND r.gender IN ('男', '0')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("女")'>
+                AND r.gender IN ('女', '1')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("其他")'>
+                AND (r.gender IS NULL OR TRIM(r.gender) = '' OR r.gender NOT IN ('男', '0', '女', '1'))
+            </if>
+            <if test="q.resultValue != null and q.resultValue != ''">
+                AND r.result = #{q.resultValue}
+            </if>
+            <if test="q.status != null and q.status != ''">
+                AND r.status = #{q.status}
+            </if>
+            <if test="q.startDate != null">
+                AND r.scan_time &gt;= #{q.startDate}
+            </if>
+            <if test="q.endDate != null">
+                AND r.scan_time &lt; #{q.endDate}
+            </if>
+        </where>
+    </sql>
+
+    <!-- 后台参与记录分页查询：按活动、结果、学生属性和参与日期动态筛选。 -->
+    <select id="selectAdminRecords" resultType="com.gkzh.zyfxq.domain.ZyfxqRecord">
+        SELECT r.* FROM gkzh_zyfxq_record r
+        <include refid="recordConditions"/>
+        ORDER BY r.record_id DESC
+    </select>
+
+    <!-- 结果输出-学校端第一页：参与人数、通关人数、平均单局耗时、累计掷骰次数与累计步数。 -->
+    <select id="selectAdminSummary" resultType="java.util.LinkedHashMap">
+        SELECT COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN r.status = 'finished' THEN 1 ELSE 0 END), 0) AS finishedCount,
+               COALESCE(SUM(CASE WHEN r.result = 'win' THEN 1 ELSE 0 END), 0) AS winCount,
+               COALESCE(SUM(CASE WHEN r.result = 'lose' THEN 1 ELSE 0 END), 0) AS loseCount,
+               COALESCE(SUM(CASE WHEN r.status = 'playing' THEN 1 ELSE 0 END), 0) AS playingCount,
+               COALESCE(AVG(CASE WHEN r.status = 'finished' AND r.duration_ms IS NOT NULL
+                                 THEN r.duration_ms END), 0) AS avgDurationMs,
+               COALESCE(SUM(r.roll_count), 0) AS rollTotal,
+               COALESCE(SUM(r.step_total), 0) AS stepTotal,
+               COALESCE(SUM(r.answer_count), 0) AS answerTotal,
+               COALESCE(SUM(r.correct_count), 0) AS correctTotal,
+               COALESCE(SUM(r.timeout_count), 0) AS timeoutTotal
+        FROM gkzh_zyfxq_record r
+        <include refid="recordConditions"/>
+    </select>
+
+    <!-- 结果输出-学校端第二页（知识点口径）：按职业问答/情景任务卡两类汇总正确率与超时占比。 -->
+    <select id="selectQuestionTypeStats" resultType="java.util.LinkedHashMap">
+        SELECT a.question_type AS questionType,
+               COUNT(*) AS answerCount,
+               COALESCE(SUM(CASE WHEN a.is_correct = '1' THEN 1 ELSE 0 END), 0) AS correctCount,
+               COALESCE(SUM(CASE WHEN a.is_timeout = '1' THEN 1 ELSE 0 END), 0) AS timeoutCount,
+               COALESCE(AVG(a.cost_ms), 0) AS avgCostMs
+        FROM gkzh_zyfxq_answer a
+        JOIN gkzh_zyfxq_record r ON r.record_id = a.record_id
+        <include refid="recordConditions"/>
+        GROUP BY a.question_type
+    </select>
+
+    <!-- 结果输出-学校端第二页（题目口径）：每题正确率、平均作答用时与超时次数。 -->
+    <select id="selectQuestionStats" resultType="java.util.LinkedHashMap">
+        SELECT a.question_id AS questionId,
+               MAX(a.question_type) AS questionType,
+               MAX(a.question_title) AS questionTitle,
+               COUNT(*) AS answerCount,
+               COALESCE(SUM(CASE WHEN a.is_correct = '1' THEN 1 ELSE 0 END), 0) AS correctCount,
+               COALESCE(SUM(CASE WHEN a.is_timeout = '1' THEN 1 ELSE 0 END), 0) AS timeoutCount,
+               COALESCE(AVG(a.cost_ms), 0) AS avgCostMs
+        FROM gkzh_zyfxq_answer a
+        JOIN gkzh_zyfxq_record r ON r.record_id = a.record_id
+        <include refid="recordConditions"/>
+        GROUP BY a.question_id
+        ORDER BY answerCount DESC, a.question_id ASC
+    </select>
+
+    <!-- 活动查看页：按游戏取最近若干条记录，避免一次加载全部历史数据。 -->
+    <select id="selectGameViewRecords" resultType="com.gkzh.zyfxq.domain.ZyfxqRecord">
+        SELECT * FROM gkzh_zyfxq_record
+        WHERE game_id = #{gameId} AND game_type = 'zyfxq'
+        ORDER BY record_id DESC
+        LIMIT #{limit}
+    </select>
+</mapper>

@@ -4,4 +4,6 @@ import com.baomidou.mybatisplus.annotation.*; import com.fasterxml.jackson.annot
 @Data @TableName("gkzh_sszctop_student_report") public class SszctopStudentReport { @TableId(type=IdType.AUTO) private Long reportId; private Long roomId,instanceId,gameId,userId,studentId; private String dimensionSnapshot,careersSnapshot,sharedOrderSnapshot,standardOrderSnapshot,result,reportJson; @JsonFormat(pattern="yyyy-MM-dd HH:mm:ss", timezone="GMT+8") private Date createTime;
  /** 维度排序中该职业对应的说明快照，学生端报告仅用于展示，不写入独立字段。 */
  @TableField(exist=false) private List<SszctopDimensionRank> rankDetails;
+ /** 报告所属活动类型：career_week=生涯活动、job_week=就业活动；由接口按活动实例回填，不落库。 */
+ @TableField(exist=false) private String bizType;
 }

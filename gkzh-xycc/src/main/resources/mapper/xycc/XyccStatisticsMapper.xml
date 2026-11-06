@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 心愿橱窗统计：每位学生每个活动取最新一次选择，关联学生档案和活动区域。 -->
+<mapper namespace="com.gkzh.xycc.mapper.XyccStatisticsMapper">
+
+    <sql id="selectionConditions">
+        <where>
+            <if test="q.instanceId != null">
+                AND apr.activity_id = #{q.instanceId}
+            </if>
+            <if test="q.schoolId != null">
+                AND COALESCE(s.school_id, ar.school_id) = #{q.schoolId}
+            </if>
+            <if test="q.departmentId != null">
+                AND (d.parent_id = #{q.departmentId} OR s.department_id = #{q.departmentId})
+            </if>
+            <if test="q.major != null and q.major != ''">
+                AND d.title LIKE CONCAT('%', #{q.major}, '%')
+            </if>
+            <if test="q.studentNo != null and q.studentNo != ''">
+                AND s.student_no LIKE CONCAT('%', #{q.studentNo}, '%')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("男")'>
+                AND s.gender IN ('男', '0')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("女")'>
+                AND s.gender IN ('女', '1')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("其他")'>
+                AND (s.gender IS NULL OR TRIM(s.gender) = '' OR s.gender NOT IN ('男', '0', '女', '1'))
+            </if>
+            <if test="q.code != null and q.code != ''">
+                AND us.pattern_combo_code = #{q.code}
+            </if>
+            <if test="q.startDate != null">
+                AND us.created_at &gt;= #{q.startDate}
+            </if>
+            <if test="q.endDate != null">
+                AND us.created_at &lt; #{q.endDate}
+            </if>
+        </where>
+    </sql>
+
+    <!-- 通过活动参与记录关联选择结果，兼容 game_id 为空的历史数据。 -->
+    <select id="selectSelectionRows" resultType="java.util.LinkedHashMap">
+        SELECT us.user_selection_id AS userSelectionId,
+               us.user_id AS userId,
+               us.game_id AS gameId,
+               us.pattern_combo_code AS patternComboCode,
+               us.pattern_ids AS patternIds,
+               us.created_at AS createdAt,
+               apr.activity_id AS instanceId,
+               s.student_name AS studentName,
+               s.student_no AS studentNo,
+               s.gender AS gender,
+               COALESCE(s.school_id, ar.school_id) AS schoolId,
+               d.parent_id AS departmentId,
+               s.department_id AS majorId,
+               sc.title AS schoolName,
+               c.title AS departmentName,
+               d.title AS major
+        FROM xycc_user_selection us
+        INNER JOIN gkzh_activity_participation_record apr
+                ON apr.module_id = us.user_selection_id AND apr.participation_type = 4
+        INNER JOIN (
+            SELECT user_id, activity_id, MAX(record_id) AS record_id
+            FROM gkzh_activity_participation_record
+            WHERE participation_type = 4
+            GROUP BY user_id, activity_id
+        ) latest ON latest.record_id = apr.record_id
+        LEFT JOIN gkzh_activity_game ag ON ag.game_id = us.game_id
+        LEFT JOIN gkzh_activity_area ar ON ar.area_id = ag.area_id
+        LEFT JOIN gkzh_student s ON s.user_id = us.user_id AND s.del_flag = '0'
+        LEFT JOIN gkzh_school sc ON sc.school_id = COALESCE(s.school_id, ar.school_id)
+        LEFT JOIN gkzh_school_department d ON d.department_id = s.department_id
+        LEFT JOIN gkzh_school_department c ON c.department_id = d.parent_id
+        <include refid="selectionConditions"/>
+        ORDER BY us.user_selection_id DESC
+    </select>
+
+    <!-- 复合编码对应的职业方向和工作环境偏好，一次取全量供统计和明细复用。 -->
+    <select id="selectComboTitles" resultType="java.util.LinkedHashMap">
+        SELECT pc.code AS code,
+               GROUP_CONCAT(DISTINCT c.title) AS careerTitles,
+               GROUP_CONCAT(DISTINCT e.title) AS envTitles
+        FROM xycc_pattern_combo pc
+        LEFT JOIN xycc_pattern_combo_career pcc ON pcc.combo_id = pc.pattern_combo_id
+        LEFT JOIN xycc_career c ON c.career_id = pcc.career_id
+        LEFT JOIN xycc_pattern_combo_env pce ON pce.combo_id = pc.pattern_combo_id
+        LEFT JOIN xycc_work_env e ON e.work_env_id = pce.env_id
+        GROUP BY pc.code
+    </select>
+
+</mapper>

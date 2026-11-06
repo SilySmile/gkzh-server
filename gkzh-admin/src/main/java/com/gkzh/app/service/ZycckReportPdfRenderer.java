@@ -1,0 +1,282 @@
+package com.gkzh.app.service;
+
+import com.gkzh.zycck.domain.ZycckCareerQuestion;
+import com.gkzh.zycck.domain.ZycckRecord;
+import org.apache.pdfbox.pdmodel.*;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
+import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
+
+import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.io.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 按页绘制，先换行再分页；中文随页面嵌入，不依赖阅读器字体。
+ */
+public final class ZycckReportPdfRenderer {
+    // 成品按 76mm × 130mm 热敏/标签纸输出（PDF 点单位）。
+    private static final PDRectangle REPORT_PAPER = new PDRectangle(76f / 25.4f * 72f, 130f / 25.4f * 72f);
+    private static final int WIDTH = 900, HEIGHT = 1539, PAD = 54, BOTTOM = 1450;
+    private final PDDocument document;
+    private final Font font;
+    private BufferedImage image;
+    private Graphics2D graphics;
+    private int y;
+
+    private ZycckReportPdfRenderer(PDDocument document) throws IOException {
+        this.document = document;
+        Font available = null;
+        for (Font candidate : GraphicsEnvironment.getLocalGraphicsEnvironment().getAllFonts()) {
+            if (candidate.canDisplayUpTo("未来职业探索报告介绍为什么") == -1) {
+                available = candidate;
+                break;
+            }
+        }
+        if (available == null) throw new IOException("服务器缺少中文字体，请安装 Noto Sans CJK 后重新生成报告");
+        font = available;
+    }
+
+    public static byte[] render(ZycckRecord record, List<ZycckCareerQuestion> careers, Map<Long, String> categoryNames) throws IOException {
+        return render(record, careers, careers, categoryNames);
+    }
+
+    public static byte[] render(ZycckRecord record, List<ZycckCareerQuestion> careers, List<ZycckCareerQuestion> further, Map<Long, String> categoryNames) throws IOException {
+        return render(record, careers, further, categoryNames, "");
+    }
+
+    public static byte[] render(ZycckRecord record, List<ZycckCareerQuestion> careers, List<ZycckCareerQuestion> further, Map<Long, String> categoryNames, String studentName) throws IOException {
+        StringBuilder html = new StringBuilder("<!DOCTYPE html><html><head><meta charset='UTF-8'/><style>")
+                .append("@page{size:A4;margin:18mm}body{font-family:GKZH,sans-serif;color:#26384d;font-size:12pt;line-height:1.6}")
+                .append("h1{font-size:23pt;color:#244e87;border-bottom:2px solid #78a9d8;padding-bottom:10px}")
+                .append("h2{font-size:15pt;color:#244e87;margin:22px 0 8px;page-break-after:avoid}")
+                .append(".meta{color:#65758a;margin:4px 0 18px}.row{padding:10px 12px;border-bottom:1px solid #e5eaf0;page-break-inside:avoid}")
+                .append(".name{font-weight:bold;color:#24364b}.intro{color:#53657a;margin-top:4px}.tag{display:inline-block;margin:4px 8px 4px 0;padding:4px 10px;border:1px solid #d6e2f0;border-radius:12px}")
+                .append("</style></head><body><h1>我的未来职业探索清单</h1>");
+        if (studentName != null && !studentName.trim().isEmpty()) {
+            html.append("<div class='meta'>学生：").append(escapeHtml(studentName)).append("</div>");
+        }
+        html.append("<div class='meta'>进一步了解的职业：").append(careers.size()).append(" 个</div>");
+        html.append("<h2>职业大类比例</h2>");
+        if (further.isEmpty()) html.append("<div class='row'>本次没有记录到职业信息。</div>");
+        else {
+            Map<String, Integer> counts = new java.util.LinkedHashMap<>();
+            for (ZycckCareerQuestion career : further) {
+                String category = categoryNames.get(career.getCategoryId());
+                if (category == null || category.trim().isEmpty()) category = "其他";
+                counts.put(category, counts.getOrDefault(category, 0) + 1);
+            }
+            for (Map.Entry<String, Integer> entry : counts.entrySet()) {
+                int percent = Math.round(entry.getValue() * 100f / further.size());
+                html.append("<span class='tag'>").append(escapeHtml(entry.getKey())).append(" ")
+                        .append(percent).append("%</span>");
+            }
+        }
+        html.append("<h2>进一步了解的职业</h2>");
+        if (careers.isEmpty()) html.append("<div class='row'>本次没有记录到职业信息。</div>");
+        for (int i = 0; i < careers.size(); i++) {
+            ZycckCareerQuestion career = careers.get(i);
+            html.append("<div class='row'><div class='name'>").append(i + 1).append(". ")
+                    .append(escapeHtml(value(career.getCareerName()))).append("</div><div class='intro'>")
+                    .append(escapeHtml(value(career.getOneLineIntro()))).append("</div></div>");
+        }
+        html.append("</body></html>");
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            PdfRendererBuilder builder = new PdfRendererBuilder().withHtmlContent(html.toString(), null).toStream(out);
+            ReportPdfFont.register(builder);
+            builder.run();
+            return out.toByteArray();
+        } catch (Exception e) {
+            throw new IOException("未来职业报告 PDF 生成失败", e);
+        }
+    }
+
+    private static String escapeHtml(String value) {
+        if (value == null) return "";
+        return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                .replace("\"", "&quot;").replace("'", "&#39;");
+    }
+
+    /**
+     * 兼容旧调用方；正式报告由服务层传入职业大类名称。
+     */
+    public static byte[] render(ZycckRecord record, List<ZycckCareerQuestion> careers) throws IOException {
+        return render(record, careers, java.util.Collections.emptyMap());
+    }
+
+    private static String value(String text) {
+        return text == null || text.trim().isEmpty() ? "暂无介绍" : text.trim();
+    }
+
+    private void newPage() {
+        image = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_RGB);
+        graphics = image.createGraphics();
+        graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        graphics.setColor(Color.WHITE);
+        graphics.fillRect(0, 0, WIDTH, HEIGHT);
+        y = 110;
+    }
+
+    private void flushPage() throws IOException {
+        graphics.setFont(font.deriveFont(24f));
+        graphics.setColor(new Color(0, 0, 0));
+        String footer = "未来职业猜猜看   |   第 " + (document.getNumberOfPages() + 1) + " 页";
+        graphics.drawString(footer, (WIDTH - graphics.getFontMetrics().stringWidth(footer)) / 2, HEIGHT - 52);
+        graphics.dispose();
+        graphics = null;
+        PDPage page = new PDPage(REPORT_PAPER);
+        document.addPage(page);
+        try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
+            stream.drawImage(LosslessFactory.createFromImage(document, image), 0, 0, REPORT_PAPER.getWidth(), REPORT_PAPER.getHeight());
+        }
+    }
+
+    private void ensure(int height) throws IOException {
+        if (y + height > BOTTOM) {
+            flushPage();
+            newPage();
+        }
+    }
+
+    private List<String> wrap(String text, int size, int width, boolean bold) {
+        graphics.setFont(font.deriveFont(bold ? Font.BOLD : Font.PLAIN, (float) size));
+        FontMetrics metrics = graphics.getFontMetrics();
+        List<String> lines = new ArrayList<>();
+        for (String paragraph : text.split("\\R", -1)) {
+            StringBuilder line = new StringBuilder();
+            for (int cp : paragraph.codePoints().toArray()) {
+                String next = new String(Character.toChars(cp));
+                if (line.length() > 0 && metrics.stringWidth(line.toString() + next) > width) {
+                    lines.add(line.toString());
+                    line.setLength(0);
+                }
+                line.append(next);
+            }
+            lines.add(line.toString());
+        }
+        return lines;
+    }
+
+    private void text(String value, int size, boolean bold) throws IOException {
+        for (String line : wrap(value, size, WIDTH - PAD * 2, bold)) {
+            ensure(size + 22);
+            graphics.setFont(font.deriveFont(bold ? Font.BOLD : Font.PLAIN, (float) size));
+            graphics.setColor(bold ? new Color(26, 44, 74) : new Color(75, 85, 99));
+            graphics.drawString(line, PAD, y);
+            y += size + 18;
+        }
+        y += 18;
+    }
+
+    private void studentName(String value) {
+        if (value == null || value.trim().isEmpty()) return;
+        graphics.setFont(font.deriveFont(Font.PLAIN, 32f));
+        graphics.setColor(new Color(75, 85, 99));
+        String label = "学生：" + value.trim();
+        int x = WIDTH - PAD - graphics.getFontMetrics().stringWidth(label);
+        graphics.drawString(label, Math.max(PAD, x), 72);
+    }
+
+    private void pie(List<ZycckCareerQuestion> careers, Map<Long, String> names) throws IOException {
+        if (careers.isEmpty()) return;
+        Map<String, Integer> counts = new java.util.LinkedHashMap<>();
+        for (ZycckCareerQuestion c : careers) {
+            String n = names.get(c.getCategoryId());
+            counts.put(n == null ? "其他" : n, counts.getOrDefault(n == null ? "其他" : n, 0) + 1);
+        }
+        ensure(430);
+        text("职业大类比例", 27, true);
+        int cx = WIDTH / 2, cy = y + 155, radius = 125;
+        double start = -Math.PI / 2;
+        Color[] colors = {new Color(255, 173, 187), new Color(253, 199, 205), new Color(254, 215, 218), new Color(201, 212, 247), new Color(172, 191, 235)};
+        int index = 0;
+        for (Map.Entry<String, Integer> e : counts.entrySet()) {
+            double end = start + Math.PI * 2 * e.getValue() / careers.size();
+            graphics.setColor(new Color(0, 0, 0));
+            graphics.fillArc(cx - radius, cy - radius, radius * 2, radius * 2, (int) Math.toDegrees(-end), (int) Math.toDegrees(end - start));
+            start = end;
+        }
+        y = cy + radius + 36;
+        index = 0;
+        for (Map.Entry<String, Integer> e : counts.entrySet()) {
+            graphics.setColor(new Color(0, 0, 0));
+            graphics.fillOval(PAD, y - 16, 16, 16);
+            graphics.setColor(new Color(0, 0, 0));
+            graphics.setFont(font.deriveFont(24f));
+            graphics.drawString(e.getKey() + " " + Math.round(e.getValue() * 100f / careers.size()) + "%", PAD + 24, y);
+            y += 30;
+            index++;
+        }
+    }
+
+    private void careerLine(int index, ZycckCareerQuestion career) throws IOException {
+        // 职业名称和一句话介绍分上下两行，统一留出间距，避免介绍与下一条内容拥挤。
+        int width = WIDTH - PAD * 2;
+        List<String> nameLines = wrap(index + ". " + value(career.getCareerName()), 32, width, true);
+        List<String> introLines = wrap(value(career.getOneLineIntro()), 28, width - 18, false);
+        // 一句话介绍最多占两行，超长内容截断，确保报告始终保持单页。
+        if (introLines.size() > 2) introLines = new ArrayList<>(introLines.subList(0, 2));
+        int blockHeight = nameLines.size() * 32 + introLines.size() * 27 + 24;
+        ensure(blockHeight);
+
+        graphics.setColor(new Color(0, 0, 0));
+        graphics.setFont(font.deriveFont(Font.BOLD, 38f));
+        y += 38;
+        for (String line : nameLines) {
+            graphics.drawString(line, PAD, y);
+            y += 46;
+        }
+        graphics.setColor(new Color(0, 0, 0));
+        graphics.setFont(font.deriveFont(Font.PLAIN, 34f));
+        for (String line : introLines) {
+            graphics.drawString(line, PAD + 18, y);
+            y += 20;
+        }
+        y += 24;
+    }
+
+    private void section(String title, String body) throws IOException {
+        ensure(140);
+        text(title, 32, true);
+        text(value(body), 30, false);
+    }
+
+    private void dayItems(String value) throws IOException {
+        String[] items = value(value).split("\\R");
+        int columnWidth = (WIDTH - PAD * 2) / 4;
+        for (int start = 0; start < items.length; start += 4) {
+            List<List<String>> cells = new ArrayList<>();
+            int maxLines = 0;
+            for (int i = start; i < Math.min(start + 4, items.length); i++) {
+                List<String> lines = wrap(items[i].replace('｜', '\n'), 25, columnWidth - 24, false);
+                cells.add(lines);
+                maxLines = Math.max(maxLines, lines.size());
+            }
+            // 较长的日常描述分段换页，不能超出纸面或丢失后半段。
+            for (int offset = 0; offset < maxLines; ) {
+                ensure(180);
+                int count = Math.min(maxLines - offset, Math.max(1, (BOTTOM - y - 100) / 38));
+                for (int column = 0; column < cells.size(); column++) {
+                    int x = PAD + column * columnWidth;
+                    graphics.setColor(new Color(255, 244, 232));
+                    graphics.fillRoundRect(x + columnWidth / 2 - 30, y - 12, 60, 60, 16, 16);
+                    graphics.setFont(font.deriveFont(Font.BOLD, 26f));
+                    graphics.setColor(new Color(197, 109, 27));
+                    graphics.drawString(String.valueOf(start + column + 1), x + columnWidth / 2 - 8, y + 28);
+                    List<String> lines = cells.get(column);
+                    graphics.setFont(font.deriveFont(25f));
+                    graphics.setColor(new Color(75, 85, 99));
+                    for (int n = offset; n < Math.min(offset + count, lines.size()); n++) {
+                        String line = lines.get(n);
+                        graphics.drawString(line, x + (columnWidth - graphics.getFontMetrics().stringWidth(line)) / 2, y + 90 + (n - offset) * 38);
+                    }
+                }
+                y += 110 + count * 38;
+                offset += count;
+            }
+        }
+    }
+}

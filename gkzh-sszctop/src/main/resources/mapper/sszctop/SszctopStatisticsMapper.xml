@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 谁是职场TOP统计查询：报告 + 学生档案 + 活动区域学校 + 院系/专业。 -->
+<mapper namespace="com.gkzh.sszctop.mapper.SszctopStatisticsMapper">
+
+    <!-- 统计、明细和导出的统一筛选条件；日期按报告完成时间 create_time。 -->
+    <sql id="reportConditions">
+        <where>
+            <if test="q.instanceId != null">
+                AND r.instance_id = #{q.instanceId}
+            </if>
+            <if test="q.schoolId != null">
+                AND COALESCE(s.school_id, ar.school_id) = #{q.schoolId}
+            </if>
+            <if test="q.departmentId != null">
+                AND (d.parent_id = #{q.departmentId} OR s.department_id = #{q.departmentId})
+            </if>
+            <if test="q.major != null and q.major != ''">
+                AND d.title LIKE CONCAT('%', #{q.major}, '%')
+            </if>
+            <if test="q.studentNo != null and q.studentNo != ''">
+                AND s.student_no LIKE CONCAT('%', #{q.studentNo}, '%')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("男")'>
+                AND s.gender IN ('男', '0')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("女")'>
+                AND s.gender IN ('女', '1')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("其他")'>
+                AND (s.gender IS NULL OR TRIM(s.gender) = '' OR s.gender NOT IN ('男', '0', '女', '1'))
+            </if>
+            <if test="q.result != null and q.result != ''">
+                AND r.result = #{q.result}
+            </if>
+            <if test="q.startDate != null">
+                AND r.create_time &gt;= #{q.startDate}
+            </if>
+            <if test="q.endDate != null">
+                AND r.create_time &lt; #{q.endDate}
+            </if>
+        </where>
+    </sql>
+
+    <!-- 历史报告可能没有学生档案，此时仍按活动区域回退学校，保证活动整体人数可统计。 -->
+    <select id="selectReportRows" resultType="java.util.LinkedHashMap">
+        SELECT r.report_id AS reportId,
+               r.instance_id AS instanceId,
+               r.game_id AS gameId,
+               r.user_id AS userId,
+               r.student_id AS studentId,
+               r.result AS result,
+               r.dimension_snapshot AS dimensionSnapshot,
+               r.careers_snapshot AS careersSnapshot,
+               r.shared_order_snapshot AS sharedOrderSnapshot,
+               r.create_time AS createTime,
+               s.student_name AS studentName,
+               s.student_no AS studentNo,
+               s.gender AS gender,
+               COALESCE(s.school_id, ar.school_id) AS schoolId,
+               d.parent_id AS departmentId,
+               s.department_id AS majorId,
+               sc.title AS schoolName,
+               c.title AS departmentName,
+               d.title AS major
+        FROM gkzh_sszctop_student_report r
+        LEFT JOIN gkzh_activity_game ag ON ag.game_id = r.game_id
+        LEFT JOIN gkzh_activity_area ar ON ar.area_id = ag.area_id
+        LEFT JOIN gkzh_student s ON s.student_id = r.student_id AND s.del_flag = '0'
+        LEFT JOIN gkzh_school sc ON sc.school_id = COALESCE(s.school_id, ar.school_id)
+        LEFT JOIN gkzh_school_department d ON d.department_id = s.department_id
+        LEFT JOIN gkzh_school_department c ON c.department_id = d.parent_id
+        <include refid="reportConditions"/>
+        ORDER BY r.report_id DESC
+    </select>
+
+</mapper>

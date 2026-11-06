@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.gkzh</groupId>
+        <artifactId>gkzh</artifactId>
+        <version>3.9.0</version>
+    </parent>
+    <artifactId>gkzh-nlld</artifactId>
+    <description>职业价值观·能量雷达（nlld）6 关 5 选 2 单人测评模块</description>
+    <dependencies>
+        <dependency>
+            <groupId>com.gkzh</groupId>
+            <artifactId>gkzh-common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.gkzh</groupId>
+            <artifactId>gkzh-activity</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+</project>

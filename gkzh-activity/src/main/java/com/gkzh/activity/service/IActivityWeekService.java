@@ -22,6 +22,8 @@ public interface IActivityWeekService {
 
     List<GkzhGameConfig> listGameConfigs(String gameType);
 
+    List<GkzhGameConfig> listGameConfigs(String gameType, String status);
+
     int saveGameConfig(GkzhGameConfig config);
 
     int deleteGameConfig(Long configId);
@@ -32,11 +34,17 @@ public interface IActivityWeekService {
 
     List<GkzhActivityWeekInstance> listInstances(String bizType);
 
+    List<GkzhActivityWeekInstance> listInstances(String bizType, Long schoolId);
+
     GkzhActivityWeekInstance getInstance(Long instanceId);
 
     int saveInstance(GkzhActivityWeekInstance instance);
 
-    int deleteInstance(Long instanceId);
+    /** 逻辑删除指定学校的活动，保留共享实例及所有历史数据。 */
+    int deleteInstance(Long instanceId, Long schoolId);
+
+    /** 拒绝进入已被本校删除的活动；兼容没有学校关系的历史区域。 */
+    void checkSchoolActivityAvailable(Long instanceId, Long schoolId);
 
     List<GkzhActivityWeekSchool> listInstanceSchools(Long instanceId);
 
@@ -45,6 +53,9 @@ public interface IActivityWeekService {
     int countFinishedGames(Long instanceId, Long userId);
 
     int saveInstanceSchools(Long instanceId, List<GkzhActivityWeekSchool> schoolConfigs);
+
+    /** 将已有活动实例添加到指定学校：关系不存在则新增，已删除则恢复。 */
+    int addInstanceSchool(Long instanceId, Long schoolId);
 
     List<GkzhActivityArea> listAreas(Long instanceId, Long schoolId);
 
@@ -56,6 +67,9 @@ public interface IActivityWeekService {
 
     GkzhActivityGame getGame(Long gameId);
 
+    /** 返回游戏所属区域绑定的学校编号；区域未绑定学校时返回 null。 */
+    Long getGameSchoolId(GkzhActivityGame game);
+
     int saveGame(GkzhActivityGame game);
 
     int deleteGame(Long gameId);
@@ -65,4 +79,7 @@ public interface IActivityWeekService {
     GkzhGameParticipation getLatestParticipation(Long gameId, Long userId);
 
     int updateGameParticipation(GkzhGameParticipation participation);
+
+    /** 按活动实例、游戏、用户清理该次游戏的全部参与记录，包含旧版本重复记录。 */
+    int deleteGameParticipations(Long instanceId, Long gameId, Long userId);
 }

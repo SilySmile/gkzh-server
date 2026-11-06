@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.zyjdc.mapper.ZyjdcRecordMapper">
+
+    <!-- 参与记录通用筛选条件；后台列表、统计汇总、角色分布和导出共用。 -->
+    <sql id="recordConditions">
+        <where>
+            game_type = 'zyjdc'
+            <if test="q.gameId != null">
+                AND game_id = #{q.gameId}
+            </if>
+            <if test="q.instanceId != null">
+                AND instance_id = #{q.instanceId}
+            </if>
+            <if test="q.schoolId != null">
+                AND school_id = #{q.schoolId}
+            </if>
+            <if test="q.departmentId != null">
+                AND (department_id = #{q.departmentId}
+                     OR EXISTS (SELECT 1 FROM gkzh_school_department d
+                                WHERE d.department_id = gkzh_zyjdc_record.department_id
+                                  AND FIND_IN_SET(#{q.departmentId}, d.ancestors)))
+            </if>
+            <if test="q.major != null and q.major != ''">
+                AND major LIKE CONCAT('%', #{q.major}, '%')
+            </if>
+            <if test="q.studentNo != null and q.studentNo != ''">
+                AND student_no LIKE CONCAT('%', #{q.studentNo}, '%')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("男")'>
+                AND gender IN ('男', '0')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("女")'>
+                AND gender IN ('女', '1')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("其他")'>
+                AND (gender IS NULL OR TRIM(gender) = '' OR gender NOT IN ('男', '0', '女', '1'))
+            </if>
+            <if test="q.roleId != null">
+                AND role_id = #{q.roleId}
+            </if>
+            <if test="q.result != null and q.result != ''">
+                AND result = #{q.result}
+            </if>
+            <if test="q.status != null and q.status != ''">
+                AND status = #{q.status}
+            </if>
+            <if test="q.startDate != null">
+                AND scan_time &gt;= #{q.startDate}
+            </if>
+            <if test="q.endDate != null">
+                AND scan_time &lt; #{q.endDate}
+            </if>
+        </where>
+    </sql>
+
+    <!-- 后台参与记录分页查询：按活动、角色、结果、学生属性和参与日期动态筛选。 -->
+    <select id="selectAdminRecords" resultType="com.gkzh.zyjdc.domain.ZyjdcRecord">
+        SELECT * FROM gkzh_zyjdc_record
+        <include refid="recordConditions"/>
+        ORDER BY record_id DESC
+    </select>
+
+    <!-- 统计汇总与列表使用同一筛选条件，保证页面人数、完成率和导出数据一致。 -->
+    <select id="selectAdminSummary" resultType="java.util.LinkedHashMap">
+        SELECT COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN status = 'finished' THEN 1 ELSE 0 END), 0) AS finished,
+               COALESCE(SUM(CASE WHEN result = 'win' THEN 1 ELSE 0 END), 0) AS winCount,
+               COALESCE(SUM(CASE WHEN result = 'lose' THEN 1 ELSE 0 END), 0) AS loseCount,
+               COALESCE(SUM(CASE WHEN result = 'draw' THEN 1 ELSE 0 END), 0) AS drawCount,
+               COALESCE(SUM(CASE WHEN role_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS selectedCount,
+               COALESCE(ROUND(AVG(attempt_no), 2), 0) AS avgAttempts
+        FROM gkzh_zyjdc_record
+        <include refid="recordConditions"/>
+    </select>
+
+    <!-- 角色分布：按角色统计选择人数和通关人数，Java 侧再补全 8 个固定角色。 -->
+    <select id="selectRoleCounts" resultType="java.util.LinkedHashMap">
+        SELECT role_id AS roleId,
+               COUNT(*) AS userCount,
+               COALESCE(SUM(CASE WHEN status = 'finished' THEN 1 ELSE 0 END), 0) AS finishedCount
+        FROM gkzh_zyjdc_record
+        <include refid="recordConditions"/>
+          AND role_id IS NOT NULL
+        GROUP BY role_id
+    </select>
+
+    <!-- 结果分布：只统计已经结束的对局。 -->
+    <select id="selectResultCounts" resultType="java.util.LinkedHashMap">
+        SELECT result AS result,
+               COUNT(*) AS userCount
+        FROM gkzh_zyjdc_record
+        <include refid="recordConditions"/>
+          AND result IS NOT NULL
+        GROUP BY result
+    </select>
+
+    <!-- 活动查看页只取最近记录，避免历史数据过多导致页面和 PDF 过慢。 -->
+    <select id="selectGameViewRecords" resultType="com.gkzh.zyjdc.domain.ZyjdcRecord">
+        SELECT * FROM gkzh_zyjdc_record
+        WHERE game_type = 'zyjdc' AND game_id = #{gameId}
+        ORDER BY record_id DESC
+        LIMIT #{limit}
+    </select>
+
+</mapper>

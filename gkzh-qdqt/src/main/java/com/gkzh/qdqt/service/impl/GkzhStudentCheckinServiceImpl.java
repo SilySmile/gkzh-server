@@ -366,6 +366,11 @@ public class GkzhStudentCheckinServiceImpl implements IGkzhStudentCheckinService
         if (request.getSchoolId() == null || request.getStudentNo() == null || request.getStudentNo().trim().isEmpty()) {
             throw new RuntimeException("请选择学校并填写学号");
         }
+        if (request.getGrade() == null || request.getGrade().trim().isEmpty()
+                || request.getEducation() == null || request.getEducation().trim().isEmpty()
+                || request.getGraduationTime() == null || !request.getGraduationTime().matches("\\d{4}-(0[1-9]|1[0-2])")) {
+            throw new RuntimeException("请填写年级、学历和毕业时间");
+        }
         validateRegistrationDepartment(request);
         // 后台学生管理预先录入的“学校 + 学号”是注册白名单；同学号可存在于不同学校。
         QueryWrapper<GkzhStudent> existQuery = Wrappers.query();
@@ -375,6 +380,12 @@ public class GkzhStudentCheckinServiceImpl implements IGkzhStudentCheckinService
         GkzhStudent existStudent = gkzhStudentMapper.selectOne(existQuery);
         if (existStudent == null) {
             throw new RuntimeException("该学校未录入此学号，请联系学校管理员后再注册");
+        }
+        if (request.getStudentName() == null || request.getStudentName().isEmpty()) {
+            throw new RuntimeException("请填写姓名");
+        }
+        if (!existStudent.getStudentName().equals(request.getStudentName())) {
+            throw new RuntimeException("学号与姓名不匹配");
         }
         // 密码只会由注册或后台重置写入；因此一旦存在即视为该学校+学号已经注册。
         if (existStudent.getPassword() != null && !existStudent.getPassword().trim().isEmpty()) {
@@ -389,6 +400,9 @@ public class GkzhStudentCheckinServiceImpl implements IGkzhStudentCheckinService
         existStudent.setPassword(passwordEncoder.encode(request.getPassword()));
         // 注册资料以用户本次填写为准，修正批量导入或后台预录时的错误资料。
         existStudent.setDepartmentId(request.getDepartmentId());
+        existStudent.setGrade(request.getGrade());
+        existStudent.setEducation(request.getEducation());
+        existStudent.setGraduationTime(request.getGraduationTime());
         existStudent.setClassName(request.getClassName());
         existStudent.setEnrollmentYear(request.getEnrollmentYear());
         existStudent.setStudentName(request.getStudentName());

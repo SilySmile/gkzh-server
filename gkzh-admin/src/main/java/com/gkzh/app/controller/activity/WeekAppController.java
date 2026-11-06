@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
@@ -31,6 +32,7 @@ import com.gkzh.common.utils.DateUtils;
 import com.gkzh.school.domain.GkzhStudent;
 import com.gkzh.school.service.IGkzhStudentService;
 import com.gkzh.xycc.mapper.UserSelectionMapper;
+import com.gkzh.zycck.service.ZycckActivityFeedbackService;
 
 /**
  * 学生端活动接口
@@ -51,6 +53,9 @@ public class WeekAppController extends FrontBaseController {
     @Autowired
     private UserSelectionMapper userSelectionMapper;
 
+    @Autowired
+    private ZycckActivityFeedbackService zycckActivityFeedbackService;
+
     @GetMapping("/{instanceId}/flow")
     public AjaxResult flow(@PathVariable Long instanceId) {
         GkzhActivityWeekInstance instance = activityWeekService.getInstance(instanceId);
@@ -60,10 +65,13 @@ public class WeekAppController extends FrontBaseController {
 
         StudentCheckin student = getCurrentStudent();
         Long schoolId = getCurrentStudentSchoolId();
+        activityWeekService.checkSchoolActivityAvailable(instanceId, schoolId);
         List<GkzhActivityArea> areas = schoolId == null
                 ? new ArrayList<>()
                 : activityWeekService.listAreas(instanceId, schoolId);
         Long userId = student == null ? null : student.getUserId();
+        // 仅存在猜猜看游戏时查询一次反馈完成集合，不增加其他类型活动的查询。
+        Set<Long> completedZycckGames = null;
         List<Map<String, Object>> result = new ArrayList<>();
         for (GkzhActivityArea area : areas) {
             List<GkzhActivityGame> games = activityWeekService.listGames(area.getAreaId());
@@ -77,6 +85,13 @@ public class WeekAppController extends FrontBaseController {
                     boolean finished = participation != null && "1".equals(participation.getStatus());
                     if (finished && "mind-window".equals(game.getGameType())) {
                         finished = userSelectionMapper.selectByGameIdAndUserId(game.getGameId(), userId) != null;
+                    }
+                    if ("zycck".equals(game.getGameType())) {
+                        // 不能沿用旧参与表的完成标记，必须有本活动本人的反馈和结束记录。
+                        if (completedZycckGames == null) {
+                            completedZycckGames = zycckActivityFeedbackService.completedGameIds(instanceId, userId);
+                        }
+                        finished = completedZycckGames.contains(game.getGameId());
                     }
                     gameJson.put("isFinish", finished);
                     gameJson.put("isFail", participation != null && "2".equals(participation.getStatus()));
@@ -102,7 +117,11 @@ public class WeekAppController extends FrontBaseController {
 
     @GetMapping("/active/{bizType}")
     public AjaxResult activeInstance(@PathVariable String bizType) {
-        List<GkzhActivityWeekInstance> instances = activityWeekService.listInstances(bizType);
+        Long schoolId = getCurrentStudentSchoolId();
+        if (schoolId == null) {
+            return AjaxResult.error("当前账号未绑定学校");
+        }
+        List<GkzhActivityWeekInstance> instances = activityWeekService.listInstances(bizType, schoolId);
         GkzhActivityWeekInstance active = instances.stream()
                 .filter(item -> "1".equals(item.getStatus()))
                 .findFirst()
@@ -135,9 +154,34 @@ public class WeekAppController extends FrontBaseController {
         if (instanceId != null && !instanceId.equals(game.getInstanceId())) {
             return AjaxResult.error("该游戏不属于当前活动");
         }
+        // 职业角斗场由自己的 /api/zyjdc/records/enter 写入参与记录，禁止通用入口重复建记录。
+        if ("zyjdc".equals(game.getGameType())) {
+            return AjaxResult.error("请从职业角斗场入口进入");
+        }
+        // 能量雷达由自己的 /api/nlld/records/enter 写入参与记录，禁止通用入口重复建记录。
+        if ("nlld".equals(game.getGameType())) {
+            return AjaxResult.error("请从能量雷达入口进入");
+        }
+        // 职业飞行棋由自己的 /api/zyfxq/records/enter 写入参与记录，禁止通用入口重复建记录。
+        if ("zyfxq".equals(game.getGameType())) {
+            return AjaxResult.error("请从职业飞行棋入口进入");
+        }
+        // 简历称重由自己的 /api/jlcz/records/enter 写入参与记录，禁止通用入口重复建记录。
+        if ("jlcz".equals(game.getGameType())) {
+            return AjaxResult.error("请从简历称重入口进入");
+        }
 
         StudentCheckin student = getCurrentStudent();
-        Long schoolId = findSchoolId(game);
+        Long studentSchoolId = getCurrentStudentSchoolId();
+        Long gameSchoolId = activityWeekService.getGameSchoolId(game);
+        if (studentSchoolId == null) {
+            return AjaxResult.error("当前账号未绑定学校，无法进入活动");
+        }
+        // 扫码入口必须按活动区域的学校归属校验，防止跨校扫码进入其他学校的活动。
+        if (gameSchoolId != null && !gameSchoolId.equals(studentSchoolId)) {
+            return AjaxResult.error("该活动不属于当前学校，无法进入");
+        }
+        Long schoolId = gameSchoolId != null ? gameSchoolId : studentSchoolId;
 
         // 扫码入口必须幂等：已完成的游戏不再重复创建未完成记录。
         GkzhGameParticipation latest = activityWeekService.getLatestParticipation(gameId, student.getUserId());
@@ -223,6 +267,37 @@ public class WeekAppController extends FrontBaseController {
         if (instanceId != null && !instanceId.equals(game.getInstanceId())) {
             return AjaxResult.error("该游戏不属于当前活动");
         }
+        Long gameSchoolId = activityWeekService.getGameSchoolId(game);
+        if (gameSchoolId != null) {
+            Long studentSchoolId = getCurrentStudentSchoolId();
+            if (studentSchoolId == null || !gameSchoolId.equals(studentSchoolId)) {
+                return AjaxResult.error("该活动不属于当前学校，无法进入");
+            }
+        }
+        // 禁止旧客户端或直接调用通用完成接口绕过活动反馈；只能由反馈事务结束游戏。
+        if ("zycck".equals(game.getGameType())) {
+            return AjaxResult.error("请提交活动反馈完成本次游戏");
+        }
+        // 骰子局只能由 /api/zcyltzj/records/{id}/submit 结算并完成，避免未答题直接标记完成。
+        if ("zcyltzj".equals(game.getGameType())) {
+            return AjaxResult.error("请完成骰子局答题并生成压力值");
+        }
+        // 职业角斗场只能由对局胜利写入完成状态，禁止通用完成接口绕过胜负判定。
+        if ("zyjdc".equals(game.getGameType())) {
+            return AjaxResult.error("请完成职业角斗场对局并取得胜利");
+        }
+        // 能量雷达只能由第 6 关提交结算，禁止通用完成接口未答完就标记完成。
+        if ("nlld".equals(game.getGameType())) {
+            return AjaxResult.error("请完成全部关卡并生成职业能量雷达报告");
+        }
+        // 职业飞行棋只有抵达终点通关才写完成状态，禁止通用完成接口直接标记完成。
+        if ("zyfxq".equals(game.getGameType())) {
+            return AjaxResult.error("请在 3 分钟内抵达终点完成职业飞行棋");
+        }
+        // 简历称重只有提交勾选并生成结果后才写完成状态，禁止通用完成接口直接标记完成。
+        if ("jlcz".equals(game.getGameType())) {
+            return AjaxResult.error("请完成简历称重并查看称重结果");
+        }
         GkzhGameParticipation participation = activityWeekService.getLatestParticipation(gameId, student.getUserId());
         if (participation == null) {
             return AjaxResult.error("暂无参与记录");
@@ -245,16 +320,6 @@ public class WeekAppController extends FrontBaseController {
         participation.setResultJson(body == null ? null : JSON.toJSONString(body));
         activityWeekService.updateGameParticipation(participation);
         return AjaxResult.success(passed ? "完成" : "未通过");
-    }
-
-    private Long findSchoolId(GkzhActivityGame game) {
-        List<GkzhActivityArea> areas = activityWeekService.listAreas(game.getInstanceId(), null);
-        for (GkzhActivityArea area : areas) {
-            if (area.getAreaId().equals(game.getAreaId())) {
-                return area.getSchoolId();
-            }
-        }
-        return null;
     }
 
     private Long getCurrentStudentSchoolId() {

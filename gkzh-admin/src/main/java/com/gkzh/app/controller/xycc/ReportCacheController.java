@@ -13,7 +13,26 @@ import com.gkzh.activity.domain.week.GkzhActivityArea;
 import com.gkzh.activity.domain.week.GkzhActivityGame;
 import com.gkzh.activity.domain.week.GkzhActivityWeekInstance;
 import com.gkzh.activity.domain.week.GkzhGameParticipation;
+import com.gkzh.activity.mapper.week.GkzhGameParticipationMapper;
 import com.gkzh.activity.service.IActivityWeekService;
+import com.gkzh.nlld.domain.NlldRecord;
+import com.gkzh.nlld.mapper.NlldRecordMapper;
+import com.gkzh.nlld.service.NlldGameService;
+import com.gkzh.zcyltzj.domain.ZcyltzjRecord;
+import com.gkzh.zcyltzj.mapper.ZcyltzjRecordMapper;
+import com.gkzh.zcyltzj.service.ZcyltzjRecordService;
+import com.gkzh.zyfxq.domain.ZyfxqRecord;
+import com.gkzh.zyfxq.mapper.ZyfxqRecordMapper;
+import com.gkzh.zyfxq.service.ZyfxqGameService;
+import com.gkzh.jlcz.domain.JlczRecord;
+import com.gkzh.jlcz.mapper.JlczRecordMapper;
+import com.gkzh.jlcz.service.JlczGameService;
+import com.gkzh.zyjdc.domain.ZyjdcRecord;
+import com.gkzh.zyjdc.domain.ZyjdcRole;
+import com.gkzh.zyjdc.mapper.ZyjdcRecordMapper;
+import com.gkzh.zyjdc.service.ZyjdcGameService;
+import com.gkzh.zytj.domain.GkzhMbtiStudentChoice;
+import com.gkzh.zytj.service.IGkzhMbtiStudentChoiceService;
 import com.gkzh.school.domain.GkzhStudent;
 import com.gkzh.school.service.IGkzhStudentService;
 import com.gkzh.sszctop.domain.SszctopCareer;
@@ -21,21 +40,13 @@ import com.gkzh.sszctop.domain.SszctopDimension;
 import com.gkzh.sszctop.domain.SszctopDimensionRank;
 import com.gkzh.sszctop.domain.SszctopStudentReport;
 import com.gkzh.sszctop.mapper.SszctopStudentReportMapper;
+import com.gkzh.app.service.ZycckReportPdfService;
+import com.gkzh.app.service.ReportPdfFont;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.File;
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.awt.Color;
-import java.awt.Font;
-import java.awt.FontMetrics;
-import java.awt.Graphics2D;
-import java.awt.BasicStroke;
-import java.awt.RenderingHints;
-import java.awt.image.BufferedImage;
-import javax.imageio.ImageIO;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Map;
 import java.util.List;
@@ -45,11 +56,7 @@ import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import java.text.SimpleDateFormat;
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.pdmodel.PDPage;
-import org.apache.pdfbox.pdmodel.common.PDRectangle;
-import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
-import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 
 /** 生成可在浏览器打开的临时报告文件，默认缓存 24 小时。 */
 @RestController
@@ -58,18 +65,51 @@ public class ReportCacheController extends FrontBaseController {
     private final IPatternComboService patternComboService;
     private final IHollandCodeService hollandCodeService;
     private final IActivityWeekService activityWeekService;
+    private final GkzhGameParticipationMapper gameParticipationMapper;
+    private final NlldRecordMapper nlldRecordMapper;
+    private final NlldGameService nlldGameService;
+    private final ZcyltzjRecordMapper zcyltzjRecordMapper;
+    private final ZcyltzjRecordService zcyltzjRecordService;
+    private final ZyfxqRecordMapper zyfxqRecordMapper;
+    private final ZyfxqGameService zyfxqGameService;
+    private final JlczRecordMapper jlczRecordMapper;
+    private final JlczGameService jlczGameService;
+    private final ZyjdcRecordMapper zyjdcRecordMapper;
+    private final ZyjdcGameService zyjdcGameService;
+    private final IGkzhMbtiStudentChoiceService mbtiStudentChoiceService;
     private final IGkzhStudentService studentService;
     private final SszctopStudentReportMapper sszctopReportMapper;
+    private final ZycckReportPdfService zycckReportPdfService;
     private static final long CACHE_MILLIS = 24 * 60 * 60 * 1000L;
 
     public ReportCacheController(IPatternComboService patternComboService, IHollandCodeService hollandCodeService,
                                  IActivityWeekService activityWeekService, IGkzhStudentService studentService,
-                                 SszctopStudentReportMapper sszctopReportMapper) {
+                                 SszctopStudentReportMapper sszctopReportMapper, ZycckReportPdfService zycckReportPdfService,
+                                 GkzhGameParticipationMapper gameParticipationMapper,
+                                 NlldRecordMapper nlldRecordMapper, NlldGameService nlldGameService,
+                                 ZcyltzjRecordMapper zcyltzjRecordMapper, ZcyltzjRecordService zcyltzjRecordService,
+                                 ZyfxqRecordMapper zyfxqRecordMapper, ZyfxqGameService zyfxqGameService,
+                                 JlczRecordMapper jlczRecordMapper, JlczGameService jlczGameService,
+                                 ZyjdcRecordMapper zyjdcRecordMapper, ZyjdcGameService zyjdcGameService,
+                                 IGkzhMbtiStudentChoiceService mbtiStudentChoiceService) {
         this.patternComboService = patternComboService;
         this.hollandCodeService = hollandCodeService;
         this.activityWeekService = activityWeekService;
+        this.gameParticipationMapper = gameParticipationMapper;
+        this.nlldRecordMapper = nlldRecordMapper;
+        this.nlldGameService = nlldGameService;
+        this.zcyltzjRecordMapper = zcyltzjRecordMapper;
+        this.zcyltzjRecordService = zcyltzjRecordService;
+        this.zyfxqRecordMapper = zyfxqRecordMapper;
+        this.zyfxqGameService = zyfxqGameService;
+        this.jlczRecordMapper = jlczRecordMapper;
+        this.jlczGameService = jlczGameService;
+        this.zyjdcRecordMapper = zyjdcRecordMapper;
+        this.zyjdcGameService = zyjdcGameService;
+        this.mbtiStudentChoiceService = mbtiStudentChoiceService;
         this.studentService = studentService;
         this.sszctopReportMapper = sszctopReportMapper;
+        this.zycckReportPdfService = zycckReportPdfService;
     }
 
     @PostMapping("/cache")
@@ -100,14 +140,34 @@ public class ReportCacheController extends FrontBaseController {
             // 只取当前活动实例与当前学校的区域，确保生涯/就业活动报告严格隔离。
             for (GkzhActivityArea area : activityWeekService.listAreas(activityId, student.getSchoolId())) {
                 for (GkzhActivityGame game : activityWeekService.listGames(area.getAreaId())) {
-                    GkzhGameParticipation participation = activityWeekService.getLatestParticipation(game.getGameId(), userId);
+                    GkzhGameParticipation participation = findFinishedParticipation(activityId, game.getGameId(), userId);
                     if (participation == null || !("1".equals(participation.getStatus()) || "2".equals(participation.getStatus()))) continue;
                     byte[] pdf;
                     if ("mind-window".equals(game.getGameType())) {
                         pdf = createPdf(patternComboService.getXyccResult(activityId, userId));
+                    } else if ("nlld".equals(game.getGameType())) {
+                        pdf = createNlldPdf(activityId, game.getGameId(), userId);
+                        if (pdf == null) pdf = createGamePdf(instance, area, game, participation);
+                    } else if ("zcyltzj".equals(game.getGameType())) {
+                        pdf = createZcyltzjPdf(activityId, game.getGameId(), userId);
+                        if (pdf == null) pdf = createGamePdf(instance, area, game, participation);
+                    } else if ("zyfxq".equals(game.getGameType())) {
+                        pdf = createZyfxqPdf(activityId, game.getGameId(), userId);
+                        if (pdf == null) pdf = createGamePdf(instance, area, game, participation);
+                    } else if ("jlcz".equals(game.getGameType())) {
+                        pdf = createJlczPdf(activityId, game.getGameId(), userId);
+                        if (pdf == null) pdf = createGamePdf(instance, area, game, participation);
+                    } else if ("zyjdc".equals(game.getGameType())) {
+                        pdf = createZyjdcPdf(activityId, game.getGameId(), userId);
+                        if (pdf == null) pdf = createGamePdf(instance, area, game, participation);
+                    } else if ("zytj".equals(game.getGameType())) {
+                        pdf = createZytjPdf(activityId, student.getStudentId());
+                        if (pdf == null) pdf = createGamePdf(instance, area, game, participation);
+                    } else if ("zycck".equals(game.getGameType())) {
+                        pdf = zycckReportPdfService.createForActivity(student.getSchoolId(), activityId, game.getGameId(), userId);
                     } else if ("sszctop".equals(game.getGameType())) {
                         // 职场 TOP 使用结算时保存的个人快照，内容与游戏结束后查看的个人报告保持一致。
-                        pdf = createSszctopPdf(activityId, game.getGameId(), userId);
+                        pdf = createSszctopTextPdf(activityId, game.getGameId(), userId);
                         if (pdf == null) pdf = createGamePdf(instance, area, game, participation);
                     } else {
                         pdf = createGamePdf(instance, area, game, participation);
@@ -121,7 +181,18 @@ public class ReportCacheController extends FrontBaseController {
             }
         }
         if (reportCount == 0) { zipFile.delete(); return AjaxResult.error("当前活动暂无可下载的游戏报告"); }
-        return AjaxResult.success("报告压缩包生成成功", "/profile/report-cache/" + token + ".zip");
+        return AjaxResult.success("报告压缩包生成成功", "/api/common/report-cache/" + token + ".zip");
+    }
+
+    /** 报告包必须使用当前活动实例的终局记录，避免同一游戏在别的活动中的记录遮住本场结果。 */
+    private GkzhGameParticipation findFinishedParticipation(Long activityId, Long gameId, Long userId) {
+        if (activityId == null || gameId == null || userId == null) return null;
+        return gameParticipationMapper.selectOne(new QueryWrapper<GkzhGameParticipation>()
+                .eq("instance_id", activityId)
+                .eq("game_id", gameId)
+                .eq("user_id", userId)
+                .in("status", "1", "2")
+                .last("ORDER BY CASE status WHEN '1' THEN 0 WHEN '2' THEN 1 ELSE 2 END, create_time DESC LIMIT 1"));
     }
 
     /**
@@ -139,76 +210,428 @@ public class ReportCacheController extends FrontBaseController {
         lines.add("游戏类别：" + gameTypeName(game.getGameType()));
         lines.add("游戏状态：" + ("1".equals(participation.getStatus()) ? "已完成" : "未通过"));
         lines.add("完成时间：" + formatDate(participation.getFinishTime()));
-        lines.add("说明：本报告记录本次活动中该游戏的个人完成结果。具体游戏的专属报告内容将按其自身规则展示。 ");
+        lines.add("本局结果");
+        int detailCount = appendResultDetails(lines, parseResult(participation.getResultJson()), "", 0);
+        if (detailCount == 0) lines.add("该游戏未保存可下载的个人结果明细。");
         return createTextPdf(lines);
     }
 
-    /**
-     * 根据职场 TOP 的个人结算快照生成 PDF。展示字段与 pages/sszctop/report.vue 一致：
-     * 维度说明、个人三项排序及职业解释、正确项绿色标记、失败时的正确排序。
-     */
-    private byte[] createSszctopPdf(Long activityId, Long gameId, Long userId) throws Exception {
+    /** 使用能量雷达结束页同一份游戏记录和结果组装逻辑生成可检索文字 PDF。 */
+    @SuppressWarnings("unchecked")
+    private byte[] createNlldPdf(Long activityId, Long gameId, Long userId) throws Exception {
+        NlldRecord record = nlldRecordMapper.selectOne(new QueryWrapper<NlldRecord>()
+                .eq("instance_id", activityId).eq("game_id", gameId).eq("user_id", userId)
+                .eq("status", "finished").last("LIMIT 1"));
+        if (record == null) return null;
+
+        Map<String, Object> view = nlldGameService.viewRecord(record.getRecordId(), userId);
+        Object rawResult = view.get("result");
+        Map<String, Object> result = rawResult instanceof Map ? (Map<String, Object>) rawResult : new HashMap<>();
+        List<String> lines = new java.util.ArrayList<>();
+        lines.add("我的职业能量雷达报告");
+        lines.add("结果类型：" + ("top2".equals(result.get("resultType")) ? "TOP2 类型" : "多元开放型"));
+        if ("top2".equals(result.get("resultType"))) {
+            appendNlldDimension(lines, "第一推荐维度", result.get("top1"));
+            appendNlldDimension(lines, "第二推荐维度", result.get("top2"));
+        } else {
+            addLine(lines, "结果说明", result.get("openText"));
+        }
+        return createTextPdf(lines);
+    }
+
+    private void appendNlldDimension(List<String> lines, String title, Object rawDimension) {
+        if (!(rawDimension instanceof Map)) return;
+        Map<?, ?> dimension = (Map<?, ?>) rawDimension;
+        Object name = dimension.get("name");
+        lines.add(title + "：" + text(name == null ? null : String.valueOf(name), "未记录"));
+        addLine(lines, "维度特点", dimension.get("summary"));
+        addLine(lines, "职业参考", dimension.get("careerReference"));
+    }
+
+    private void addLine(List<String> lines, String label, Object value) {
+        if (value == null || String.valueOf(value).trim().isEmpty()) return;
+        lines.add(label + "：" + value);
+    }
+
+    private byte[] createZcyltzjPdf(Long activityId, Long gameId, Long userId) throws Exception {
+        ZcyltzjRecord record = zcyltzjRecordMapper.selectOne(new QueryWrapper<ZcyltzjRecord>()
+                .eq("instance_id", activityId).eq("game_id", gameId).eq("user_id", userId)
+                .eq("status", "finished").last("LIMIT 1"));
+        if (record == null) return null;
+        Map<String, Object> view = zcyltzjRecordService.view(record);
+        Object rawResult = view.get("result");
+        Map<?, ?> result = rawResult instanceof Map ? (Map<?, ?>) rawResult : java.util.Collections.emptyMap();
+        List<String> lines = new java.util.ArrayList<>();
+        lines.add("我的压力接受度报告");
+        Object rawPressure = result.get("pressureValue");
+        int pressure = rawPressure instanceof Number ? ((Number) rawPressure).intValue() : 0;
+        pressure = Math.max(0, Math.min(100, pressure));
+        addLine(lines, "我的压力值是", pressure + "%");
+        addLine(lines, "测评项目", view.get("pointName"));
+        String color = String.valueOf(result.get("color"));
+        addLine(lines, "结果区间", "red".equals(color) ? "红色区间" : "yellow".equals(color) ? "临界区间" : "绿色区间");
+        addLine(lines, "压力主题", view.get("theme"));
+        addLine(lines, "职场投射", view.get("projection"));
+        addLine(lines, "红色答案", result.get("redCount"));
+        addLine(lines, "绿色答案", result.get("greenCount"));
+        addLine(lines, "答题总数", result.get("total"));
+        return createTextPdf(lines);
+    }
+
+    private byte[] createZyfxqPdf(Long activityId, Long gameId, Long userId) throws Exception {
+        ZyfxqRecord record = zyfxqRecordMapper.selectOne(new QueryWrapper<ZyfxqRecord>()
+                .eq("instance_id", activityId).eq("game_id", gameId).eq("user_id", userId)
+                .eq("status", "finished").last("LIMIT 1"));
+        if (record == null) return null;
+        Map<String, Object> view = zyfxqGameService.view(record);
+        List<String> lines = new java.util.ArrayList<>();
+        lines.add("职业飞行棋对局报告");
+        String result = String.valueOf(view.get("result"));
+        boolean win = "win".equalsIgnoreCase(result);
+        lines.add(win ? "恭喜你完成了本次挑战" : "很遗憾，本局未通过");
+        lines.add(win
+                ? "你在 " + zyfxqDuration(view.get("durationMs")) + " 内抵达终点，本局成绩已计入活动统计。"
+                : "3 分钟内没有抵达终点，可以重新开始一局，成绩以最新一局为准。");
+        lines.add("本局数据");
+        lines.add("本局总时长：" + zyfxqDuration(view.get("durationMs")));
+        lines.add("掷骰总次数：" + numberOrZero(view.get("rollCount")) + " 次");
+        lines.add("累计行进总步数：" + numberOrZero(view.get("stepTotal")) + " 步");
+        lines.add("抵达格号：" + numberOrZero(view.get("position")) + " / 19");
+        lines.add("作答题数：" + numberOrZero(view.get("answerCount")) + " 题");
+        lines.add("答对题数：" + numberOrZero(view.get("correctCount")) + " 题");
+        lines.add("超时题数：" + numberOrZero(view.get("timeoutCount")) + " 题");
+        lines.add("第几局：第 " + numberOrDefault(view.get("attemptNo"), 1) + " 局");
+        lines.add("本局开始：" + zyfxqTime(view.get("startTime")));
+        lines.add("本局结束：" + zyfxqTime(view.get("endTime")));
+        lines.add("答对题目原地继续摇骰，答错或超时后退 2 格；3 分钟内抵达第 19 格即通关。");
+        lines.add("答题明细");
+        Object rawAnswers = view.get("answers");
+        if (!(rawAnswers instanceof List) || ((List<?>) rawAnswers).isEmpty()) {
+            lines.add("本局还没有触发过题目，下次落点停在答题格就会弹出题目。");
+        } else {
+            for (Object rawAnswer : (List<?>) rawAnswers) {
+                if (!(rawAnswer instanceof Map)) continue;
+                Map<?, ?> answer = (Map<?, ?>) rawAnswer;
+                String cell = textValue(answer.get("cellNo"), "-");
+                String type = textValue(answer.get("questionTypeName"), "题目");
+                String answerResult = textValue(answer.get("result"), "-");
+                lines.add("第 " + cell + " 格 · " + type + " · " + answerResult);
+                lines.add("题目：" + textValue(answer.get("title"), "-"));
+                lines.add("题目限时：" + textValue(answer.get("limitSeconds"), "-") + " 秒");
+                lines.add("实际答题：" + zyfxqCost(answer.get("costMs")));
+                lines.add("是否超时：" + (Boolean.TRUE.equals(answer.get("timeout")) ? "是" : "否"));
+                String option = textValue(answer.get("optionContent"), "超时未作答");
+                String optionLabel = textValue(answer.get("optionLabel"), "");
+                lines.add("我的选择：" + (optionLabel.isEmpty() || option.startsWith("超时") ? option : optionLabel + ". " + option));
+                String correct = textValue(answer.get("correctContent"), "-");
+                String correctLabel = textValue(answer.get("correctLabel"), "");
+                lines.add("正确答案：" + (correctLabel.isEmpty() ? correct : correctLabel + ". " + correct));
+            }
+        }
+        return createTextPdf(lines);
+    }
+
+    /** 简历称重个人报告：与小程序结果页同源，输出总重、分类小计、缺口与建议。 */
+    private byte[] createJlczPdf(Long activityId, Long gameId, Long userId) throws Exception {
+        JlczRecord record = jlczRecordMapper.selectOne(new QueryWrapper<JlczRecord>()
+                .eq("instance_id", activityId).eq("game_id", gameId).eq("user_id", userId)
+                .eq("status", "finished").last("LIMIT 1"));
+        if (record == null) return null;
+        Map<String, Object> view = jlczGameService.view(record);
+        List<String> lines = new java.util.ArrayList<>();
+        Map<?, ?> result = view.get("result") instanceof Map ? (Map<?, ?>) view.get("result") : new java.util.HashMap<>();
+        Map<?, ?> setting = view.get("setting") instanceof Map ? (Map<?, ?>) view.get("setting") : new java.util.HashMap<>();
+        boolean pass = Boolean.TRUE.equals(result.get("pass"));
+        boolean balanced = Boolean.TRUE.equals(result.get("balanced"));
+        lines.add("简历称重报告");
+        lines.add(pass ? (balanced ? "你的简历分量刚好达到通关标准" : "你的简历分量达到了通关标准")
+                : "你的简历分量还差一点");
+        lines.add("总重量：" + numberOrZero(result.get("totalWeight")) + "g（标准 "
+                + numberOrZero(result.get("passWeight")) + "g）");
+        if (!pass) {
+            lines.add("距通关还差：" + numberOrZero(result.get("gap")) + "g");
+        }
+        lines.add("本次勾选：" + numberOrZero(result.get("selectedCount")) + " 项");
+        lines.add("称重用时：" + zyfxqDuration(result.get("durationMs")));
+        lines.add("称重次数：第 " + numberOrDefault(result.get("attemptNo"), 1) + " 次");
+        lines.add("左侧标准砝码：" + numberOrZero(setting.get("leftWeightG")) + "g");
+        lines.add("分类小计");
+        Object rawCategories = result.get("categoryTotals");
+        if (rawCategories instanceof List) {
+            for (Object raw : (List<?>) rawCategories) {
+                if (!(raw instanceof Map)) continue;
+                Map<?, ?> category = (Map<?, ?>) raw;
+                lines.add(textValue(category.get("categoryName"), "类别") + "："
+                        + numberOrZero(category.get("totalWeight")) + "g");
+            }
+        }
+        lines.add("本次勾选的砝码");
+        Object rawSelected = view.get("selected");
+        if (!(rawSelected instanceof List) || ((List<?>) rawSelected).isEmpty()) {
+            lines.add("本次没有勾选任何砝码，可以重新称重后再试。");
+        } else {
+            for (Object raw : (List<?>) rawSelected) {
+                if (!(raw instanceof Map)) continue;
+                Map<?, ?> weight = (Map<?, ?>) raw;
+                lines.add("第 " + textValue(weight.get("weightNo"), "-") + " 号 · "
+                        + textValue(weight.get("label"), "-") + " · " + numberOrZero(weight.get("weightG")) + "g");
+            }
+        }
+        Object rawSuggestions = result.get("suggestions");
+        if (!pass && rawSuggestions instanceof List && !((List<?>) rawSuggestions).isEmpty()) {
+            lines.add("优先补充建议");
+            for (Object raw : (List<?>) rawSuggestions) {
+                if (!(raw instanceof Map)) continue;
+                Map<?, ?> weight = (Map<?, ?>) raw;
+                lines.add("第 " + textValue(weight.get("weightNo"), "-") + " 号 · "
+                        + textValue(weight.get("label"), "-") + "（" + numberOrZero(weight.get("weightG")) + "g）");
+            }
+        }
+        lines.add("提示：通关标准为总重达到 " + numberOrZero(setting.get("passWeightG"))
+                + "g；本结果为简历自查，仅用于活动体验与简历改进参考。");
+        return createTextPdf(lines);
+    }
+
+    private String numberOrZero(Object value) {
+        return value == null ? "0" : String.valueOf(value);
+    }
+
+    private String numberOrDefault(Object value, int fallback) {
+        return value == null ? String.valueOf(fallback) : String.valueOf(value);
+    }
+
+    private String textValue(Object value, String fallback) {
+        if (value == null || String.valueOf(value).trim().isEmpty()) return fallback;
+        return String.valueOf(value);
+    }
+
+    private String zyfxqDuration(Object value) {
+        if (value == null) return "-";
+        try {
+            double seconds = Double.parseDouble(String.valueOf(value)) / 1000d;
+            return String.format(java.util.Locale.ROOT, "%.1f 秒", seconds);
+        } catch (NumberFormatException ignored) {
+            return String.valueOf(value);
+        }
+    }
+
+    private String zyfxqCost(Object value) {
+        if (value == null) return "-";
+        try {
+            double seconds = Double.parseDouble(String.valueOf(value)) / 1000d;
+            return String.format(java.util.Locale.ROOT, "%.1f 秒", seconds);
+        } catch (NumberFormatException ignored) {
+            return String.valueOf(value);
+        }
+    }
+
+    private String zyfxqTime(Object value) {
+        if (value == null) return "-";
+        if (value instanceof java.util.Date) return new SimpleDateFormat("yyyy-MM-dd HH:mm").format((java.util.Date) value);
+        return String.valueOf(value);
+    }
+
+    private byte[] createZyjdcPdf(Long activityId, Long gameId, Long userId) throws Exception {
+        ZyjdcRecord record = zyjdcRecordMapper.selectOne(new QueryWrapper<ZyjdcRecord>()
+                .eq("instance_id", activityId).eq("game_id", gameId).eq("user_id", userId)
+                .in("result", "win", "lose", "draw").last("LIMIT 1"));
+        if (record == null) return null;
+        Map<String, Object> view = zyjdcGameService.viewRecord(record.getRecordId(), userId);
+        List<String> lines = new java.util.ArrayList<>();
+        lines.add("职业角斗场对局报告");
+        String result = textValue(view.get("result"), "draw");
+        boolean win = "win".equalsIgnoreCase(result);
+        String resultTitle = win ? "你赢下了这一局" : ("lose".equalsIgnoreCase(result) ? "这一局没有获胜" : "这一局打成平局");
+        lines.add(resultTitle);
+        lines.add(zyjdcResultSub(result, textValue(view.get("resultReason"), "")));
+        lines.add("角色：" + textValue(view.get("roleName"), "—"));
+        lines.add("尝试：" + numberOrDefault(view.get("attemptNo"), 1) + " 次");
+        lines.add("步数：" + numberOrZero(view.get("moveCount")));
+
+        Object rawRole = view.get("role");
+        ZyjdcRole role = rawRole instanceof ZyjdcRole ? (ZyjdcRole) rawRole : null;
+        lines.add("角色档案");
+        lines.add("角色名称：" + textValue(view.get("roleName"), "—"));
+        lines.add("职业名称：" + textValue(view.get("jobTitle"), "—"));
+        lines.add("角色解读：" + roleText(role == null ? null : role.getRoleInterpretation(), "这是你在本局选择的角色。"));
+        lines.add("职场定位");
+        lines.add(roleText(role == null ? null : role.getPositioning(), role == null ? textValue(view.get("jobTitle"), "暂无内容") : "暂无内容"));
+        lines.add("能力优势");
+        lines.add(roleText(role == null ? null : role.getAdvantage(), role == null ? textValue(view.get("jobTitle"), "暂无内容") : "暂无内容"));
+        lines.add("生存法则");
+        lines.add(roleText(role == null ? null : role.getSurvivalRule(), "暂无内容"));
+        lines.add("职场能力");
+        lines.add(roleText(role == null ? null : role.getCareerAbility(), "暂无内容"));
+        return createTextPdf(lines);
+    }
+
+    private String roleText(String value, String fallback) {
+        return value == null || value.trim().isEmpty() ? fallback : value;
+    }
+
+    private String zyjdcResultSub(String result, String reason) {
+        boolean win = "win".equalsIgnoreCase(result);
+        if ("den".equals(reason)) return win ? "你先一步踏入对方兽穴，赢下本局并获得通关印戳。" : "对方先一步踏入你的兽穴，本局失利，可以重新挑战。";
+        if ("capture_all".equals(reason)) return win ? "你吃光了对方全部棋子，获得通关印戳。" : "你的棋子被对方全部吃掉，可以重新挑战。";
+        if ("no_move".equals(reason)) return win ? "对方无子可动，你获得胜利。" : "我方无子可动，本局判负。";
+        if ("timeout".equals(reason)) return win ? "时间到，你剩余棋子的最高等级占优，获得胜利。" : "时间到，按剩余棋子等级与数量结算。";
+        return win ? "恭喜完成本局对弈。" : "调整策略后再试一次。";
+    }
+
+    private byte[] createZytjPdf(Long activityId, Long studentId) throws Exception {
+        GkzhMbtiStudentChoice query = new GkzhMbtiStudentChoice();
+        query.setActivityId(activityId);
+        query.setStudentId(studentId);
+        List<GkzhMbtiStudentChoice> choices = mbtiStudentChoiceService.selectGkzhMbtiStudentChoiceList(query);
+        if (choices == null || choices.isEmpty()) return null;
+        GkzhMbtiStudentChoice choice = choices.get(0);
+        List<String> lines = new java.util.ArrayList<>();
+        lines.add("职愿探究结果报告");
+        addLine(lines, "MBTI 类型", choice.getChoiceCode());
+        addLine(lines, "选择用时（秒）", choice.getChoiceTime());
+        return createTextPdf(lines);
+    }
+
+    private byte[] createSszctopTextPdf(Long activityId, Long gameId, Long userId) throws Exception {
         SszctopStudentReport report = sszctopReportMapper.selectOne(new QueryWrapper<SszctopStudentReport>()
                 .eq("instance_id", activityId).eq("game_id", gameId).eq("user_id", userId)
                 .orderByDesc("report_id").last("limit 1"));
         if (report == null) return null;
-
         SszctopDimension dimension = parseObject(report.getDimensionSnapshot(), SszctopDimension.class);
         List<SszctopCareer> careers = parseList(report.getCareersSnapshot(), SszctopCareer.class);
         List<Long> selectedIds = parseIds(report.getSharedOrderSnapshot());
         List<Long> standardIds = parseIds(report.getStandardOrderSnapshot());
         List<SszctopDimensionRank> rankDetails = parseRankDetails(report.getReportJson());
         boolean passed = "passed".equals(report.getResult());
-
-        final int width = 1080, pad = 48;
-        // 中文字体按保守字数换行，保证每行都留在 PDF 卡片内容区内。
-        int height = 500 + textLines(dimension == null ? "" : dimension.getDescription(), 28).size() * 44;
-        for (Long careerId : selectedIds) height += 220 + textLines(rankDescription(rankDetails, careerId), 28).size() * 44;
-        if (!passed) height += 190 + standardIds.size() * 104;
-        height = Math.max(height, 1180);
-
-        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = image.createGraphics();
-        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        g.setColor(new Color(245, 247, 251)); g.fillRect(0, 0, width, height);
-        int y = 72;
-        g.setColor(new Color(36, 86, 166)); g.setFont(new Font("Microsoft YaHei", Font.BOLD, 46)); drawCentered(g, "谁是职场TOP", width, y); y += 58;
-        g.setColor(passed ? new Color(32, 166, 106) : new Color(217, 83, 79));
-        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 30)); drawCentered(g, passed ? "挑战成功" : "本局未通过", width, y); y += 54;
-
-        int dimensionHeight = 230 + textLines(dimension == null ? "暂无维度说明" : dimension.getDescription(), 28).size() * 44;
-        drawCard(g, pad, y, width - pad * 2, dimensionHeight, Color.WHITE, new Color(227, 233, 242));
-        y += 46;
-        g.setColor(new Color(37, 56, 88)); g.setFont(new Font("Microsoft YaHei", Font.BOLD, 32)); g.drawString("本次选择的维度", pad + 28, y); y += 54;
-        g.setColor(new Color(36, 86, 166)); g.setFont(new Font("Microsoft YaHei", Font.BOLD, 40)); g.drawString(dimension == null ? "未记录维度" : text(dimension.getName(), "未记录维度"), pad + 28, y); y += 48;
-        g.setColor(new Color(83, 101, 126)); g.setFont(new Font("Microsoft YaHei", Font.BOLD, 27)); g.drawString("维度解释", pad + 28, y); y += 38;
-        y = drawWrappedText(g, dimension == null ? "暂无维度说明" : dimension.getDescription(), pad + 28, y, 28, 28, new Color(102, 117, 139), 44) + 44;
-
-        g.setColor(new Color(37, 56, 88)); g.setFont(new Font("Microsoft YaHei", Font.BOLD, 34)); g.drawString("你选择的职业与个人排序", pad, y); y += 42;
+        List<String> lines = new java.util.ArrayList<>();
+        lines.add("谁是职场 TOP 个人报告");
+        lines.add("对局结果：" + (passed ? "挑战成功" : "本局未通过"));
+        addLine(lines, "本次选择的维度", dimension == null ? null : dimension.getName());
+        addLine(lines, "维度解释", dimension == null ? null : dimension.getDescription());
+        lines.add("你选择的职业与个人排序");
         for (int i = 0; i < selectedIds.size(); i++) {
-            Long careerId = selectedIds.get(i); SszctopCareer career = career(careers, careerId);
-            boolean correct = i < standardIds.size() && Objects.equals(careerId, standardIds.get(i));
-            String description = rankDescription(rankDetails, careerId);
-            int cardHeight = 180 + textLines(description, 28).size() * 44;
-            Color border = correct ? new Color(53, 183, 122) : new Color(227, 233, 242);
-            drawCard(g, pad, y, width - pad * 2, cardHeight, correct ? new Color(241, 251, 246) : Color.WHITE, border);
-            g.setColor(correct ? new Color(53, 183, 122) : new Color(36, 86, 166)); g.fillOval(pad + 26, y + 28, 50, 50);
-            g.setColor(Color.WHITE); g.setFont(new Font("Arial", Font.BOLD, 28)); drawCenteredAt(g, String.valueOf(i + 1), pad + 51, y + 63);
-            g.setColor(new Color(43, 58, 82)); g.setFont(new Font("Microsoft YaHei", Font.BOLD, 32)); g.drawString(career == null ? "未记录职业" : text(career.getName(), "未记录职业"), pad + 98, y + 63);
-            if (correct) { g.setColor(new Color(32, 166, 106)); g.setFont(new Font("Microsoft YaHei", Font.BOLD, 24)); g.drawString("排序正确", width - pad - 138, y + 62); }
-            g.setColor(new Color(102, 117, 139)); g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 27));
-            drawWrappedText(g, description, pad + 28, y + 124, 28, 27, new Color(102, 117, 139), 44);
-            y += cardHeight + 34;
+            Long id = selectedIds.get(i);
+            SszctopCareer career = career(careers, id);
+            addLine(lines, "第 " + (i + 1) + " 名", career == null ? "未记录职业" : career.getName());
+            addLine(lines, "职业排序说明", rankDescription(rankDetails, id));
+            if (i < standardIds.size() && Objects.equals(id, standardIds.get(i))) addLine(lines, "排序校验", "正确");
         }
         if (!passed) {
-            int standardHeight = 140 + standardIds.size() * 104;
-            drawCard(g, pad, y, width - pad * 2, standardHeight, new Color(255, 248, 236), new Color(242, 162, 58)); y += 48;
-            g.setColor(new Color(37, 56, 88)); g.setFont(new Font("Microsoft YaHei", Font.BOLD, 34)); g.drawString("正确排序", pad + 28, y); y += 38;
-            g.setColor(new Color(125, 137, 155)); g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 25)); g.drawString("以下为本次选取职业的正确排序：", pad + 28, y); y += 44;
-            for (int i = 0; i < standardIds.size(); i++) { SszctopCareer career = career(careers, standardIds.get(i)); g.setColor(new Color(233, 154, 40)); g.fillOval(pad + 28, y - 28, 42, 42); g.setColor(Color.WHITE); g.setFont(new Font("Arial", Font.BOLD, 24)); drawCenteredAt(g, String.valueOf(i + 1), pad + 49, y + 2); g.setColor(new Color(43, 58, 82)); g.setFont(new Font("Microsoft YaHei", Font.BOLD, 29)); g.drawString(career == null ? "未记录职业" : text(career.getName(), "未记录职业"), pad + 90, y + 1); y += 92; }
+            lines.add("正确排序");
+            for (int i = 0; i < standardIds.size(); i++) {
+                SszctopCareer career = career(careers, standardIds.get(i));
+                addLine(lines, "第 " + (i + 1) + " 名", career == null ? "未记录职业" : career.getName());
+            }
         }
-        g.dispose();
-        return createImagePdf(image);
+        return createTextPdf(lines);
+    }
+
+    /** 仅展开报告页会展示的字段，避免把棋盘配置等内部状态写进报告。 */
+    private void appendReportFields(List<String> lines, Map<String, Object> data,
+                                    java.util.Set<String> keys, int depth) {
+        if (data == null) return;
+        for (String key : keys) {
+            Object value = data.get(key);
+            if (value == null) continue;
+            if (value instanceof Map || value instanceof List) {
+                lines.add(resultLabel(key));
+                appendReportValue(lines, value, resultLabel(key), depth + 1);
+            } else {
+                addLine(lines, resultLabel(key), value);
+            }
+        }
+    }
+
+    private void appendReportValue(List<String> lines, Object value, String parent, int depth) {
+        if (depth > 4 || lines.size() >= 120 || value == null) return;
+        if (value instanceof Map) {
+            for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+                if (lines.size() >= 120) break;
+                String key = resultLabel(String.valueOf(entry.getKey()));
+                Object child = entry.getValue();
+                String label = parent + " - " + key;
+                if (child instanceof Map || child instanceof List) appendReportValue(lines, child, label, depth + 1);
+                else addLine(lines, label, child);
+            }
+        } else if (value instanceof List) {
+            int i = 1;
+            for (Object child : (List<?>) value) {
+                if (lines.size() >= 120) break;
+                appendReportValue(lines, child, parent + " " + i++, depth + 1);
+            }
+        } else {
+            addLine(lines, parent, value);
+        }
+    }
+
+    private JSONObject parseResult(String resultJson) {
+        if (resultJson == null || resultJson.trim().isEmpty()) return null;
+        try {
+            return JSON.parseObject(resultJson);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    /** 递归展开统一终局快照，让没有专属 PDF 模板的新旧游戏也能下载个人结果。 */
+    private int appendResultDetails(List<String> lines, Object value, String parent, int depth) {
+        if (depth > 5 || lines.size() >= 120 || value == null) return 0;
+        int count = 0;
+        if (value instanceof Map) {
+            for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+                if (lines.size() >= 120) break;
+                String key = String.valueOf(entry.getKey());
+                String label = resultLabel(key);
+                Object child = entry.getValue();
+                if (child == null) continue;
+                if (child instanceof Map || child instanceof List) {
+                    count += appendResultDetails(lines, child, parent.isEmpty() ? label : parent + " - " + label, depth + 1);
+                } else {
+                    String text = String.valueOf(child).trim();
+                    if (text.isEmpty()) continue;
+                    if ("result".equals(key)) text = resultName(text);
+                    if (text.length() > 3000) text = text.substring(0, 2997) + "...";
+                    lines.add((parent.isEmpty() ? "" : parent + " - ") + label + "：" + text);
+                    count++;
+                }
+            }
+        } else if (value instanceof List) {
+            int index = 1;
+            for (Object item : (List<?>) value) {
+                if (lines.size() >= 120) break;
+                count += appendResultDetails(lines, item, parent + " " + index++, depth + 1);
+            }
+        }
+        return count;
+    }
+
+    private String resultLabel(String key) {
+        Map<String, String> labels = new HashMap<>();
+        labels.put("result", "对局结果"); labels.put("resultType", "结果类型");
+        labels.put("pointNo", "骰子点数"); labels.put("pointName", "测评项目");
+        labels.put("pressureValue", "压力值"); labels.put("color", "结果等级");
+        labels.put("attemptNo", "局数"); labels.put("rollCount", "掷骰次数");
+        labels.put("durationMs", "本局时长（毫秒）"); labels.put("roleName", "职业角色");
+        labels.put("jobTitle", "职业名称"); labels.put("reason", "结束原因");
+        labels.put("top1", "第一推荐"); labels.put("top2", "第二推荐");
+        labels.put("openText", "结果说明"); labels.put("scores", "测评得分");
+        labels.put("roomCode", "房间编号");
+        labels.put("resultTypeName", "结果类型"); labels.put("redCount", "红色答案数");
+        labels.put("greenCount", "绿色答案数"); labels.put("total", "答题总数");
+        labels.put("theme", "压力主题"); labels.put("projection", "职场投射");
+        labels.put("summary", "维度特点"); labels.put("careerReference", "职业参考");
+        labels.put("correctCount", "答对题数"); labels.put("timeoutCount", "超时题数");
+        labels.put("answerCount", "作答题数"); labels.put("stepTotal", "累计行进步数");
+        labels.put("position", "抵达格号"); labels.put("durationMs", "本局时长（毫秒）");
+        labels.put("finishTime", "完成时间"); labels.put("endTime", "本局结束时间");
+        labels.put("startTime", "本局开始时间"); labels.put("attemptNo", "局数");
+        return labels.getOrDefault(key, key);
+    }
+
+    private String resultName(String result) {
+        if ("win".equalsIgnoreCase(result) || "passed".equalsIgnoreCase(result)) return "已通过";
+        if ("lose".equalsIgnoreCase(result) || "failed".equalsIgnoreCase(result)) return "未通过";
+        return result;
     }
 
     private <T> T parseObject(String value, Class<T> type) { try { return JSON.parseObject(value, type); } catch (Exception ignored) { return null; } }
@@ -217,32 +640,40 @@ public class ReportCacheController extends FrontBaseController {
     private List<SszctopDimensionRank> parseRankDetails(String reportJson) { try { JSONObject json = JSON.parseObject(reportJson); List<SszctopDimensionRank> list = JSON.parseArray(JSON.toJSONString(json.get("rankDetails")), SszctopDimensionRank.class); return list == null ? new java.util.ArrayList<>() : list; } catch (Exception ignored) { return new java.util.ArrayList<>(); } }
     private SszctopCareer career(List<SszctopCareer> careers, Long id) { for (SszctopCareer career : careers) if (Objects.equals(career.getCareerId(), id)) return career; return null; }
     private String rankDescription(List<SszctopDimensionRank> ranks, Long careerId) { for (SszctopDimensionRank rank : ranks) if (Objects.equals(rank.getCareerId(), careerId)) return text(rank.getDescription(), "暂无该维度下的职业说明"); return "暂无该维度下的职业说明"; }
-    private int drawWrappedText(Graphics2D g, String value, int x, int y, int maxChars, int fontSize, Color color, int lineHeight) { g.setColor(color); g.setFont(new Font("Microsoft YaHei", Font.PLAIN, fontSize)); for (String line : textLines(value, maxChars)) { g.drawString(line, x, y); y += lineHeight; } return y; }
-    private void drawCard(Graphics2D g, int x, int y, int width, int height, Color background, Color border) { g.setColor(background); g.fillRoundRect(x, y, width, height, 24, 24); g.setColor(border); g.setStroke(new BasicStroke(3)); g.drawRoundRect(x + 1, y + 1, width - 2, height - 2, 24, 24); }
-    private byte[] createImagePdf(BufferedImage image) throws Exception { try (PDDocument doc = new PDDocument(); ByteArrayOutputStream out = new ByteArrayOutputStream()) { PDRectangle pageSize = PDRectangle.A4; float scale = pageSize.getWidth() / image.getWidth(); int slice = (int) (pageSize.getHeight() / scale); for (int top = 0; top < image.getHeight(); top += slice) { BufferedImage part = image.getSubimage(0, top, image.getWidth(), Math.min(slice, image.getHeight() - top)); PDPage page = new PDPage(pageSize); doc.addPage(page); try (PDPageContentStream cs = new PDPageContentStream(doc, page)) { cs.drawImage(LosslessFactory.createFromImage(doc, part), 0, pageSize.getHeight() - part.getHeight() * scale, pageSize.getWidth(), part.getHeight() * scale); } } doc.save(out); return out.toByteArray(); } }
-
-    /** 使用图片分页生成通用 PDF，保证中文字体在移动端下载后可正常显示。 */
+    /** 使用 HTML 排版输出文字 PDF，避免将报告内容栅格化为截图。 */
     private byte[] createTextPdf(List<String> sections) throws Exception {
-        final int width = 1080, height = 1520, pad = 76;
-        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = image.createGraphics();
-        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        g.setColor(new Color(245, 247, 250)); g.fillRect(0, 0, width, height);
-        g.setColor(Color.WHITE); g.fillRoundRect(pad, 72, width - pad * 2, height - 144, 30, 30);
-        int y = 170;
+        StringBuilder html = new StringBuilder("<!DOCTYPE html><html><head><meta charset='UTF-8'/><style>")
+                .append("@page{size:A4;margin:22mm 18mm}body{font-family:GKZH,sans-serif;color:#24364b;font-size:12pt;line-height:1.65}")
+                .append("h1{font-size:23pt;color:#244e87;border-bottom:2px solid #78a9d8;padding-bottom:12px;margin:0 0 24px}")
+                .append("h2{font-size:15pt;color:#244e87;margin:22px 0 8px;page-break-after:avoid}")
+                .append(".row{padding:9px 12px;border-bottom:1px solid #e5eaf0;page-break-inside:avoid}")
+                .append(".label{font-weight:bold;color:#334b66}.value{white-space:pre-wrap;overflow-wrap:anywhere}")
+                .append("</style></head><body>");
         for (int i = 0; i < sections.size(); i++) {
-            g.setColor(i == 0 ? new Color(26, 44, 74) : new Color(52, 73, 94));
-            g.setFont(new Font("Microsoft YaHei", i == 0 ? Font.BOLD : Font.PLAIN, i == 0 ? 44 : 30));
-            for (String line : textLines(sections.get(i), 28)) { g.drawString(line, pad + 42, y); y += i == 0 ? 68 : 52; }
-            y += i == 0 ? 30 : 14;
-        }
-        g.dispose();
-        try (PDDocument doc = new PDDocument(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            PDRectangle pageSize = PDRectangle.A4; PDPage page = new PDPage(pageSize); doc.addPage(page);
-            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
-                cs.drawImage(LosslessFactory.createFromImage(doc, image), 0, 0, pageSize.getWidth(), pageSize.getHeight());
+            String section = sections.get(i) == null ? "" : sections.get(i);
+            if (i == 0) {
+                html.append("<h1>").append(escape(section)).append("</h1>");
+            } else if (section.matches("(?:本局数据|答题明细|本局结果|15 项维度得分|兴趣类型说明|职业方向|工作环境偏好|你选择的职业与个人排序|正确排序)")) {
+                html.append("<h2>").append(escape(section)).append("</h2>");
+            } else {
+                int split = section.indexOf('：');
+                if (split < 0) split = section.indexOf(':');
+                html.append("<div class='row'>");
+                if (split > 0) {
+                    html.append("<span class='label'>").append(escape(section.substring(0, split + 1))).append("</span> ")
+                            .append("<span class='value'>").append(escape(section.substring(split + 1))).append("</span>");
+                } else {
+                    html.append("<span class='value'>").append(escape(section)).append("</span>");
+                }
+                html.append("</div>");
             }
-            doc.save(out); return out.toByteArray();
+        }
+        html.append("</body></html>");
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            PdfRendererBuilder builder = new PdfRendererBuilder().withHtmlContent(html.toString(), null).toStream(out);
+            ReportPdfFont.register(builder);
+            builder.run();
+            return out.toByteArray();
         }
     }
 
@@ -266,69 +697,37 @@ public class ReportCacheController extends FrontBaseController {
 
     private String escape(String value) { if (value == null) return ""; return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"); }
 
-    /** 用真实报告数据绘制结果页长图，再分页写入 PDF，避免 HTML 引擎与小程序 CSS 渲染差异。 */
+    /** 使用结束页报告数据生成可检索文字 PDF。 */
     private byte[] createPdf(Map result) throws Exception {
-        int width = 1080, pad = 48, y = 42;
         String code = result.get("code") == null ? "" : String.valueOf(result.get("code"));
         Map<String,HollandCode> details = new HashMap<>();
         for (HollandCode item : hollandCodeService.listCodes()) details.put(item.getCode(), item);
-        int height = 250 + code.length() * 330;
         List<String> lines = new java.util.ArrayList<>();
+        lines.add("职业兴趣测评报告");
+        addLine(lines, "霍兰德代码", code);
+        lines.add("兴趣类型说明");
         for (int i=0; i<code.length(); i++) {
             HollandCode item = details.get(String.valueOf(code.charAt(i)));
-            if (item != null) { height += 430 + textLines(item.getSummary(), 40).size() * 34 + textLines(item.getLife(), 40).size() * 34; }
+            if (item != null) {
+                addLine(lines, item.getName() + "（" + item.getCode() + "）特点", item.getSummary());
+                addLine(lines, "生活事例", item.getLife());
+            }
         }
-        height += 430 + (int)(PDRectangle.A4.getHeight()/PDRectangle.A4.getWidth()*width);
-        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = image.createGraphics();
-        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        g.setColor(new Color(245,247,250)); g.fillRect(0,0,width,height);
-        g.setColor(new Color(26,44,74)); g.setFont(new Font("Microsoft YaHei", Font.BOLD, 42)); drawCentered(g,"您的职业兴趣类型为",width,y+44); y += 80;
-        int badgeW = 300, badgeH = 220, gap = 18, start = (width - (code.length()*badgeW + (code.length()-1)*gap))/2;
-        for (int i=0; i<code.length(); i++) { HollandCode item=details.get(String.valueOf(code.charAt(i))); if(item==null)continue; int x=start+i*(badgeW+gap); Color c=Color.decode(color(String.valueOf(code.charAt(i)))); g.setColor(new Color(c.getRed(),c.getGreen(),c.getBlue(),55)); g.fillRoundRect(x,y,badgeW,badgeH,28,28); g.setColor(c); g.setStroke(new BasicStroke(8)); g.drawRoundRect(x+4,y+4,badgeW-8,badgeH-8,28,28); g.setFont(new Font("Arial",Font.BOLD,62)); drawCenteredAt(g,String.valueOf(code.charAt(i)),x+badgeW/2,y+92); g.setFont(new Font("Microsoft YaHei",Font.PLAIN,28)); drawCenteredAt(g,item.getName(),x+badgeW/2,y+145); }
-        y += badgeH + 55; g.setColor(new Color(44,62,80)); g.setFont(new Font("Microsoft YaHei",Font.BOLD,34)); g.drawString("下述是你的结论",pad,y); y += 28;
-        for (int i=0; i<code.length(); i++) { HollandCode item=details.get(String.valueOf(code.charAt(i))); if(item==null)continue; Color c=Color.decode(color(String.valueOf(code.charAt(i)))); int cardH=250+textLines(item.getSummary(),40).size()*34+textLines(item.getLife(),40).size()*34; g.setColor(Color.WHITE); g.fillRoundRect(pad,y,width-pad*2,cardH,24,24); g.setColor(c); g.fillRoundRect(pad,y,width-pad*2,12,24,24); g.setColor(new Color(26,44,74)); g.setFont(new Font("Microsoft YaHei",Font.BOLD,30)); g.drawString(icon(String.valueOf(code.charAt(i)))+"  "+item.getName()+"（"+code.charAt(i)+"）",pad+28,y+58); y=drawSection(g,"特点",item.getSummary(),y+88,pad,width,c); y=drawSection(g,"生活事例",item.getLife(),y+18,pad,width,c)+34; }
-        int pageSlice=(int)(PDRectangle.A4.getHeight()/PDRectangle.A4.getWidth()*width);
-        int comboHeight=430;
-        int pageOffset=y%pageSlice;
-        if(pageOffset>pageSlice-180){ y += pageSlice-pageOffset+24; }
-        g.setColor(Color.WHITE); g.fillRoundRect(pad,y,width-pad*2,comboHeight,24,24); g.setColor(new Color(26,44,74)); g.setFont(new Font("Microsoft YaHei",Font.BOLD,30)); drawCentered(g,"你的职业方向与工作环境偏好",width,y+58); g.setColor(new Color(24,86,209)); g.setFont(new Font("Microsoft YaHei",Font.BOLD,23)); g.drawString("职业方向",pad+28,y+108); y=drawTags(g,result.get("careers"),y+158,pad,width,new Color(238,244,255),new Color(24,86,209)); g.setColor(new Color(39,174,96)); g.drawString("工作环境偏好",pad+28,y+58); drawTags(g,result.get("workEnvs"),y+98,pad,width,new Color(234,250,241),new Color(39,174,96)); g.dispose();
-        try (PDDocument doc=new PDDocument(); ByteArrayOutputStream out=new ByteArrayOutputStream()) { PDRectangle pageSize=PDRectangle.A4; float scale=pageSize.getWidth()/width; int slice=(int)(pageSize.getHeight()/scale); for(int top=0;top<height;top+=slice){ BufferedImage part=image.getSubimage(0,top,width,Math.min(slice,height-top)); PDPage page=new PDPage(pageSize); doc.addPage(page); try(PDPageContentStream cs=new PDPageContentStream(doc,page)){ cs.drawImage(LosslessFactory.createFromImage(doc,part),0,pageSize.getHeight()-part.getHeight()*scale,pageSize.getWidth(),part.getHeight()*scale); } } doc.save(out); return out.toByteArray(); }
-    }
-    private int drawSection(Graphics2D g,String title,String text,int y,int pad,int width,Color c){g.setColor(c);g.setFont(new Font("Microsoft YaHei",Font.BOLD,23));g.drawString(title,pad+28,y);g.setColor(new Color(52,73,94));g.setFont(new Font("Microsoft YaHei",Font.PLAIN,22));int yy=y+36;for(String line:textLines(text,40)){g.drawString(line,pad+28,yy);yy+=34;}return yy;}
-    private int drawTags(Graphics2D g,Object items,int y,int pad,int width,Color bg,Color fg){if(items instanceof Iterable){int x=pad+28;g.setFont(new Font("Microsoft YaHei",Font.PLAIN,20));for(Object item:(Iterable)items){String t=String.valueOf(value(item,"title"));int w=g.getFontMetrics().stringWidth(t)+34;if(x+w>width-pad){x=pad+28;y+=44;}g.setColor(bg);g.fillRoundRect(x,y-25,w,34,20,20);g.setColor(fg);g.drawString(t,x+17,y);x+=w+12;}}return y;}
-    private List<String> textLines(String text,int max){List<String> out=new java.util.ArrayList<>();if(text==null) return out;for(int i=0;i<text.length();i+=max)out.add(text.substring(i,Math.min(text.length(),i+max)));return out;}
-    private void drawCentered(Graphics2D g,String s,int width,int y){drawCenteredAt(g,s,width/2,y);} private void drawCenteredAt(Graphics2D g,String s,int x,int y){FontMetrics fm=g.getFontMetrics();g.drawString(s,x-fm.stringWidth(s)/2,y);}
-
-    private String buildHtml(Map result) {
-        String code = result.get("code") == null ? "" : String.valueOf(result.get("code"));
-        Map<String,HollandCode> details = new HashMap<>();
-        for (HollandCode item : hollandCodeService.listCodes()) details.put(item.getCode(), item);
-        StringBuilder badges = new StringBuilder();
-        StringBuilder conclusions = new StringBuilder();
-        for (int i=0; i<code.length(); i++) {
-            String c = String.valueOf(code.charAt(i)); HollandCode item = details.get(c); if (item == null) continue;
-            String color = color(c); String icon = icon(c);
-            badges.append("<div class='badge' style='border-color:").append(color).append("'><b>").append(escape(c)).append("</b><span>").append(escape(item.getName())).append("</span></div>");
-            conclusions.append("<div class='type-card' style='border-top-color:").append(color).append("'><h3>").append(icon).append(" ").append(escape(item.getName())).append("（").append(escape(c)).append("）</h3><h4>特点</h4><p>").append(escape(item.getSummary())).append("</p><h4>生活事例</h4><p>").append(escape(item.getLife())).append("</p></div>");
-        }
-        return "<?xml version='1.0' encoding='UTF-8'?><!DOCTYPE html><html xmlns='http://www.w3.org/1999/xhtml' lang='zh-CN'><head><meta charset='UTF-8' /><title>职业兴趣测评报告</title><style type='text/css'>body{font-family:Arial,'Microsoft YaHei';max-width:900px;margin:0 auto;padding:24px;color:#263b55;background:#f5f7fa}.header{text-align:center;padding:24px 18px 12px}.header h1{margin:0;color:#1a2c4a;font-size:28px}.badges{margin:22px auto 12px;text-align:center}.badge{display:inline-block;vertical-align:top;width:108px;height:98px;margin:6px;padding:12px 4px;border:5px solid #8bbce0;border-radius:18px;background:#eef7ff;box-sizing:border-box}.badge b{display:block;font-size:30px;color:#1677ff;line-height:38px}.badge span{display:block;margin-top:4px;font-size:14px}.type-explain-title{font-size:22px;font-weight:bold;color:#2c3e50;margin:22px 4px 12px}.type-card,.combo{margin:18px 0;padding:20px 22px;background:#fff;border-radius:14px;border-top:7px solid #1677ff;box-shadow:0 4px 12px #dfe6ef}.type-card h3{margin:0 0 16px;font-size:20px;color:#1a2c4a}.type-card h4{color:#1856d1;margin:12px 0 4px;font-size:15px}.type-card p{line-height:1.8;margin:0;font-size:15px;color:#34495e}.combo{border-top:0}.combo h2{color:#1a2c4a;font-size:20px;text-align:center;margin:0 0 20px}.combo h3{font-size:15px;color:#1856d1;margin:14px 0 6px}.item{display:inline-block;margin:4px 8px 4px 0;padding:8px 13px;background:#eef4ff;color:#1856d1;border-radius:18px;font-size:14px}.secondary{background:#eafaf1;color:#27ae60}</style></head><body><div class='header'><h1>您的职业兴趣类型为</h1><div class='badges'>" + badges + "</div></div><div class='type-explain-title'>下述是你的结论</div>" + conclusions + "<div class='combo'><h2>你的职业方向与工作环境偏好</h2><h3>职业方向</h3>" + listHtml(result,"careers","title", false) + "<h3>工作环境偏好</h3>" + listHtml(result,"workEnvs","title", true) + "</div></body></html>";
+        lines.add("职业方向");
+        appendTitleValues(lines, result.get("careers"));
+        lines.add("工作环境偏好");
+        appendTitleValues(lines, result.get("workEnvs"));
+        return createTextPdf(lines);
     }
 
-    private String listHtml(Map result, String key, String field) { return listHtml(result, key, field, false); }
-    private String listHtml(Map result, String key, String field, boolean secondary) {
-        Object value = result.get(key);
-        if (!(value instanceof Iterable)) return "";
-        StringBuilder html = new StringBuilder();
-        for (Object item : (Iterable) value) {
-            Object text = value(item, field);
-            if (text != null && !String.valueOf(text).trim().isEmpty()) html.append("<div class='item").append(secondary ? " secondary" : "").append("'>").append(escape(String.valueOf(text))).append("</div>");
+    private void appendTitleValues(List<String> lines, Object rawItems) {
+        if (!(rawItems instanceof Iterable)) return;
+        for (Object item : (Iterable<?>) rawItems) {
+            if (item instanceof Map) {
+                Object title = ((Map<?, ?>) item).get("title");
+                addLine(lines, title == null ? "项目" : String.valueOf(title), ((Map<?, ?>) item).get("description"));
+            } else if (item != null) lines.add(String.valueOf(item));
         }
-        return html.toString();
     }
-
-    private Object value(Object bean, String field) { if (bean == null) return ""; if (bean instanceof Map) return ((Map) bean).get(field); try { return bean.getClass().getMethod("get" + Character.toUpperCase(field.charAt(0)) + field.substring(1)).invoke(bean); } catch (Exception e) { return ""; } }
     private String safeName(String value) { return value == null || value.trim().isEmpty() ? "未分类区域" : value.replaceAll("[\\\\/:*?\"<>|]", "_"); }
-    private String color(String c) { return "I".equals(c)?"#2980b9":"R".equals(c)?"#e67e22":"S".equals(c)?"#27ae60":"E".equals(c)?"#c0392b":"A".equals(c)?"#8e44ad":"#7f8c8d"; }
-    private String icon(String c) { return "I".equals(c)?"🔬":"R".equals(c)?"🛠️":"S".equals(c)?"🤝":"E".equals(c)?"📈":"A".equals(c)?"🎨":"📋"; }
 }

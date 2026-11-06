@@ -186,8 +186,9 @@ public class GkzhActivityWeekController extends BaseController {
     }
 
     @GetMapping("/instances")
-    public AjaxResult instances(@RequestParam(required = false) String bizType) {
-        return AjaxResult.success(activityWeekService.listInstances(bizType));
+    public AjaxResult instances(@RequestParam(required = false) String bizType,
+                                @RequestParam(required = false) Long schoolId) {
+        return AjaxResult.success(activityWeekService.listInstances(bizType, schoolId));
     }
 
     @GetMapping("/instance/{instanceId}")
@@ -200,9 +201,9 @@ public class GkzhActivityWeekController extends BaseController {
         return toAjax(activityWeekService.saveInstance(instance));
     }
 
-    @DeleteMapping("/instance/{instanceId}")
-    public AjaxResult deleteInstance(@PathVariable Long instanceId) {
-        return toAjax(activityWeekService.deleteInstance(instanceId));
+    @DeleteMapping("/instance/{instanceId}/schools/{schoolId}")
+    public AjaxResult deleteInstance(@PathVariable Long instanceId, @PathVariable Long schoolId) {
+        return toAjax(activityWeekService.deleteInstance(instanceId, schoolId));
     }
 
     @GetMapping("/instance/{instanceId}/schools")

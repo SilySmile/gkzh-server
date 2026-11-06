@@ -28,6 +28,7 @@ public class GkzhActivityWeekSchool {
 
     private Integer maxDrawCount;
 
+    /** 0正常，1停用，2本校已删除（保留配置和历史数据）。 */
     private String status;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")

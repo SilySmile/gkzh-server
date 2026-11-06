@@ -2,11 +2,13 @@ package com.gkzh.activity.service.impl;
 
 import java.util.Date;
 import java.util.List;
+import java.util.Objects;
 import com.alibaba.fastjson2.JSON;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.gkzh.activity.domain.week.GkzhActivityArea;
@@ -143,14 +145,30 @@ public class ActivityWeekServiceImpl implements IActivityWeekService {
 
     @Override
     public List<GkzhActivityWeekInstance> listInstances(String bizType) {
+        return listInstances(bizType, null);
+    }
+
+    @Override
+    public List<GkzhActivityWeekInstance> listInstances(String bizType, Long schoolId) {
         QueryWrapper<GkzhActivityWeekInstance> query = new QueryWrapper<>();
         if (bizType != null && !bizType.trim().isEmpty()) {
             query.eq("biz_type", bizType);
+        }
+        if (schoolId != null) {
+            // 区域也可作为历史活动的学校归属；明确删除的关系优先，不能被区域回退重新展示。
+            query.apply("(EXISTS (SELECT 1 FROM gkzh_activity_week_school ws "
+                    + "WHERE ws.instance_id = gkzh_activity_week_instance.instance_id AND ws.school_id = {0}) "
+                    + "OR EXISTS (SELECT 1 FROM gkzh_activity_area a "
+                    + "WHERE a.instance_id = gkzh_activity_week_instance.instance_id AND a.school_id = {0})) "
+                    + "AND NOT EXISTS (SELECT 1 FROM gkzh_activity_week_school deleted "
+                    + "WHERE deleted.instance_id = gkzh_activity_week_instance.instance_id "
+                    + "AND deleted.school_id = {0} AND deleted.status = '2')", schoolId);
         }
         query.orderByDesc("instance_id");
         List<GkzhActivityWeekInstance> list = instanceMapper.selectList(query);
         for (GkzhActivityWeekInstance item : list) {
             item.setBannerUrl(resolveUrl(item.getBannerUrl()));
+            item.setSchoolId(schoolId);
         }
         return list;
     }
@@ -182,16 +200,33 @@ public class ActivityWeekServiceImpl implements IActivityWeekService {
     }
 
     @Override
+    @Transactional
     public int saveInstance(GkzhActivityWeekInstance instance) {
         Date now = DateUtils.getNowDate();
+        boolean creating = instance.getInstanceId() == null;
+        GkzhActivityWeekInstance existing = null;
+        if (creating && instance.getSchoolId() == null) {
+            throw new ServiceException("请选择学校");
+        }
         if (instance.getInstanceId() != null) {
-            GkzhActivityWeekInstance existing = getInstance(instance.getInstanceId());
-            if (existing != null) {
-                if (instance.getStartTime() == null) {
-                    instance.setStartTime(existing.getStartTime());
+            existing = getInstance(instance.getInstanceId());
+            if (existing == null) {
+                throw new ServiceException("活动不存在");
+            }
+            if (instance.getSchoolId() != null) {
+                checkSchoolActivityAvailable(instance.getInstanceId(), instance.getSchoolId());
+                if (getSchoolConfig(instance.getInstanceId(), instance.getSchoolId()) == null
+                        && areaMapper.selectCount(new QueryWrapper<GkzhActivityArea>()
+                        .eq("instance_id", instance.getInstanceId()).eq("school_id", instance.getSchoolId())) == 0) {
+                    throw new ServiceException("该活动不属于当前学校");
                 }
-                if (instance.getEndTime() == null) {
-                    instance.setEndTime(existing.getEndTime());
+            }
+            if (existing != null) {
+                if (instance.getStartTime() == null && existing.getStartTime() != null) {
+                    instance.setStartTime(new Date(existing.getStartTime().getTime()));
+                }
+                if (instance.getEndTime() == null && existing.getEndTime() != null) {
+                    instance.setEndTime(new Date(existing.getEndTime().getTime()));
                 }
                 if (instance.getBizType() == null) {
                     instance.setBizType(existing.getBizType());
@@ -214,6 +249,12 @@ public class ActivityWeekServiceImpl implements IActivityWeekService {
         if (!"3".equals(instance.getStatus())) {
             instance.setStatus(resolveTimeStatus(instance));
         }
+        if (instance.getStartTime() == null || instance.getEndTime() == null) {
+            throw new ServiceException("请选择活动开始和结束时间");
+        }
+        if (instance.getStartTime().after(instance.getEndTime())) {
+            throw new ServiceException("结束时间不能早于开始时间");
+        }
         if (instance.getInstanceId() == null && instance.getDefinitionId() == null
                 && (instance.getBizType() == null || instance.getBizType().trim().isEmpty())) {
             throw new ServiceException("请选择活动类型");
@@ -226,25 +267,52 @@ public class ActivityWeekServiceImpl implements IActivityWeekService {
                 instance.setDefinitionId(definition.getDefinitionId());
             }
         }
-        if (instance.getInstanceId() == null) {
+        if (creating) {
             checkOverlap(instance);
             if (instance.getEndTime() != null && instance.getEndTime().before(now)) {
                 throw new RuntimeException("不能添加已结束的活动");
             }
             instance.setCreateTime(now);
             instance.setUpdateTime(now);
-            return instanceMapper.insert(instance);
+            int rows = instanceMapper.insert(instance);
+            saveInstanceSchools(instance.getInstanceId(), singletonSchool(instance.getSchoolId()));
+            return rows;
         }
         instance.setUpdateTime(now);
-        checkOverlap(instance);
+        // 标题、状态与定时状态同步不应触发旧活动时间冲突校验。
+        if (!Objects.equals(instance.getStartTime(), existing.getStartTime())
+                || !Objects.equals(instance.getEndTime(), existing.getEndTime())
+                || !Objects.equals(instance.getBizType(), existing.getBizType())) {
+            List<GkzhActivityWeekSchool> schools = listInstanceSchools(instance.getInstanceId());
+            for (GkzhActivityWeekSchool school : schools) {
+                checkOverlap(instance, school.getSchoolId());
+            }
+            if (instance.getSchoolId() != null && schools.stream()
+                    .noneMatch(school -> instance.getSchoolId().equals(school.getSchoolId()))) {
+                checkOverlap(instance, instance.getSchoolId());
+            }
+        }
         return instanceMapper.updateById(instance);
     }
 
+    private List<GkzhActivityWeekSchool> singletonSchool(Long schoolId) {
+        GkzhActivityWeekSchool relation = new GkzhActivityWeekSchool();
+        relation.setSchoolId(schoolId);
+        return java.util.Collections.singletonList(relation);
+    }
+
     private void checkOverlap(GkzhActivityWeekInstance instance) {
+        checkOverlap(instance, instance.getSchoolId());
+    }
+
+    private void checkOverlap(GkzhActivityWeekInstance instance, Long schoolId) {
+        if (schoolId == null) {
+            throw new ServiceException("请选择学校后再设置活动时间");
+        }
         if (instance.getBizType() == null || instance.getStartTime() == null || instance.getEndTime() == null) {
             return;
         }
-        List<GkzhActivityWeekInstance> exists = listInstances(instance.getBizType());
+        List<GkzhActivityWeekInstance> exists = listInstances(instance.getBizType(), schoolId);
         for (GkzhActivityWeekInstance item : exists) {
             if (instance.getInstanceId() != null && instance.getInstanceId().equals(item.getInstanceId())) {
                 continue;
@@ -253,7 +321,7 @@ public class ActivityWeekServiceImpl implements IActivityWeekService {
                 continue;
             }
             if (instance.getStartTime().before(item.getEndTime()) && instance.getEndTime().after(item.getStartTime())) {
-                throw new RuntimeException("所选时间范围与已有活动时间重叠，请调整后再添加");
+                throw new ServiceException("所选时间范围与该学校已有的同类型活动时间重叠，请调整后再添加");
             }
         }
     }
@@ -270,32 +338,47 @@ public class ActivityWeekServiceImpl implements IActivityWeekService {
     }
 
     @Override
-    public int deleteInstance(Long instanceId) {
-        GkzhActivityWeekInstance instance = getInstance(instanceId);
-        if (instance == null) {
-            return 0;
+    @Transactional
+    public int deleteInstance(Long instanceId, Long schoolId) {
+        if (instanceId == null || schoolId == null) {
+            throw new ServiceException("请选择要删除活动的学校");
         }
-        if (!"0".equals(instance.getStatus())) {
-            throw new RuntimeException("只有未开始的活动可以删除");
+        if (instanceMapper.selectById(instanceId) == null) {
+            throw new ServiceException("活动不存在");
         }
-        QueryWrapper<GkzhActivityArea> areaQuery = new QueryWrapper<>();
-        areaQuery.eq("instance_id", instanceId);
-        List<GkzhActivityArea> areas = areaMapper.selectList(areaQuery);
-        for (GkzhActivityArea area : areas) {
-            deleteArea(area.getAreaId());
+        GkzhActivityWeekSchool relation = weekSchoolMapper.selectOne(new QueryWrapper<GkzhActivityWeekSchool>()
+                .eq("instance_id", instanceId).eq("school_id", schoolId));
+        if (relation != null) {
+            // 重复请求保持幂等；永远不删除实例、区域、游戏及历史参与/报告数据。
+            return "2".equals(relation.getStatus()) ? 1 : weekSchoolMapper.markSchoolDeleted(instanceId, schoolId);
         }
+        if (areaMapper.selectCount(new QueryWrapper<GkzhActivityArea>()
+                .eq("instance_id", instanceId).eq("school_id", schoolId)) == 0) {
+            throw new ServiceException("该学校未关联此活动");
+        }
+        // 无关系表的历史学校区域：增加删除标记，避免区域回退再次展示。
+        relation = new GkzhActivityWeekSchool();
+        relation.setInstanceId(instanceId);
+        relation.setSchoolId(schoolId);
+        relation.setStatus("2");
+        relation.setCreateTime(DateUtils.getNowDate());
+        return weekSchoolMapper.insert(relation);
+    }
 
-        QueryWrapper<GkzhActivityWeekSchool> schoolQuery = new QueryWrapper<>();
-        schoolQuery.eq("instance_id", instanceId);
-        weekSchoolMapper.delete(schoolQuery);
-
-        return instanceMapper.deleteById(instanceId);
+    @Override
+    public void checkSchoolActivityAvailable(Long instanceId, Long schoolId) {
+        if (instanceId != null && schoolId != null && weekSchoolMapper.selectCount(
+                new QueryWrapper<GkzhActivityWeekSchool>().eq("instance_id", instanceId)
+                        .eq("school_id", schoolId).eq("status", "2")) > 0) {
+            throw new ServiceException("该学校的活动已删除");
+        }
     }
 
     @Override
     public List<GkzhActivityWeekSchool> listInstanceSchools(Long instanceId) {
         QueryWrapper<GkzhActivityWeekSchool> query = new QueryWrapper<>();
         query.eq("instance_id", instanceId);
+        query.and(q -> q.isNull("status").or().ne("status", "2"));
         return weekSchoolMapper.selectList(query);
     }
 
@@ -303,6 +386,7 @@ public class ActivityWeekServiceImpl implements IActivityWeekService {
     public GkzhActivityWeekSchool getSchoolConfig(Long instanceId, Long schoolId) {
         QueryWrapper<GkzhActivityWeekSchool> query = new QueryWrapper<>();
         query.eq("instance_id", instanceId).eq("school_id", schoolId);
+        query.and(q -> q.isNull("status").or().ne("status", "2"));
         return weekSchoolMapper.selectOne(query);
     }
 
@@ -323,26 +407,41 @@ public class ActivityWeekServiceImpl implements IActivityWeekService {
     }
 
     @Override
+    @Transactional
     public int saveInstanceSchools(Long instanceId, List<GkzhActivityWeekSchool> schoolConfigs) {
-        QueryWrapper<GkzhActivityWeekSchool> delete = new QueryWrapper<>();
-        delete.eq("instance_id", instanceId);
-        weekSchoolMapper.delete(delete);
-
-        int rows = 0;
-        if (schoolConfigs != null) {
-            for (GkzhActivityWeekSchool config : schoolConfigs) {
-                GkzhActivityWeekSchool relation = new GkzhActivityWeekSchool();
-                relation.setInstanceId(instanceId);
-                relation.setSchoolId(config.getSchoolId());
-                relation.setMinFinishCount(config.getMinFinishCount() == null ? 0 : config.getMinFinishCount());
-                relation.setLotteryId(config.getLotteryId());
-                relation.setMaxDrawCount(config.getMaxDrawCount() == null ? 1 : config.getMaxDrawCount());
-                relation.setStatus("0");
-                relation.setCreateTime(DateUtils.getNowDate());
-                rows += weekSchoolMapper.insert(relation);
-            }
+        if (instanceId == null || instanceMapper.selectById(instanceId) == null) {
+            throw new ServiceException("活动实例不存在");
         }
-        return rows;
+        if (schoolConfigs == null || schoolConfigs.size() != 1 || schoolConfigs.get(0) == null
+                || schoolConfigs.get(0).getSchoolId() == null) {
+            throw new ServiceException("每次只能保存当前一个学校的配置");
+        }
+        GkzhActivityWeekSchool config = schoolConfigs.get(0);
+        checkSchoolActivityAvailable(instanceId, config.getSchoolId());
+        GkzhActivityWeekSchool relation = getSchoolConfig(instanceId, config.getSchoolId());
+        if (relation == null) {
+            if (!listInstanceSchools(instanceId).isEmpty() && areaMapper.selectCount(
+                    new QueryWrapper<GkzhActivityArea>().eq("instance_id", instanceId)
+                            .eq("school_id", config.getSchoolId())) == 0) {
+                throw new ServiceException("不能为其他学校的活动新增学校绑定，请在当前学校新建活动");
+            }
+            relation = new GkzhActivityWeekSchool();
+            relation.setInstanceId(instanceId);
+            relation.setSchoolId(config.getSchoolId());
+            relation.setStatus("0");
+            relation.setCreateTime(DateUtils.getNowDate());
+        }
+        relation.setMinFinishCount(config.getMinFinishCount() == null ? 0 : config.getMinFinishCount());
+        relation.setLotteryId(config.getLotteryId());
+        relation.setMaxDrawCount(config.getMaxDrawCount() == null ? 1 : config.getMaxDrawCount());
+        if (relation.getMinFinishCount() < 0 || relation.getMaxDrawCount() < 1) {
+            throw new ServiceException("完成游戏数不能小于0，最多抽奖次数不能小于1");
+        }
+        if (relation.getId() == null) {
+            return weekSchoolMapper.insert(relation);
+        }
+        // 原有多学校活动只更新指定学校这一行，绝不能先清空整个活动的学校关系。
+        return weekSchoolMapper.updateSchoolConfig(relation);
     }
 
     @Override
@@ -360,6 +459,12 @@ public class ActivityWeekServiceImpl implements IActivityWeekService {
     public int saveArea(GkzhActivityArea area) {
         if (area.getSchoolId() == null) {
             throw new ServiceException("学校不能为空");
+        }
+        checkSchoolActivityAvailable(area.getInstanceId(), area.getSchoolId());
+        if (getSchoolConfig(area.getInstanceId(), area.getSchoolId()) == null
+                && areaMapper.selectCount(new QueryWrapper<GkzhActivityArea>()
+                .eq("instance_id", area.getInstanceId()).eq("school_id", area.getSchoolId())) == 0) {
+            throw new ServiceException("只能在活动所属学校添加区域");
         }
         Date now = DateUtils.getNowDate();
         if (area.getAreaId() == null) {
@@ -404,6 +509,9 @@ public class ActivityWeekServiceImpl implements IActivityWeekService {
         }
         // 区域是活动内容的学校归属来源，与 flow 接口按学校过滤区域的口径保持一致。
         GkzhActivityArea area = areaMapper.selectById(game.getAreaId());
+        if (area != null) {
+            checkSchoolActivityAvailable(area.getInstanceId(), area.getSchoolId());
+        }
         return area == null ? null : area.getSchoolId();
     }
 

@@ -65,6 +65,7 @@ public class WeekAppController extends FrontBaseController {
 
         StudentCheckin student = getCurrentStudent();
         Long schoolId = getCurrentStudentSchoolId();
+        activityWeekService.checkSchoolActivityAvailable(instanceId, schoolId);
         List<GkzhActivityArea> areas = schoolId == null
                 ? new ArrayList<>()
                 : activityWeekService.listAreas(instanceId, schoolId);
@@ -116,7 +117,11 @@ public class WeekAppController extends FrontBaseController {
 
     @GetMapping("/active/{bizType}")
     public AjaxResult activeInstance(@PathVariable String bizType) {
-        List<GkzhActivityWeekInstance> instances = activityWeekService.listInstances(bizType);
+        Long schoolId = getCurrentStudentSchoolId();
+        if (schoolId == null) {
+            return AjaxResult.error("当前账号未绑定学校");
+        }
+        List<GkzhActivityWeekInstance> instances = activityWeekService.listInstances(bizType, schoolId);
         GkzhActivityWeekInstance active = instances.stream()
                 .filter(item -> "1".equals(item.getStatus()))
                 .findFirst()

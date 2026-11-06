@@ -34,11 +34,17 @@ public interface IActivityWeekService {
 
     List<GkzhActivityWeekInstance> listInstances(String bizType);
 
+    List<GkzhActivityWeekInstance> listInstances(String bizType, Long schoolId);
+
     GkzhActivityWeekInstance getInstance(Long instanceId);
 
     int saveInstance(GkzhActivityWeekInstance instance);
 
-    int deleteInstance(Long instanceId);
+    /** 逻辑删除指定学校的活动，保留共享实例及所有历史数据。 */
+    int deleteInstance(Long instanceId, Long schoolId);
+
+    /** 拒绝进入已被本校删除的活动；兼容没有学校关系的历史区域。 */
+    void checkSchoolActivityAvailable(Long instanceId, Long schoolId);
 
     List<GkzhActivityWeekSchool> listInstanceSchools(Long instanceId);
 

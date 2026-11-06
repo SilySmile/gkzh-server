@@ -25,6 +25,8 @@ public interface GkzhStaffActivityStatisticsMapper {
     @Select("select i.instance_id, i.biz_type, i.title, i.start_time, i.end_time " +
             "from gkzh_activity_week_instance i " +
             "where i.biz_type = #{bizType} and i.status = '1' " +
+            "and not exists (select 1 from gkzh_activity_week_school deleted " +
+            "where deleted.instance_id = i.instance_id and deleted.school_id = #{schoolId} and deleted.status = '2') " +
             // 参与学校关系与区域配置任一命中即可：部分活动只配置了学校区域和游戏，未单独保存参与学校关系。
             "and (exists (select 1 from gkzh_activity_week_school ws " +
             "where ws.instance_id = i.instance_id and ws.school_id = #{schoolId} and ws.status = '0') " +

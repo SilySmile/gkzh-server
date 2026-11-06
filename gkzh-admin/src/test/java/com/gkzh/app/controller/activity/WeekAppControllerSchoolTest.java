@@ -1,6 +1,8 @@
 package com.gkzh.app.controller.activity;
 
 import com.gkzh.activity.domain.week.GkzhActivityGame;
+import com.gkzh.activity.domain.week.GkzhActivityWeekInstance;
+import java.util.Collections;
 import com.gkzh.activity.service.IActivityWeekService;
 import com.gkzh.common.core.domain.AjaxResult;
 import com.gkzh.common.core.domain.model.StudentCheckin;
@@ -20,6 +22,32 @@ import static org.mockito.Mockito.spy;
 
 /** 扫码进入活动游戏时，必须校验游戏所属区域学校与当前学生学校一致。 */
 class WeekAppControllerSchoolTest {
+
+    @Test
+    void activeActivityUsesCurrentStudentSchool() {
+        IActivityWeekService activities = mock(IActivityWeekService.class);
+        IGkzhStudentService students = mock(IGkzhStudentService.class);
+        GkzhStudent profile = new GkzhStudent();
+        profile.setSchoolId(5L);
+        when(students.selectGkzhStudentByStudentId(21L)).thenReturn(profile);
+        GkzhActivityWeekInstance active = new GkzhActivityWeekInstance();
+        active.setInstanceId(21L);
+        active.setStatus("1");
+        when(activities.listInstances("career_week", 5L)).thenReturn(Collections.singletonList(active));
+        WeekAppController controller = spy(new WeekAppController());
+        StudentCheckin login = new StudentCheckin();
+        login.setStuId(21L);
+        doReturn(login).when(controller).getCurrentStudent();
+        ReflectionTestUtils.setField(controller, "activityWeekService", activities);
+        ReflectionTestUtils.setField(controller, "studentService", students);
+
+        AjaxResult result = controller.activeInstance("career_week");
+
+        assertEquals(200, result.get("code"));
+        assertEquals(active, result.get("data"));
+        verify(activities).listInstances("career_week", 5L);
+        verify(activities, never()).listInstances("career_week");
+    }
 
     @Test
     void rejectsGameFromAnotherSchoolBeforeCreatingParticipation() {

@@ -206,6 +206,11 @@ public class GkzhActivityWeekController extends BaseController {
         return toAjax(activityWeekService.deleteInstance(instanceId, schoolId));
     }
 
+    @PostMapping("/instance/{instanceId}/schools/{schoolId}")
+    public AjaxResult addInstanceSchool(@PathVariable Long instanceId, @PathVariable Long schoolId) {
+        return toAjax(activityWeekService.addInstanceSchool(instanceId, schoolId));
+    }
+
     @GetMapping("/instance/{instanceId}/schools")
     public AjaxResult instanceSchools(@PathVariable Long instanceId) {
         return AjaxResult.success(activityWeekService.listInstanceSchools(instanceId));

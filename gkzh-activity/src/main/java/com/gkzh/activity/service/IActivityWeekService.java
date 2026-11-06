@@ -54,6 +54,9 @@ public interface IActivityWeekService {
 
     int saveInstanceSchools(Long instanceId, List<GkzhActivityWeekSchool> schoolConfigs);
 
+    /** 将已有活动实例添加到指定学校：关系不存在则新增，已删除则恢复。 */
+    int addInstanceSchool(Long instanceId, Long schoolId);
+
     List<GkzhActivityArea> listAreas(Long instanceId, Long schoolId);
 
     int saveArea(GkzhActivityArea area);

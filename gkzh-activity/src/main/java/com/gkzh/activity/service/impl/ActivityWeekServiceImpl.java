@@ -445,6 +445,39 @@ public class ActivityWeekServiceImpl implements IActivityWeekService {
     }
 
     @Override
+    @Transactional
+    public int addInstanceSchool(Long instanceId, Long schoolId) {
+        if (instanceId == null || schoolId == null) {
+            throw new ServiceException("请选择活动和学校");
+        }
+        GkzhActivityWeekInstance instance = instanceMapper.selectById(instanceId);
+        if (instance == null) {
+            throw new ServiceException("活动不存在");
+        }
+        GkzhActivityWeekSchool relation = weekSchoolMapper.selectOne(new QueryWrapper<GkzhActivityWeekSchool>()
+                .eq("instance_id", instanceId).eq("school_id", schoolId));
+        // 已经正常绑定，直接返回成功，重复点击不产生重复关系。
+        if (relation != null && !"2".equals(relation.getStatus())) {
+            return 1;
+        }
+        // 目标学校同一活动类型下不能出现时间重叠的活动。
+        checkOverlap(instance, schoolId);
+        if (relation == null) {
+            relation = new GkzhActivityWeekSchool();
+            relation.setInstanceId(instanceId);
+            relation.setSchoolId(schoolId);
+            relation.setMinFinishCount(0);
+            relation.setMaxDrawCount(1);
+            relation.setStatus("0");
+            relation.setCreateTime(DateUtils.getNowDate());
+            return weekSchoolMapper.insert(relation);
+        }
+        // 恢复被“删除本校活动”软删除的关系，保留原抽奖门槛配置。
+        relation.setStatus("0");
+        return weekSchoolMapper.updateById(relation);
+    }
+
+    @Override
     public List<GkzhActivityArea> listAreas(Long instanceId, Long schoolId) {
         QueryWrapper<GkzhActivityArea> query = new QueryWrapper<>();
         query.eq("instance_id", instanceId);

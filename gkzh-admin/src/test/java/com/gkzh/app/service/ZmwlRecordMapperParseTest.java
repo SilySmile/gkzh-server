@@ -106,5 +106,13 @@ public class ZmwlRecordMapperParseTest {
                 .getBoundSql(params).getSql();
         assertTrue(summary.contains("LEFT JOIN gkzh_school_department p ON p.department_id = d.parent_id"), summary);
         assertTrue(summary.contains("未填写院系"), summary);
+        // gkzh_school_department 的名称字段是 title；写成 name 会在运行时报 Unknown column。
+        assertTrue(summary.contains("COALESCE(p.title"), summary);
+        assertFalse(summary.contains("p.name"), summary);
+
+        String counts = configuration.getMappedStatement(NAMESPACE + ".selectDepartmentDirectionCounts")
+                .getBoundSql(params).getSql();
+        assertTrue(counts.contains("COALESCE(p.title"), counts);
+        assertFalse(counts.contains("p.name"), counts);
     }
 }

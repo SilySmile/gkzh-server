@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.zmwl.mapper.ZmwlRecordMapper">
+
+    <!-- 参与记录通用筛选条件，列表、汇总、方向分布、院系偏好和导出共用同一口径。 -->
+    <sql id="recordConditions">
+        <where>
+            r.game_type = 'zmwl'
+            <if test="q.instanceId != null">
+                AND r.instance_id = #{q.instanceId}
+            </if>
+            <if test="q.gameId != null">
+                AND r.game_id = #{q.gameId}
+            </if>
+            <if test="q.schoolId != null">
+                AND r.school_id = #{q.schoolId}
+            </if>
+            <if test="q.startDate != null">
+                AND r.scan_time &gt;= #{q.startDate}
+            </if>
+            <if test="q.endDate != null">
+                AND r.scan_time &lt; #{q.endDate}
+            </if>
+            <if test="q.departmentId != null">
+                AND (r.department_id = #{q.departmentId}
+                     OR EXISTS (SELECT 1 FROM gkzh_school_department d
+                                WHERE d.department_id = r.department_id
+                                  AND FIND_IN_SET(#{q.departmentId}, d.ancestors)))
+            </if>
+            <if test="q.major != null and q.major != ''">
+                AND r.major LIKE CONCAT('%', #{q.major}, '%')
+            </if>
+            <if test="q.studentNo != null and q.studentNo != ''">
+                AND r.student_no LIKE CONCAT('%', #{q.studentNo}, '%')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("男")'>
+                AND r.gender IN ('男', '0')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("女")'>
+                AND r.gender IN ('女', '1')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("其他")'>
+                AND (r.gender IS NULL OR TRIM(r.gender) = '' OR r.gender NOT IN ('男', '0', '女', '1'))
+            </if>
+            <if test="q.directionCode != null and q.directionCode != ''">
+                AND r.direction_code = #{q.directionCode}
+            </if>
+            <if test='q.status != null and q.status.equals("finished")'>
+                AND r.status = 'finished'
+            </if>
+            <if test='q.status != null and q.status.equals("inProgress")'>
+                AND r.status &lt;&gt; 'finished'
+            </if>
+        </where>
+    </sql>
+
+    <!-- 后台参与记录查询：按活动、方向、状态、学生属性和参与日期动态筛选。 -->
+    <select id="selectAdminRecords" resultType="com.gkzh.zmwl.domain.ZmwlRecord">
+        SELECT r.* FROM gkzh_zmwl_record r
+        <include refid="recordConditions"/>
+        ORDER BY r.record_id DESC
+    </select>
+
+    <!-- 统计汇总与列表使用同一筛选条件；方向人数只统计已确认选择的记录。 -->
+    <select id="selectAdminSummary" resultType="java.util.LinkedHashMap">
+        SELECT COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN r.status = 'finished' THEN 1 ELSE 0 END), 0) AS finished,
+               COALESCE(SUM(CASE WHEN r.status = 'finished' AND r.direction_code IS NOT NULL
+                                      AND r.direction_code &lt;&gt; '' THEN 1 ELSE 0 END), 0) AS chosen,
+               COALESCE(SUM(CASE WHEN r.status = 'finished' AND r.direction_code = 'undecided'
+                                 THEN 1 ELSE 0 END), 0) AS undecided,
+               COALESCE(ROUND(AVG(CASE WHEN r.status = 'finished' THEN r.duration_ms END), 0), 0) AS avgDurationMs
+        FROM gkzh_zmwl_record r
+        <include refid="recordConditions"/>
+    </select>
+
+    <!-- 各发展方向的选择人数；未出现的方向由服务端补 0。 -->
+    <select id="selectDirectionStats" resultType="java.util.LinkedHashMap">
+        SELECT r.direction_code AS directionCode,
+               MAX(r.direction_name) AS directionName,
+               COUNT(*) AS selectedCount
+        FROM gkzh_zmwl_record r
+        <include refid="recordConditions"/>
+          AND r.status = 'finished'
+          AND r.direction_code IS NOT NULL
+          AND r.direction_code &lt;&gt; ''
+        GROUP BY r.direction_code
+        ORDER BY selectedCount DESC, directionCode
+    </select>
+
+    <!-- 各院系的参与与完成人数；院系取专业部门的父部门，缺失统一归入“未填写院系”。 -->
+    <select id="selectDepartmentSummary" resultType="java.util.LinkedHashMap">
+        SELECT COALESCE(p.name, '未填写院系') AS departmentName,
+               COUNT(*) AS participantCount,
+               COALESCE(SUM(CASE WHEN r.status = 'finished' THEN 1 ELSE 0 END), 0) AS finishedCount
+        FROM gkzh_zmwl_record r
+        LEFT JOIN gkzh_school_department d ON d.department_id = r.department_id
+        LEFT JOIN gkzh_school_department p ON p.department_id = d.parent_id
+        <include refid="recordConditions"/>
+        GROUP BY COALESCE(p.name, '未填写院系')
+        ORDER BY participantCount DESC, departmentName
+    </select>
+
+    <!-- 各院系在每个发展方向上的人数；只统计已确认选择的记录。 -->
+    <select id="selectDepartmentDirectionCounts" resultType="java.util.LinkedHashMap">
+        SELECT COALESCE(p.name, '未填写院系') AS departmentName,
+               r.direction_code AS directionCode,
+               MAX(r.direction_name) AS directionName,
+               COUNT(*) AS selectedCount
+        FROM gkzh_zmwl_record r
+        LEFT JOIN gkzh_school_department d ON d.department_id = r.department_id
+        LEFT JOIN gkzh_school_department p ON p.department_id = d.parent_id
+        <include refid="recordConditions"/>
+          AND r.status = 'finished'
+          AND r.direction_code IS NOT NULL
+          AND r.direction_code &lt;&gt; ''
+        GROUP BY COALESCE(p.name, '未填写院系'), r.direction_code
+    </select>
+
+    <!-- 活动查看页只取最近若干条记录，限制数据量。 -->
+    <select id="selectGameViewRecords" resultType="com.gkzh.zmwl.domain.ZmwlRecord">
+        SELECT * FROM gkzh_zmwl_record
+        WHERE game_id = #{gameId} AND game_type = 'zmwl'
+        ORDER BY record_id DESC
+        LIMIT #{limit}
+    </select>
+
+</mapper>

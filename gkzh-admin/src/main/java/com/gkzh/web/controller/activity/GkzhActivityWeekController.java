@@ -73,6 +73,10 @@ import com.gkzh.app.service.JlczRecordEnrichService;
 import com.gkzh.jlcz.domain.JlczRecord;
 import com.gkzh.jlcz.mapper.JlczRecordMapper;
 import com.gkzh.jlcz.service.JlczStatisticsService;
+import com.gkzh.app.service.ZmwlRecordEnrichService;
+import com.gkzh.zmwl.domain.ZmwlRecord;
+import com.gkzh.zmwl.mapper.ZmwlRecordMapper;
+import com.gkzh.zmwl.service.ZmwlStatisticsService;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
@@ -150,6 +154,18 @@ public class GkzhActivityWeekController extends BaseController {
     /** 简历称重记录展示字段补全，与后台列表使用同一口径。 */
     @Autowired
     private JlczRecordEnrichService jlczRecordEnrichService;
+
+    /** 职面未来的学校端统计：参与、完成率、方向偏好占比与院系分布。 */
+    @Autowired
+    private ZmwlStatisticsService zmwlStatisticsService;
+
+    /** 职面未来参与记录，查看页只取最近若干条用于展示。 */
+    @Autowired
+    private ZmwlRecordMapper zmwlRecordMapper;
+
+    /** 职面未来记录展示字段补全，与后台列表使用同一口径。 */
+    @Autowired
+    private ZmwlRecordEnrichService zmwlRecordEnrichService;
 
     @Value("${app.qr-code.base-url}")
     private String qrCodeBaseUrl;
@@ -263,7 +279,8 @@ public class GkzhActivityWeekController extends BaseController {
             Map<String, Object> gameView = buildGameView(game);
             String viewType = String.valueOf(gameView.get("viewType"));
             if (!"mind-window".equals(viewType) && !"sszctop".equals(viewType) && !"zyjdc".equals(viewType)
-                    && !"nlld".equals(viewType) && !"zyfxq".equals(viewType) && !"jlcz".equals(viewType)) {
+                    && !"nlld".equals(viewType) && !"zyfxq".equals(viewType) && !"jlcz".equals(viewType)
+                    && !"zmwl".equals(viewType)) {
                 return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
             }
             byte[] bytes = createGameViewPdf(gameView);
@@ -298,6 +315,8 @@ public class GkzhActivityWeekController extends BaseController {
         if ("zyfxq".equals(type)) viewType = "zyfxq";
         // 简历称重固定使用专属两页模板，配置缺失时也不降级为通用空白页。
         if ("jlcz".equals(type)) viewType = "jlcz";
+        // 职面未来固定使用专属两页模板，配置缺失时也不降级为通用空白页。
+        if ("zmwl".equals(type)) viewType = "zmwl";
         view.put("gameId", game.getGameId());
         view.put("gameTitle", game.getTitle());
         view.put("gameType", type);
@@ -307,6 +326,7 @@ public class GkzhActivityWeekController extends BaseController {
         if ("nlld".equals(viewType)) return buildNlldGameView(game, view);
         if ("zyfxq".equals(viewType)) return buildZyfxqGameView(game, view);
         if ("jlcz".equals(viewType)) return buildJlczGameView(game, view);
+        if ("zmwl".equals(viewType)) return buildZmwlGameView(game, view);
         if (!"mind-window".equals(viewType)) {
             view.put("message", "该游戏暂未配置查看模板");
             view.put("pages", new ArrayList<>());
@@ -452,6 +472,20 @@ public class GkzhActivityWeekController extends BaseController {
         return view;
     }
 
+    /**
+     * 构建职面未来活动查看数据（结果输出-学校端）：
+     * 第一页展示参与人数、完成人数、完成率、最受欢迎方向与最近记录；
+     * 第二页展示各发展方向偏好占比、院系分布与简要分析。
+     */
+    private Map<String, Object> buildZmwlGameView(GkzhActivityGame game, Map<String, Object> view) {
+        Map<String, Object> stats = zmwlStatisticsService.gameViewStats(game.getGameId());
+        view.putAll(stats);
+        List<ZmwlRecord> records = zmwlRecordMapper.selectGameViewRecords(game.getGameId(), 50);
+        view.put("records", zmwlRecordEnrichService.enrich(records));
+        view.put("recordLimit", 50);
+        return view;
+    }
+
     /** 从学生结算快照中还原其本次选择的维度；历史损坏数据直接跳过，不影响其他统计。 */    private SszctopDimension reportDimension(SszctopStudentReport report) {
         try {
             return JSON.parseObject(report.getDimensionSnapshot(), SszctopDimension.class);
@@ -592,6 +626,13 @@ public class GkzhActivityWeekController extends BaseController {
                     (List<Map<String, Object>>) view.get("weightStats"),
                     (List<Map<String, Object>>) view.get("categoryStats"),
                     (List<Map<String, Object>>) view.get("distribution"),
+                    String.valueOf(view.get("analysis")), title));
+        } else if ("zmwl".equals(view.get("viewType"))) {
+            pages.add(drawZmwlOverviewPage((Map<String, Object>) view.get("summary"),
+                    (List<Map<String, Object>>) view.get("records"), title));
+            pages.add(drawZmwlDirectionStatsPage((Map<String, Object>) view.get("summary"),
+                    (List<Map<String, Object>>) view.get("directionStats"),
+                    (List<Map<String, Object>>) view.get("departmentStats"),
                     String.valueOf(view.get("analysis")), title));
         } else {
             pages.add(drawHollandPage((List<HollandCode>) view.get("hollandCodes"), title));
@@ -1204,6 +1245,145 @@ public class GkzhActivityWeekController extends BaseController {
         g.setColor(new Color(52, 73, 94));
         g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 22));
         drawWrapped(g, analysis, 76, y + 40, 928, 36);
+        g.dispose();
+        return image;
+    }
+
+    /** 职面未来 PDF 第一页：整体参与数据 + 最近学生方向选择明细。 */
+    private BufferedImage drawZmwlOverviewPage(Map<String, Object> summary, List<Map<String, Object>> records,
+                                                String title) {
+        List<Map<String, Object>> rows = records == null ? new ArrayList<>() : records;
+        int show = Math.min(rows.size(), 16);
+        int height = Math.max(1527, 260 + show * 50);
+        BufferedImage image = newViewImage(height);
+        Graphics2D g = image.createGraphics();
+        g.setColor(new Color(26, 44, 74));
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 42));
+        g.drawString(title + "—职面未来整体数据", 48, 72);
+
+        Map<String, Object> value = summary == null ? new LinkedHashMap<>() : summary;
+        g.setColor(new Color(52, 73, 94));
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 22));
+        g.drawString("扫码参与：" + text(value.get("participantCount")) + " 人    完成选择："
+                + text(value.get("finishedCount")) + " 人    完成率：" + text(value.get("finishRate"))
+                + "%    最受欢迎：" + text(value.get("topDirectionName")) + "（"
+                + text(value.get("topDirectionCount")) + " 人，占 " + text(value.get("topDirectionRate")) + "%）", 48, 118);
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 20));
+        g.drawString("暂未确定：" + text(value.get("undecidedCount")) + " 人    平均选择用时："
+                + text(value.get("avgDurationSeconds")) + " 秒", 48, 154);
+
+        int y = 190;
+        String[] headers = {"序号", "学生", "学号", "院系", "专业", "发展方向", "确认时间"};
+        int[] xs = {60, 110, 220, 320, 450, 580, 820};
+        g.setColor(new Color(22, 119, 255));
+        g.fillRect(48, y, 984, 44);
+        g.setColor(Color.WHITE);
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 18));
+        for (int i = 0; i < headers.length; i++) {
+            g.drawString(headers[i], xs[i], y + 28);
+        }
+        y += 44;
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 17));
+        for (int i = 0; i < show; i++) {
+            Map<String, Object> row = rows.get(i);
+            g.setColor(i % 2 == 0 ? new Color(248, 250, 253) : Color.WHITE);
+            g.fillRect(48, y, 984, 50);
+            g.setColor(new Color(52, 73, 94));
+            g.drawString(String.valueOf(i + 1), xs[0], y + 31);
+            g.drawString(cut(text(row.get("studentName")), 5), xs[1], y + 31);
+            g.drawString(cut(text(row.get("studentNo")), 10), xs[2], y + 31);
+            g.drawString(cut(text(row.get("departmentName")), 7), xs[3], y + 31);
+            g.drawString(cut(text(row.get("major")), 7), xs[4], y + 31);
+            g.drawString(cut(text(row.get("directionName")), 6), xs[5], y + 31);
+            g.drawString(timeText(row.get("finishTime")), xs[6], y + 31);
+            y += 50;
+        }
+        g.dispose();
+        return image;
+    }
+
+    /** 职面未来 PDF 第二页：各发展方向偏好占比、院系分布与简要分析。 */
+    private BufferedImage drawZmwlDirectionStatsPage(Map<String, Object> summary,
+                                                      List<Map<String, Object>> directionStats,
+                                                      List<Map<String, Object>> departmentStats,
+                                                      String analysis, String title) {
+        List<Map<String, Object>> directions = directionStats == null ? new ArrayList<>() : directionStats;
+        List<Map<String, Object>> departments = departmentStats == null ? new ArrayList<>() : departmentStats;
+        Map<String, Object> value = summary == null ? new LinkedHashMap<>() : summary;
+        int showDepartments = Math.min(departments.size(), 12);
+        int height = Math.max(1527, 220 + directions.size() * 40 + 90 + showDepartments * 40 + 330);
+        BufferedImage image = newViewImage(height);
+        Graphics2D g = image.createGraphics();
+        g.setColor(new Color(26, 44, 74));
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 42));
+        g.drawString(title + "—方向偏好占比", 48, 72);
+        g.setColor(new Color(52, 73, 94));
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 21));
+        g.drawString("已完成选择 " + text(value.get("finishedCount")) + " 人    暂未确定 "
+                + text(value.get("undecidedCount")) + " 人    平均选择用时 "
+                + text(value.get("avgDurationSeconds")) + " 秒", 48, 112);
+
+        int y = 140;
+        String[] headers = {"排序", "发展方向", "标签称号", "人数", "占比", "状态"};
+        int[] xs = {70, 150, 360, 600, 700, 820};
+        g.setColor(new Color(22, 119, 255));
+        g.fillRect(48, y, 984, 42);
+        g.setColor(Color.WHITE);
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 17));
+        for (int i = 0; i < headers.length; i++) {
+            g.drawString(headers[i], xs[i], y + 27);
+        }
+        y += 42;
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 17));
+        for (int i = 0; i < directions.size(); i++) {
+            Map<String, Object> row = directions.get(i);
+            g.setColor(i % 2 == 0 ? new Color(248, 250, 253) : Color.WHITE);
+            g.fillRect(48, y, 984, 40);
+            g.setColor(new Color(52, 73, 94));
+            g.drawString(String.valueOf(row.get("sortOrder")), xs[0], y + 26);
+            g.drawString(cut(text(row.get("name")), 8), xs[1], y + 26);
+            g.drawString(cut(text(row.get("tagName")), 10), xs[2], y + 26);
+            g.drawString(text(row.get("selectedCount")), xs[3], y + 26);
+            g.drawString(text(row.get("rate")) + "%", xs[4], y + 26);
+            g.drawString("1".equals(text(row.get("status"))) ? "停用" : "启用", xs[5], y + 26);
+            y += 40;
+        }
+
+        y += 26;
+        g.setColor(new Color(26, 44, 74));
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 22));
+        g.drawString("院系方向偏好（前 " + showDepartments + " 个院系）", 48, y);
+        y += 24;
+        String[] deptHeaders = {"院系", "参与", "完成", "完成率", "最受欢迎方向"};
+        int[] deptXs = {70, 430, 520, 620, 760};
+        g.setColor(new Color(22, 119, 255));
+        g.fillRect(48, y, 984, 38);
+        g.setColor(Color.WHITE);
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 16));
+        for (int i = 0; i < deptHeaders.length; i++) {
+            g.drawString(deptHeaders[i], deptXs[i], y + 25);
+        }
+        y += 38;
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 16));
+        for (int i = 0; i < showDepartments; i++) {
+            Map<String, Object> row = departments.get(i);
+            g.setColor(i % 2 == 0 ? new Color(248, 250, 253) : Color.WHITE);
+            g.fillRect(48, y, 984, 38);
+            g.setColor(new Color(52, 73, 94));
+            g.drawString(cut(text(row.get("departmentName")), 14), deptXs[0], y + 25);
+            g.drawString(text(row.get("participantCount")), deptXs[1], y + 25);
+            g.drawString(text(row.get("finishedCount")), deptXs[2], y + 25);
+            g.drawString(text(row.get("finishRate")) + "%", deptXs[3], y + 25);
+            g.drawString(cut(text(row.get("topDirectionName")), 8), deptXs[4], y + 25);
+            y += 38;
+        }
+
+        y += 26;
+        g.setColor(Color.WHITE);
+        g.fillRoundRect(48, y, 984, 260, 20, 20);
+        g.setColor(new Color(52, 73, 94));
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 22));
+        drawWrapped(g, analysis, 76, y + 44, 928, 36);
         g.dispose();
         return image;
     }

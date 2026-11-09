@@ -27,6 +27,9 @@ import com.gkzh.zyfxq.service.ZyfxqGameService;
 import com.gkzh.jlcz.domain.JlczRecord;
 import com.gkzh.jlcz.mapper.JlczRecordMapper;
 import com.gkzh.jlcz.service.JlczGameService;
+import com.gkzh.zmwl.domain.ZmwlRecord;
+import com.gkzh.zmwl.mapper.ZmwlRecordMapper;
+import com.gkzh.zmwl.service.ZmwlGameService;
 import com.gkzh.zyjdc.domain.ZyjdcRecord;
 import com.gkzh.zyjdc.domain.ZyjdcRole;
 import com.gkzh.zyjdc.mapper.ZyjdcRecordMapper;
@@ -74,6 +77,8 @@ public class ReportCacheController extends FrontBaseController {
     private final ZyfxqGameService zyfxqGameService;
     private final JlczRecordMapper jlczRecordMapper;
     private final JlczGameService jlczGameService;
+    private final ZmwlRecordMapper zmwlRecordMapper;
+    private final ZmwlGameService zmwlGameService;
     private final ZyjdcRecordMapper zyjdcRecordMapper;
     private final ZyjdcGameService zyjdcGameService;
     private final IGkzhMbtiStudentChoiceService mbtiStudentChoiceService;
@@ -90,6 +95,7 @@ public class ReportCacheController extends FrontBaseController {
                                  ZcyltzjRecordMapper zcyltzjRecordMapper, ZcyltzjRecordService zcyltzjRecordService,
                                  ZyfxqRecordMapper zyfxqRecordMapper, ZyfxqGameService zyfxqGameService,
                                  JlczRecordMapper jlczRecordMapper, JlczGameService jlczGameService,
+                                 ZmwlRecordMapper zmwlRecordMapper, ZmwlGameService zmwlGameService,
                                  ZyjdcRecordMapper zyjdcRecordMapper, ZyjdcGameService zyjdcGameService,
                                  IGkzhMbtiStudentChoiceService mbtiStudentChoiceService) {
         this.patternComboService = patternComboService;
@@ -104,6 +110,8 @@ public class ReportCacheController extends FrontBaseController {
         this.zyfxqGameService = zyfxqGameService;
         this.jlczRecordMapper = jlczRecordMapper;
         this.jlczGameService = jlczGameService;
+        this.zmwlRecordMapper = zmwlRecordMapper;
+        this.zmwlGameService = zmwlGameService;
         this.zyjdcRecordMapper = zyjdcRecordMapper;
         this.zyjdcGameService = zyjdcGameService;
         this.mbtiStudentChoiceService = mbtiStudentChoiceService;
@@ -156,6 +164,9 @@ public class ReportCacheController extends FrontBaseController {
                         if (pdf == null) pdf = createGamePdf(instance, area, game, participation);
                     } else if ("jlcz".equals(game.getGameType())) {
                         pdf = createJlczPdf(activityId, game.getGameId(), userId);
+                        if (pdf == null) pdf = createGamePdf(instance, area, game, participation);
+                    } else if ("zmwl".equals(game.getGameType())) {
+                        pdf = createZmwlPdf(activityId, game.getGameId(), userId);
                         if (pdf == null) pdf = createGamePdf(instance, area, game, participation);
                     } else if ("zyjdc".equals(game.getGameType())) {
                         pdf = createZyjdcPdf(activityId, game.getGameId(), userId);
@@ -389,6 +400,32 @@ public class ReportCacheController extends FrontBaseController {
         }
         lines.add("提示：通关标准为总重达到 " + numberOrZero(setting.get("passWeightG"))
                 + "g；本结果为简历自查，仅用于活动体验与简历改进参考。");
+        return createTextPdf(lines);
+    }
+
+    /** 职面未来个人报告：与小程序选择卡同源，输出方向、标签、方向解读与寄语。 */
+    private byte[] createZmwlPdf(Long activityId, Long gameId, Long userId) throws Exception {
+        ZmwlRecord record = zmwlRecordMapper.selectOne(new QueryWrapper<ZmwlRecord>()
+                .eq("instance_id", activityId).eq("game_id", gameId).eq("user_id", userId)
+                .eq("status", "finished").last("LIMIT 1"));
+        if (record == null) return null;
+        List<String> lines = new java.util.ArrayList<>();
+        lines.add("我的未来选择卡");
+        lines.add("这是我选择的未来发展方向");
+        lines.add("发展方向：" + textValue(record.getDirectionName(), "-"));
+        if (record.getTagName() != null && !record.getTagName().trim().isEmpty()) {
+            lines.add("方向标签：" + record.getTagName());
+        }
+        lines.add("方向解读");
+        lines.add(textValue(record.getInterpretation(), "暂无方向解读"));
+        lines.add("寄语");
+        lines.add(textValue(record.getMessage(), "暂无寄语"));
+        if (record.getFinishTime() != null) {
+            lines.add("确认时间：" + new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm")
+                    .format(record.getFinishTime()));
+        }
+        lines.add("提示：方向选择没有对错，本结果仅用于帮助你思考未来的发展方向，"
+                + "可结合自身兴趣、能力和实际情况继续探索。");
         return createTextPdf(lines);
     }
 

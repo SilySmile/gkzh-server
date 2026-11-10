@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.zdyp.mapper.ZdypRecordMapper">
+
+    <!-- 参与记录通用筛选条件，列表、汇总、行为分型、维度错误、首填偏好、职业分布与导出共用同一口径。 -->
+    <sql id="recordConditions">
+        <where>
+            r.game_type = 'zdyp'
+            <if test="q.instanceId != null">
+                AND r.instance_id = #{q.instanceId}
+            </if>
+            <if test="q.gameId != null">
+                AND r.game_id = #{q.gameId}
+            </if>
+            <if test="q.schoolId != null">
+                AND r.school_id = #{q.schoolId}
+            </if>
+            <if test="q.startDate != null">
+                AND r.scan_time &gt;= #{q.startDate}
+            </if>
+            <if test="q.endDate != null">
+                AND r.scan_time &lt; #{q.endDate}
+            </if>
+            <if test="q.departmentId != null">
+                AND (r.department_id = #{q.departmentId}
+                     OR EXISTS (SELECT 1 FROM gkzh_school_department d
+                                WHERE d.department_id = r.department_id
+                                  AND FIND_IN_SET(#{q.departmentId}, d.ancestors)))
+            </if>
+            <if test="q.major != null and q.major != ''">
+                AND r.major LIKE CONCAT('%', #{q.major}, '%')
+            </if>
+            <if test="q.studentNo != null and q.studentNo != ''">
+                AND r.student_no LIKE CONCAT('%', #{q.studentNo}, '%')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("男")'>
+                AND r.gender IN ('男', '0')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("女")'>
+                AND r.gender IN ('女', '1')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("其他")'>
+                AND (r.gender IS NULL OR TRIM(r.gender) = '' OR r.gender NOT IN ('男', '0', '女', '1'))
+            </if>
+            <if test="q.careerCode != null and q.careerCode != ''">
+                AND r.career_code = #{q.careerCode}
+            </if>
+            <if test="q.behaviorType != null and q.behaviorType != ''">
+                AND r.behavior_type = #{q.behaviorType}
+            </if>
+            <if test='q.status != null and q.status.equals("finished")'>
+                AND r.status = 'finished'
+            </if>
+            <if test='q.status != null and q.status.equals("inProgress")'>
+                AND r.status &lt;&gt; 'finished'
+            </if>
+        </where>
+    </sql>
+
+    <!-- 后台参与记录查询：按活动、岗位、行为分型、状态、学生属性和参与日期动态筛选。 -->
+    <select id="selectAdminRecords" resultType="com.gkzh.zdyp.domain.ZdypRecord">
+        SELECT r.* FROM gkzh_zdyp_record r
+        <include refid="recordConditions"/>
+        ORDER BY r.record_id DESC
+    </select>
+
+    <!-- 统计汇总：一次查询得到参与、通关、首次通关、重闯、超时与用时指标，避免多次全表扫描。 -->
+    <select id="selectAdminSummary" resultType="java.util.LinkedHashMap">
+        SELECT COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN r.status = 'finished' THEN 1 ELSE 0 END), 0) AS finished,
+               COALESCE(SUM(CASE WHEN r.attempt_no &gt;= 1 THEN 1 ELSE 0 END), 0) AS started,
+               COALESCE(SUM(CASE WHEN r.first_attempt_correct = '1' THEN 1 ELSE 0 END), 0) AS firstCorrect,
+               COALESCE(SUM(CASE WHEN r.status = 'finished' AND r.first_attempt_correct = '1' THEN 1 ELSE 0 END), 0) AS firstPass,
+               COALESCE(SUM(CASE WHEN r.attempt_no &gt; 1 THEN r.attempt_no - 1 ELSE 0 END), 0) AS reattemptTotal,
+               COALESCE(SUM(CASE WHEN r.timeout_count &gt; 0 THEN 1 ELSE 0 END), 0) AS timeoutPlayers,
+               COALESCE(SUM(r.timeout_count), 0) AS timeoutTotal,
+               COALESCE(ROUND(AVG(CASE WHEN r.status = 'finished' THEN r.first_attempt_ms END), 0), 0) AS avgFirstMs,
+               COALESCE(ROUND(AVG(CASE WHEN r.status = 'finished' THEN r.best_ms END), 0), 0) AS avgBestMs,
+               COALESCE(MIN(CASE WHEN r.status = 'finished' THEN r.best_ms END), 0) AS minBestMs,
+               COALESCE(MAX(CASE WHEN r.status = 'finished' THEN r.best_ms END), 0) AS maxBestMs
+        FROM gkzh_zdyp_record r
+        <include refid="recordConditions"/>
+    </select>
+
+    <!-- 四类行为分型人数；只统计已通关且已写入分型的记录，未出现的分型由服务端补 0。 -->
+    <select id="selectBehaviorStats" resultType="java.util.LinkedHashMap">
+        SELECT r.behavior_type AS behaviorType,
+               MAX(r.behavior_name) AS behaviorName,
+               COUNT(*) AS playerCount
+        FROM gkzh_zdyp_record r
+        <include refid="recordConditions"/>
+          AND r.status = 'finished'
+          AND r.behavior_type IS NOT NULL
+          AND r.behavior_type &lt;&gt; ''
+        GROUP BY r.behavior_type
+        ORDER BY playerCount DESC, behaviorType
+    </select>
+
+    <!-- 首次尝试各卡槽的放对与放错次数：维度错误率与“职业缺点”短板分析的核心数据。 -->
+    <select id="selectFirstAttemptSlotStats" resultType="java.util.LinkedHashMap">
+        SELECT a.slot_code AS slotCode,
+               COUNT(*) AS placedCount,
+               COALESCE(SUM(CASE WHEN a.is_correct = '1' THEN 1 ELSE 0 END), 0) AS correctCount,
+               COALESCE(SUM(CASE WHEN a.is_correct = '0' THEN 1 ELSE 0 END), 0) AS wrongCount
+        FROM gkzh_zdyp_answer a
+        INNER JOIN gkzh_zdyp_attempt t ON t.attempt_id = a.attempt_id AND t.attempt_no = 1
+        INNER JOIN gkzh_zdyp_record r ON r.record_id = t.record_id
+        <include refid="recordConditions"/>
+        GROUP BY a.slot_code
+    </select>
+
+    <!-- 首次尝试优先选择的卡槽分布：判断学生先看优势还是先看职业短板。 -->
+    <select id="selectFirstSlotStats" resultType="java.util.LinkedHashMap">
+        SELECT t.first_slot_code AS slotCode,
+               COUNT(*) AS playerCount
+        FROM gkzh_zdyp_attempt t
+        INNER JOIN gkzh_zdyp_record r ON r.record_id = t.record_id
+        <include refid="recordConditions"/>
+          AND t.attempt_no = 1
+          AND t.first_slot_code IS NOT NULL
+          AND t.first_slot_code &lt;&gt; ''
+        GROUP BY t.first_slot_code
+        ORDER BY playerCount DESC, slotCode
+    </select>
+
+    <!-- 各岗位的选择人数与通关人数；未出现的岗位由服务端补 0。 -->
+    <select id="selectCareerStats" resultType="java.util.LinkedHashMap">
+        SELECT r.career_code AS careerCode,
+               MAX(r.career_name) AS careerName,
+               COUNT(*) AS selectedCount,
+               COALESCE(SUM(CASE WHEN r.status = 'finished' THEN 1 ELSE 0 END), 0) AS finishedCount
+        FROM gkzh_zdyp_record r
+        <include refid="recordConditions"/>
+          AND r.career_code IS NOT NULL
+          AND r.career_code &lt;&gt; ''
+        GROUP BY r.career_code
+        ORDER BY selectedCount DESC, careerCode
+    </select>
+
+    <!-- 各院系的参与与通关人数；院系取专业部门的父部门，缺失统一归入“未填写院系”。
+         注意：gkzh_school_department 的名称字段是 title，不是 name。 -->
+    <select id="selectDepartmentSummary" resultType="java.util.LinkedHashMap">
+        SELECT COALESCE(p.title, '未填写院系') AS departmentName,
+               COUNT(*) AS participantCount,
+               COALESCE(SUM(CASE WHEN r.status = 'finished' THEN 1 ELSE 0 END), 0) AS finishedCount
+        FROM gkzh_zdyp_record r
+        LEFT JOIN gkzh_school_department d ON d.department_id = r.department_id
+        LEFT JOIN gkzh_school_department p ON p.department_id = d.parent_id
+        <include refid="recordConditions"/>
+        GROUP BY COALESCE(p.title, '未填写院系')
+        ORDER BY participantCount DESC, departmentName
+    </select>
+
+    <!-- 活动查看页只取最近若干条记录，限制数据量。 -->
+    <select id="selectGameViewRecords" resultType="com.gkzh.zdyp.domain.ZdypRecord">
+        SELECT * FROM gkzh_zdyp_record
+        WHERE game_id = #{gameId} AND game_type = 'zdyp'
+        ORDER BY record_id DESC
+        LIMIT #{limit}
+    </select>
+
+</mapper>

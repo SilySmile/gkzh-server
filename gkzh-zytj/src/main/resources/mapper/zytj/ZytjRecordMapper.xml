@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gkzh.zytj.mapper.ZytjRecordMapper">
+
+    <!-- 参与记录通用筛选条件，列表、汇总、型别分布、维度分布、院系分布和导出共用同一口径。 -->
+    <sql id="recordConditions">
+        <where>
+            r.game_type = 'zytj'
+            <if test="q.instanceId != null">
+                AND r.instance_id = #{q.instanceId}
+            </if>
+            <if test="q.gameId != null">
+                AND r.game_id = #{q.gameId}
+            </if>
+            <if test="q.schoolId != null">
+                AND r.school_id = #{q.schoolId}
+            </if>
+            <if test="q.startDate != null">
+                AND r.scan_time &gt;= #{q.startDate}
+            </if>
+            <if test="q.endDate != null">
+                AND r.scan_time &lt; #{q.endDate}
+            </if>
+            <if test="q.departmentId != null">
+                AND (r.department_id = #{q.departmentId}
+                     OR EXISTS (SELECT 1 FROM gkzh_school_department d
+                                WHERE d.department_id = r.department_id
+                                  AND FIND_IN_SET(#{q.departmentId}, d.ancestors)))
+            </if>
+            <if test="q.major != null and q.major != ''">
+                AND r.major LIKE CONCAT('%', #{q.major}, '%')
+            </if>
+            <if test="q.studentNo != null and q.studentNo != ''">
+                AND r.student_no LIKE CONCAT('%', #{q.studentNo}, '%')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("男")'>
+                AND r.gender IN ('男', '0')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("女")'>
+                AND r.gender IN ('女', '1')
+            </if>
+            <if test='q.genderValue != null and q.genderValue.equals("其他")'>
+                AND (r.gender IS NULL OR TRIM(r.gender) = '' OR r.gender NOT IN ('男', '0', '女', '1'))
+            </if>
+            <if test="q.typeCode != null and q.typeCode != ''">
+                AND r.type_code = #{q.typeCode}
+            </if>
+            <if test='q.status != null and q.status.equals("finished")'>
+                AND r.status = 'finished'
+            </if>
+            <if test='q.status != null and q.status.equals("inProgress")'>
+                AND r.status &lt;&gt; 'finished'
+            </if>
+        </where>
+    </sql>
+
+    <!-- 后台参与记录查询：按活动、人格类型、状态、学生属性和参与日期动态筛选。 -->
+    <select id="selectAdminRecords" resultType="com.gkzh.zytj.domain.ZytjRecord">
+        SELECT r.* FROM gkzh_zytj_record r
+        <include refid="recordConditions"/>
+        ORDER BY r.record_id DESC
+    </select>
+
+    <!-- 统计汇总与列表使用同一筛选条件；已提交人数只统计 status=finished 的记录。 -->
+    <select id="selectAdminSummary" resultType="java.util.LinkedHashMap">
+        SELECT COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN r.status = 'finished' THEN 1 ELSE 0 END), 0) AS finished,
+               COALESCE(SUM(CASE WHEN r.status = 'finished' AND r.is_timeout = '1'
+                                 THEN 1 ELSE 0 END), 0) AS timeoutCount,
+               COALESCE(SUM(CASE WHEN r.status = 'finished' AND r.type_code IS NOT NULL
+                                       AND r.type_code &lt;&gt; '' THEN 1 ELSE 0 END), 0) AS typed,
+               COALESCE(ROUND(AVG(CASE WHEN r.status = 'finished' THEN r.duration_ms END), 0), 0) AS avgDurationMs
+        FROM gkzh_zytj_record r
+        <include refid="recordConditions"/>
+    </select>
+
+    <!-- 16 型分布；未出现的类型由服务端补 0。文案取当前配置，避免历史快照文案过期。 -->
+    <select id="selectTypeStats" resultType="java.util.LinkedHashMap">
+        SELECT r.type_code AS typeCode,
+               MAX(r.feature) AS feature,
+               MAX(r.career_field) AS careerField,
+               MAX(r.typical_careers) AS typicalCareers,
+               COUNT(*) AS selectedCount
+        FROM gkzh_zytj_record r
+        <include refid="recordConditions"/>
+          AND r.status = 'finished'
+          AND r.type_code IS NOT NULL
+          AND r.type_code &lt;&gt; ''
+        GROUP BY r.type_code
+        ORDER BY selectedCount DESC, typeCode
+    </select>
+
+    <!-- 四个维度的字母倾向：item_codes 形如“E,N,T,P”，按逗号位置逐列拆分统计。
+         四列分别对应 EI、SN、TF、JP，学生端选择页也是按此列序计算进度与代码。 -->
+    <select id="selectDimensionStats" resultType="java.util.LinkedHashMap">
+        SELECT 'EI' AS dimensionCode, TRIM(SUBSTRING_INDEX(r.item_codes, ',', 1)) AS letter, COUNT(*) AS selectedCount
+        FROM gkzh_zytj_record r
+        <include refid="recordConditions"/>
+          AND r.status = 'finished' AND r.item_codes IS NOT NULL AND r.item_codes &lt;&gt; ''
+        GROUP BY TRIM(SUBSTRING_INDEX(r.item_codes, ',', 1))
+        UNION ALL
+        SELECT 'SN' AS dimensionCode, TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(r.item_codes, ',', 2), ',', -1)) AS letter, COUNT(*) AS selectedCount
+        FROM gkzh_zytj_record r
+        <include refid="recordConditions"/>
+          AND r.status = 'finished' AND r.item_codes IS NOT NULL AND r.item_codes &lt;&gt; ''
+        GROUP BY TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(r.item_codes, ',', 2), ',', -1))
+        UNION ALL
+        SELECT 'TF' AS dimensionCode, TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(r.item_codes, ',', 3), ',', -1)) AS letter, COUNT(*) AS selectedCount
+        FROM gkzh_zytj_record r
+        <include refid="recordConditions"/>
+          AND r.status = 'finished' AND r.item_codes IS NOT NULL AND r.item_codes &lt;&gt; ''
+        GROUP BY TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(r.item_codes, ',', 3), ',', -1))
+        UNION ALL
+        SELECT 'JP' AS dimensionCode, TRIM(SUBSTRING_INDEX(r.item_codes, ',', -1)) AS letter, COUNT(*) AS selectedCount
+        FROM gkzh_zytj_record r
+        <include refid="recordConditions"/>
+          AND r.status = 'finished' AND r.item_codes IS NOT NULL AND r.item_codes &lt;&gt; ''
+        GROUP BY TRIM(SUBSTRING_INDEX(r.item_codes, ',', -1))
+    </select>
+
+    <!-- 各院系的参与与提交人数；院系取专业部门的父部门，缺失统一归入“未填写院系”。
+         注意：gkzh_school_department 的名称字段是 title，不是 name。 -->
+    <select id="selectDepartmentSummary" resultType="java.util.LinkedHashMap">
+        SELECT COALESCE(p.title, '未填写院系') AS departmentName,
+               COUNT(*) AS participantCount,
+               COALESCE(SUM(CASE WHEN r.status = 'finished' THEN 1 ELSE 0 END), 0) AS finishedCount
+        FROM gkzh_zytj_record r
+        LEFT JOIN gkzh_school_department d ON d.department_id = r.department_id
+        LEFT JOIN gkzh_school_department p ON p.department_id = d.parent_id
+        <include refid="recordConditions"/>
+        GROUP BY COALESCE(p.title, '未填写院系')
+        ORDER BY participantCount DESC, departmentName
+    </select>
+
+    <!-- 各院系在每个维度字母上的人数；只统计已提交记录。名称字段同样取 title。 -->
+    <select id="selectDepartmentLetterCounts" resultType="java.util.LinkedHashMap">
+        SELECT COALESCE(p.title, '未填写院系') AS departmentName,
+               'EI' AS dimensionCode,
+               TRIM(SUBSTRING_INDEX(r.item_codes, ',', 1)) AS letter,
+               COUNT(*) AS selectedCount
+        FROM gkzh_zytj_record r
+        LEFT JOIN gkzh_school_department d ON d.department_id = r.department_id
+        LEFT JOIN gkzh_school_department p ON p.department_id = d.parent_id
+        <include refid="recordConditions"/>
+          AND r.status = 'finished' AND r.item_codes IS NOT NULL AND r.item_codes &lt;&gt; ''
+        GROUP BY COALESCE(p.title, '未填写院系'), TRIM(SUBSTRING_INDEX(r.item_codes, ',', 1))
+        UNION ALL
+        SELECT COALESCE(p.title, '未填写院系') AS departmentName,
+               'SN' AS dimensionCode,
+               TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(r.item_codes, ',', 2), ',', -1)) AS letter,
+               COUNT(*) AS selectedCount
+        FROM gkzh_zytj_record r
+        LEFT JOIN gkzh_school_department d ON d.department_id = r.department_id
+        LEFT JOIN gkzh_school_department p ON p.department_id = d.parent_id
+        <include refid="recordConditions"/>
+          AND r.status = 'finished' AND r.item_codes IS NOT NULL AND r.item_codes &lt;&gt; ''
+        GROUP BY COALESCE(p.title, '未填写院系'), TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(r.item_codes, ',', 2), ',', -1))
+        UNION ALL
+        SELECT COALESCE(p.title, '未填写院系') AS departmentName,
+               'TF' AS dimensionCode,
+               TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(r.item_codes, ',', 3), ',', -1)) AS letter,
+               COUNT(*) AS selectedCount
+        FROM gkzh_zytj_record r
+        LEFT JOIN gkzh_school_department d ON d.department_id = r.department_id
+        LEFT JOIN gkzh_school_department p ON p.department_id = d.parent_id
+        <include refid="recordConditions"/>
+          AND r.status = 'finished' AND r.item_codes IS NOT NULL AND r.item_codes &lt;&gt; ''
+        GROUP BY COALESCE(p.title, '未填写院系'), TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(r.item_codes, ',', 3), ',', -1))
+        UNION ALL
+        SELECT COALESCE(p.title, '未填写院系') AS departmentName,
+               'JP' AS dimensionCode,
+               TRIM(SUBSTRING_INDEX(r.item_codes, ',', -1)) AS letter,
+               COUNT(*) AS selectedCount
+        FROM gkzh_zytj_record r
+        LEFT JOIN gkzh_school_department d ON d.department_id = r.department_id
+        LEFT JOIN gkzh_school_department p ON p.department_id = d.parent_id
+        <include refid="recordConditions"/>
+          AND r.status = 'finished' AND r.item_codes IS NOT NULL AND r.item_codes &lt;&gt; ''
+        GROUP BY COALESCE(p.title, '未填写院系'), TRIM(SUBSTRING_INDEX(r.item_codes, ',', -1))
+    </select>
+
+    <!-- 活动查看页只取最近若干条记录，限制数据量。 -->
+    <select id="selectGameViewRecords" resultType="com.gkzh.zytj.domain.ZytjRecord">
+        SELECT * FROM gkzh_zytj_record
+        WHERE game_id = #{gameId} AND game_type = 'zytj'
+        ORDER BY record_id DESC
+        LIMIT #{limit}
+    </select>
+
+</mapper>

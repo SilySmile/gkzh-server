@@ -174,6 +174,14 @@ public class WeekAppController extends FrontBaseController {
         if ("zmwl".equals(game.getGameType())) {
             return AjaxResult.error("请从职面未来入口进入");
         }
+        // 职愿探究由自己的 /api/zytj/records/enter 写入参与记录，禁止通用入口重复建记录。
+        if ("zytj".equals(game.getGameType())) {
+            return AjaxResult.error("请从职愿探究入口进入");
+        }
+        // 职得一拼由自己的 /api/zdyp/records/enter 写入参与记录，禁止通用入口重复建记录。
+        if ("zdyp".equals(game.getGameType())) {
+            return AjaxResult.error("请从职得一拼入口进入");
+        }
 
         StudentCheckin student = getCurrentStudent();
         Long studentSchoolId = getCurrentStudentSchoolId();
@@ -305,6 +313,14 @@ public class WeekAppController extends FrontBaseController {
         // 职面未来只有确认未来发展方向后才写完成状态，禁止通用完成接口直接标记完成。
         if ("zmwl".equals(game.getGameType())) {
             return AjaxResult.error("请确认未来发展方向并查看个人选择卡");
+        }
+        // 职愿探究必须完成橱窗选择并生成职业探索卡，禁止通用完成接口直接标记完成。
+        if ("zytj".equals(game.getGameType())) {
+            return AjaxResult.error("请完成橱窗选择并查看职业探索卡");
+        }
+        // 职得一拼只有四张卡片全部拼对后才写完成状态，禁止通用完成接口直接标记完成。
+        if ("zdyp".equals(game.getGameType())) {
+            return AjaxResult.error("请完成职业拼图并查看职业解析");
         }
         GkzhGameParticipation participation = activityWeekService.getLatestParticipation(gameId, student.getUserId());
         if (participation == null) {

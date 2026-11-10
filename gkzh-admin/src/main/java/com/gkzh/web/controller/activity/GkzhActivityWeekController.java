@@ -2,6 +2,7 @@ package com.gkzh.web.controller.activity;
 
 import java.io.IOException;
 import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.FontMetrics;
@@ -12,11 +13,15 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -77,6 +82,15 @@ import com.gkzh.app.service.ZmwlRecordEnrichService;
 import com.gkzh.zmwl.domain.ZmwlRecord;
 import com.gkzh.zmwl.mapper.ZmwlRecordMapper;
 import com.gkzh.zmwl.service.ZmwlStatisticsService;
+import com.gkzh.app.service.ZdypRecordEnrichService;
+import com.gkzh.zdyp.domain.ZdypRecord;
+import com.gkzh.zdyp.mapper.ZdypRecordMapper;
+import com.gkzh.zdyp.service.ZdypStatisticsService;
+import com.gkzh.app.service.ZytjRecordEnrichService;
+import com.gkzh.zytj.domain.ZytjRecord;
+import com.gkzh.zytj.domain.dto.ZytjRecordQuery;
+import com.gkzh.zytj.mapper.ZytjRecordMapper;
+import com.gkzh.zytj.service.ZytjStatisticsService;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
@@ -166,6 +180,30 @@ public class GkzhActivityWeekController extends BaseController {
     /** 职面未来记录展示字段补全，与后台列表使用同一口径。 */
     @Autowired
     private ZmwlRecordEnrichService zmwlRecordEnrichService;
+
+    /** 职得一拼的学校端统计：参与、通关、维度错误、首填偏好与四类行为分型。 */
+    @Autowired
+    private ZdypStatisticsService zdypStatisticsService;
+
+    /** 职得一拼参与记录，查看页只取最近若干条用于展示。 */
+    @Autowired
+    private ZdypRecordMapper zdypRecordMapper;
+
+    /** 职得一拼记录展示字段补全，与后台列表使用同一口径。 */
+    @Autowired
+    private ZdypRecordEnrichService zdypRecordEnrichService;
+
+    /** 职愿探究的学校端统计：参与、提交、16 型分布、维度倾向与院系分布。 */
+    @Autowired
+    private ZytjStatisticsService zytjStatisticsService;
+
+    /** 职愿探究参与记录，查看页只取最近若干条用于展示。 */
+    @Autowired
+    private ZytjRecordMapper zytjRecordMapper;
+
+    /** 职愿探究记录展示字段补全，与后台列表使用同一口径。 */
+    @Autowired
+    private ZytjRecordEnrichService zytjRecordEnrichService;
 
     @Value("${app.qr-code.base-url}")
     private String qrCodeBaseUrl;
@@ -280,7 +318,7 @@ public class GkzhActivityWeekController extends BaseController {
             String viewType = String.valueOf(gameView.get("viewType"));
             if (!"mind-window".equals(viewType) && !"sszctop".equals(viewType) && !"zyjdc".equals(viewType)
                     && !"nlld".equals(viewType) && !"zyfxq".equals(viewType) && !"jlcz".equals(viewType)
-                    && !"zmwl".equals(viewType)) {
+                    && !"zmwl".equals(viewType) && !"zytj".equals(viewType) && !"zdyp".equals(viewType)) {
                 return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
             }
             byte[] bytes = createGameViewPdf(gameView);
@@ -317,6 +355,10 @@ public class GkzhActivityWeekController extends BaseController {
         if ("jlcz".equals(type)) viewType = "jlcz";
         // 职面未来固定使用专属两页模板，配置缺失时也不降级为通用空白页。
         if ("zmwl".equals(type)) viewType = "zmwl";
+        // 职愿探究固定使用专属两页模板，配置缺失时也不降级为通用空白页。
+        if ("zytj".equals(type)) viewType = "zytj";
+        // 职得一拼固定使用专属两页模板，配置缺失时也不降级为通用空白页。
+        if ("zdyp".equals(type)) viewType = "zdyp";
         view.put("gameId", game.getGameId());
         view.put("gameTitle", game.getTitle());
         view.put("gameType", type);
@@ -327,6 +369,8 @@ public class GkzhActivityWeekController extends BaseController {
         if ("zyfxq".equals(viewType)) return buildZyfxqGameView(game, view);
         if ("jlcz".equals(viewType)) return buildJlczGameView(game, view);
         if ("zmwl".equals(viewType)) return buildZmwlGameView(game, view);
+        if ("zytj".equals(viewType)) return buildZytjGameView(game, view);
+        if ("zdyp".equals(viewType)) return buildZdypGameView(game, view);
         if (!"mind-window".equals(viewType)) {
             view.put("message", "该游戏暂未配置查看模板");
             view.put("pages", new ArrayList<>());
@@ -486,6 +530,127 @@ public class GkzhActivityWeekController extends BaseController {
         return view;
     }
 
+    /**
+     * 构建职得一拼活动查看数据（结果输出-学校端）：
+     * 第一页展示参与、通关、首次通关、重闯、超时与最近记录；
+     * 第二页展示四类行为分型、各维度错误率、首填偏好与简要分析。
+     */
+    private Map<String, Object> buildZdypGameView(GkzhActivityGame game, Map<String, Object> view) {
+        Map<String, Object> stats = zdypStatisticsService.gameViewStats(game.getGameId());
+        view.putAll(stats);
+        List<ZdypRecord> records = zdypRecordMapper.selectGameViewRecords(game.getGameId(), 50);
+        view.put("records", zdypRecordEnrichService.enrich(records));
+        view.put("recordLimit", 50);
+        return view;
+    }
+
+    /**
+     * 构建职愿探究活动查看数据（结果输出-学校端）：
+     * 第一页展示参与人数、已生成探索卡人数、完成率、超时人数、16 型分布与维度倾向；
+     * 第二页展示各人格类型对应的解读与最近参与记录。
+     * 导出 PDF 复用文字版两页，避免与前端图表口径不一致。
+     */
+    private Map<String, Object> buildZytjGameView(GkzhActivityGame game, Map<String, Object> view) {
+        ZytjRecordQuery query = new ZytjRecordQuery();
+        query.setGameId(game.getGameId());
+        Map<String, Object> stats = zytjStatisticsService.gameViewStats(query);
+        view.putAll(stats);
+        List<ZytjRecord> records = zytjRecordMapper.selectGameViewRecords(game.getGameId(), 50);
+        view.put("records", zytjRecordEnrichService.enrich(records));
+        view.put("recordLimit", 50);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> types = (List<Map<String, Object>>) stats.get("types");
+        view.put("summaryText", buildZytjSummaryText(stats));
+        view.put("typeInterpretationText", buildZytjTypeText(types));
+        view.put("analysis", buildZytjAnalysis(stats, types));
+        return view;
+    }
+
+    /** 职愿探究第一页文字版：关键指标 + 16 型分布 + 维度倾向，用于 PDF。 */
+    private String buildZytjSummaryText(Map<String, Object> stats) {
+        Map<String, Object> summary = asMap(stats.get("summary"));
+        StringBuilder builder = new StringBuilder();
+        builder.append("参与人数：").append(text(summary.get("participantCount"))).append(" 人\n");
+        builder.append("已生成探索卡人数：").append(text(summary.get("finishedCount"))).append(" 人\n");
+        builder.append("进行中人数：").append(text(summary.get("inProgressCount"))).append(" 人\n");
+        builder.append("完成率：").append(text(summary.get("finishRate"))).append("%\n");
+        builder.append("超时自动提交：").append(text(summary.get("timeoutCount"))).append(" 人（")
+                .append(text(summary.get("timeoutRate"))).append("%）\n");
+        builder.append("平均用时：").append(text(summary.get("avgDurationSeconds"))).append(" 秒\n");
+        builder.append("占比最高类型：").append(text(summary.get("topTypeCode"))).append("（")
+                .append(text(summary.get("topTypeCount"))).append(" 人）\n\n");
+        builder.append("【16 型分布】\n");
+        for (Map<String, Object> type : safeList(stats.get("types"))) {
+            long count = number(type.get("selectedCount"));
+            if (count <= 0) continue;
+            builder.append(text(type.get("typeCode"))).append("：").append(count).append(" 人（")
+                    .append(text(type.get("rate"))).append("%）\n");
+        }
+        builder.append("\n【四个维度倾向】\n");
+        for (Map<String, Object> dimension : safeList(stats.get("dimensions"))) {
+            builder.append(text(dimension.get("dimensionCode"))).append(" - ")
+                    .append(text(dimension.get("letter"))).append("（")
+                    .append(text(dimension.get("itemName"))).append("）：")
+                    .append(text(dimension.get("selectedCount"))).append(" 人（")
+                    .append(text(dimension.get("rate"))).append("%）\n");
+        }
+        return builder.toString();
+    }
+
+    /** 职愿探究第二页文字版：16 型对应解读，用于 PDF。 */
+    private String buildZytjTypeText(List<Map<String, Object>> types) {
+        StringBuilder builder = new StringBuilder();
+        for (Map<String, Object> type : safeList(types)) {
+            builder.append(text(type.get("typeCode"))).append("（")
+                    .append(text(type.get("selectedCount"))).append(" 人）\n");
+            builder.append("  性格特点：").append(text(type.get("feature"))).append("\n");
+            builder.append("  适合职业领域：").append(text(type.get("careerField"))).append("\n");
+            builder.append("  典型职业：").append(text(type.get("typicalCareers"))).append("\n\n");
+        }
+        return builder.toString();
+    }
+
+    /** 职愿探究简要分析：覆盖 16 型分布集中度与超时情况。 */
+    private String buildZytjAnalysis(Map<String, Object> stats, List<Map<String, Object>> types) {
+        Map<String, Object> summary = asMap(stats.get("summary"));
+        long finished = number(summary.get("finishedCount"));
+        if (finished <= 0) {
+            return "当前游戏尚无已生成职业探索卡的记录。学生完成橱窗选择后，这里将展示 16 型人格分布与维度倾向分析。";
+        }
+        long topCount = number(summary.get("topTypeCount"));
+        BigDecimal topRate = decimal(summary.get("topTypeRate"));
+        String topCode = text(summary.get("topTypeCode"));
+        long covered = 0;
+        for (Map<String, Object> type : safeList(types)) {
+            if (number(type.get("selectedCount")) > 0) covered++;
+        }
+        StringBuilder builder = new StringBuilder();
+        builder.append("本次共 ").append(finished).append(" 名学生生成职业探索卡，覆盖 ")
+                .append(covered).append(" 种人格类型。");
+        if (topCode != null && !topCode.isEmpty() && !"null".equals(topCode)) {
+            builder.append("占比最高的是 ").append(topCode).append("，").append(topCount)
+                    .append(" 人（").append(topRate).append("%）。");
+            if (topRate.compareTo(BigDecimal.valueOf(35)) >= 0) {
+                builder.append("分布相对集中，可在后续课程中关注该类型群体的共性特征。");
+            } else {
+                builder.append("整体分布较为分散，说明学生性格取向多样。");
+            }
+        }
+        builder.append("超时自动提交 ").append(text(summary.get("timeoutCount"))).append(" 人，占已提交人数的 ")
+                .append(text(summary.get("timeoutRate"))).append("%。");
+        return builder.toString();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> asMap(Object value) {
+        return value instanceof Map ? (Map<String, Object>) value : new LinkedHashMap<>();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> safeList(Object value) {
+        return value instanceof List ? (List<Map<String, Object>>) value : new ArrayList<>();
+    }
+
     /** 从学生结算快照中还原其本次选择的维度；历史损坏数据直接跳过，不影响其他统计。 */    private SszctopDimension reportDimension(SszctopStudentReport report) {
         try {
             return JSON.parseObject(report.getDimensionSnapshot(), SszctopDimension.class);
@@ -593,6 +758,87 @@ public class GkzhActivityWeekController extends BaseController {
         return toAjax(activityWeekService.saveGame(game));
     }
 
+    /**
+     * 一键下载某个活动实例下全部游戏的二维码（ZIP）。
+     * 压缩包内每个 PNG 以“游戏名称”命名，后台配置的中文游戏名即文件名，便于按游戏直接分发；
+     * 同一活动下出现重名游戏时追加区域名或序号区分，并附带“二维码清单.txt”记录文件名与游戏、区域、游戏编码的对应关系。
+     * 只导出当前学校可见的区域，保持生涯活动/就业活动与学校隔离口径一致。
+     */
+    @GetMapping("/game/qrcode/zip/{instanceId}")
+    public ResponseEntity<byte[]> downloadGameQrCodes(@PathVariable Long instanceId,
+                                                      @RequestParam(required = false) Long schoolId) {
+        GkzhActivityWeekInstance instance = activityWeekService.getInstance(instanceId);
+        if (instance == null) {
+            return qrZipError("活动不存在或已被删除，请刷新页面后重试");
+        }
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream();
+             ZipOutputStream zip = new ZipOutputStream(out, StandardCharsets.UTF_8)) {
+            Set<String> usedFileNames = new HashSet<>();
+            StringBuilder manifest = new StringBuilder("文件名\t游戏名称\t活动区域\t游戏编码\t二维码内容\r\n");
+            int count = 0;
+            for (GkzhActivityArea area : activityWeekService.listAreas(instanceId, schoolId)) {
+                for (GkzhActivityGame game : activityWeekService.listGames(area.getAreaId())) {
+                    String content = buildGameQrContent(game);
+                    byte[] png = QRCodeUtils.generateQRCode(content, 400, 400);
+                    String fileName = buildUniqueQrFileName(game, area, usedFileNames);
+                    zip.putNextEntry(new ZipEntry(fileName));
+                    zip.write(png);
+                    zip.closeEntry();
+                    manifest.append(fileName).append('\t')
+                            .append(game.getTitle() == null ? "" : game.getTitle()).append('\t')
+                            .append(area.getTitle() == null ? "" : area.getTitle()).append('\t')
+                            .append(resolveGameRoute(game)).append('\t')
+                            .append(content).append("\r\n");
+                    count++;
+                }
+            }
+            if (count == 0) {
+                // 没有游戏时返回 JSON 提示，避免前端把空压缩包当成有效文件保存。
+                return qrZipError("当前活动下还没有配置游戏，暂无可下载的二维码");
+            }
+            zip.putNextEntry(new ZipEntry("二维码清单.txt"));
+            zip.write(manifest.toString().getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+            zip.finish();
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.parseMediaType("application/zip"));
+            headers.setContentDisposition(ContentDisposition.attachment()
+                    .filename(safeFileName(instance.getTitle()) + "-游戏二维码.zip", StandardCharsets.UTF_8).build());
+            headers.setCacheControl("no-cache");
+            return new ResponseEntity<>(out.toByteArray(), headers, HttpStatus.OK);
+        } catch (WriterException | IOException e) {
+            return qrZipError("生成二维码压缩包失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 生成压缩包内唯一的二维码文件名：优先使用游戏名称（与后台“游戏名称”列一致），
+     * 重名时依次追加区域名和序号，保证同一压缩包内不会互相覆盖。
+     */
+    private String buildUniqueQrFileName(GkzhActivityGame game, GkzhActivityArea area, Set<String> usedFileNames) {
+        String title = game.getTitle() == null ? "" : game.getTitle().trim();
+        String base = safeFileName(title.isEmpty() ? "游戏" + game.getGameId() : title);
+        String candidate = base;
+        if (usedFileNames.contains(candidate + ".png")) {
+            String areaName = area == null || area.getTitle() == null ? "" : safeFileName(area.getTitle().trim());
+            candidate = areaName.isEmpty() ? base : base + "-" + areaName;
+            int index = 2;
+            while (usedFileNames.contains(candidate + ".png")) {
+                candidate = base + "-" + index;
+                index++;
+            }
+        }
+        usedFileNames.add(candidate + ".png");
+        return candidate + ".png";
+    }
+
+    /** 二维码打包接口的业务失败响应：返回 JSON 提示体，前端下载工具据此弹出中文提示。 */
+    private ResponseEntity<byte[]> qrZipError(String message) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(new MediaType(MediaType.APPLICATION_JSON, StandardCharsets.UTF_8));
+        return new ResponseEntity<>(JSON.toJSONBytes(AjaxResult.error(message)), headers, HttpStatus.OK);
+    }
+
     private byte[] createGameViewPdf(Map<String, Object> view) throws Exception {
         List<BufferedImage> pages = new ArrayList<>();
         String title = String.valueOf(view.get("gameTitle"));
@@ -633,6 +879,19 @@ public class GkzhActivityWeekController extends BaseController {
             pages.add(drawZmwlDirectionStatsPage((Map<String, Object>) view.get("summary"),
                     (List<Map<String, Object>>) view.get("directionStats"),
                     (List<Map<String, Object>>) view.get("departmentStats"),
+                    String.valueOf(view.get("analysis")), title));
+        } else if ("zytj".equals(view.get("viewType"))) {
+            // 职愿探究学校端两页：人格类型整体数据、各人格类型对应解读。
+            pages.add(drawTextAnalysisPage(String.valueOf(view.get("summaryText")), title, "人格类型整体数据"));
+            pages.add(drawTextAnalysisPage(String.valueOf(view.get("typeInterpretationText")), title, "各人格类型对应解读"));
+        } else if ("zdyp".equals(view.get("viewType"))) {
+            // 职得一拼学校端两页：整体数据与最近记录、行为分型与维度错误分析。
+            pages.add(drawZdypOverviewPage((Map<String, Object>) view.get("summary"),
+                    (List<Map<String, Object>>) view.get("records"), title));
+            pages.add(drawZdypAnalysisPage((Map<String, Object>) view.get("summary"),
+                    (List<Map<String, Object>>) view.get("behaviorStats"),
+                    (List<Map<String, Object>>) view.get("slotStats"),
+                    (List<Map<String, Object>>) view.get("firstSlotStats"),
                     String.valueOf(view.get("analysis")), title));
         } else {
             pages.add(drawHollandPage((List<HollandCode>) view.get("hollandCodes"), title));
@@ -1381,6 +1640,171 @@ public class GkzhActivityWeekController extends BaseController {
         y += 26;
         g.setColor(Color.WHITE);
         g.fillRoundRect(48, y, 984, 260, 20, 20);
+        g.setColor(new Color(52, 73, 94));
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 22));
+        drawWrapped(g, analysis, 76, y + 44, 928, 36);
+        g.dispose();
+        return image;
+    }
+
+    /** 职得一拼 PDF 第一页：参与、通关、首次通关、重闯、超时指标与最近参与记录。 */
+    private BufferedImage drawZdypOverviewPage(Map<String, Object> summary, List<Map<String, Object>> records,
+                                                String title) {
+        List<Map<String, Object>> rows = records == null ? new ArrayList<>() : records;
+        int show = Math.min(rows.size(), 16);
+        int height = Math.max(1527, 300 + show * 50);
+        BufferedImage image = newViewImage(height);
+        Graphics2D g = image.createGraphics();
+        g.setColor(new Color(26, 44, 74));
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 42));
+        g.drawString(title + "—职得一拼整体数据", 48, 72);
+
+        Map<String, Object> value = summary == null ? new LinkedHashMap<>() : summary;
+        g.setColor(new Color(52, 73, 94));
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 22));
+        g.drawString("扫码参与：" + text(value.get("participantCount")) + " 人    通关："
+                + text(value.get("finishedCount")) + " 人    通关率：" + text(value.get("finishRate"))
+                + "%    首次即通关：" + text(value.get("firstPassCount")) + " 人（"
+                + text(value.get("firstPassRate")) + "%）", 48, 118);
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 20));
+        g.drawString("平均闯关次数：" + text(value.get("avgAttempts")) + " 次    超时人数："
+                + text(value.get("timeoutPlayers")) + " 人（" + text(value.get("timeoutRate"))
+                + "%）    平均首次用时：" + text(value.get("avgFirstSeconds")) + " 秒    平均最快通关用时："
+                + text(value.get("avgBestSeconds")) + " 秒", 48, 156);
+
+        int y = 200;
+        String[] headers = {"序号", "学生", "学号", "院系", "岗位", "行为分型", "通关时间"};
+        int[] xs = {60, 100, 200, 300, 450, 640, 820};
+        g.setColor(new Color(22, 119, 255));
+        g.fillRect(48, y, 984, 44);
+        g.setColor(Color.WHITE);
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 18));
+        for (int i = 0; i < headers.length; i++) {
+            g.drawString(headers[i], xs[i], y + 28);
+        }
+        y += 44;
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 17));
+        for (int i = 0; i < show; i++) {
+            Map<String, Object> row = rows.get(i);
+            g.setColor(i % 2 == 0 ? new Color(248, 250, 253) : Color.WHITE);
+            g.fillRect(48, y, 984, 50);
+            g.setColor(new Color(52, 73, 94));
+            g.drawString(String.valueOf(i + 1), xs[0], y + 31);
+            g.drawString(cut(text(row.get("studentName")), 5), xs[1], y + 31);
+            g.drawString(cut(text(row.get("studentNo")), 10), xs[2], y + 31);
+            g.drawString(cut(text(row.get("departmentName")), 7), xs[3], y + 31);
+            g.drawString(cut(text(row.get("careerName")), 9), xs[4], y + 31);
+            g.drawString(cut(text(row.get("behaviorName")), 6), xs[5], y + 31);
+            g.drawString(timeText(row.get("finishTime")), xs[6], y + 31);
+            y += 50;
+        }
+        g.dispose();
+        return image;
+    }
+
+    /** 职得一拼 PDF 第二页：四类行为分型、各维度首次错误与首选卡槽偏好及简要分析。 */
+    private BufferedImage drawZdypAnalysisPage(Map<String, Object> summary,
+                                               List<Map<String, Object>> behaviorStats,
+                                               List<Map<String, Object>> slotStats,
+                                               List<Map<String, Object>> firstSlotStats,
+                                               String analysis, String title) {
+        List<Map<String, Object>> behaviors = behaviorStats == null ? new ArrayList<>() : behaviorStats;
+        List<Map<String, Object>> slots = slotStats == null ? new ArrayList<>() : slotStats;
+        List<Map<String, Object>> firstSlots = firstSlotStats == null ? new ArrayList<>() : firstSlotStats;
+        int height = Math.max(1527, 260 + behaviors.size() * 40 + 90 + slots.size() * 40
+                + 90 + firstSlots.size() * 40 + 300);
+        BufferedImage image = newViewImage(height);
+        Graphics2D g = image.createGraphics();
+        g.setColor(new Color(26, 44, 74));
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 42));
+        g.drawString(title + "—行为分型与维度分析", 48, 72);
+
+        int y = 120;
+        g.setColor(new Color(26, 44, 74));
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 22));
+        g.drawString("四类职业认知分型（以已通关人数为分母）", 48, y);
+        y += 18;
+        String[] behaviorHeaders = {"行为分型", "人数", "占比"};
+        int[] behaviorXs = {90, 520, 640};
+        g.setColor(new Color(22, 119, 255));
+        g.fillRect(48, y, 984, 40);
+        g.setColor(Color.WHITE);
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 17));
+        for (int i = 0; i < behaviorHeaders.length; i++) {
+            g.drawString(behaviorHeaders[i], behaviorXs[i], y + 26);
+        }
+        y += 40;
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 17));
+        for (int i = 0; i < behaviors.size(); i++) {
+            Map<String, Object> row = behaviors.get(i);
+            g.setColor(i % 2 == 0 ? new Color(248, 250, 253) : Color.WHITE);
+            g.fillRect(48, y, 984, 40);
+            g.setColor(new Color(52, 73, 94));
+            g.drawString(cut(text(row.get("behaviorName")), 12), behaviorXs[0], y + 26);
+            g.drawString(text(row.get("playerCount")), behaviorXs[1], y + 26);
+            g.drawString(text(row.get("rate")) + "%", behaviorXs[2], y + 26);
+            y += 40;
+        }
+
+        y += 26;
+        g.setColor(new Color(26, 44, 74));
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 22));
+        g.drawString("首次尝试各维度错误（重点看“职业缺点”）", 48, y);
+        y += 18;
+        String[] slotHeaders = {"卡槽", "放对", "放错", "首次正确率", "未填写"};
+        int[] slotXs = {90, 380, 470, 570, 760};
+        g.setColor(new Color(22, 119, 255));
+        g.fillRect(48, y, 984, 40);
+        g.setColor(Color.WHITE);
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 17));
+        for (int i = 0; i < slotHeaders.length; i++) {
+            g.drawString(slotHeaders[i], slotXs[i], y + 26);
+        }
+        y += 40;
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 17));
+        for (int i = 0; i < slots.size(); i++) {
+            Map<String, Object> row = slots.get(i);
+            g.setColor(i % 2 == 0 ? new Color(248, 250, 253) : Color.WHITE);
+            g.fillRect(48, y, 984, 40);
+            g.setColor(new Color(52, 73, 94));
+            g.drawString(text(row.get("slotName")), slotXs[0], y + 26);
+            g.drawString(text(row.get("correctCount")), slotXs[1], y + 26);
+            g.drawString(text(row.get("wrongCount")), slotXs[2], y + 26);
+            g.drawString(text(row.get("correctRate")) + "%", slotXs[3], y + 26);
+            g.drawString(text(row.get("unfilledCount")), slotXs[4], y + 26);
+            y += 40;
+        }
+
+        y += 26;
+        g.setColor(new Color(26, 44, 74));
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 22));
+        g.drawString("首填卡槽偏好（学生第一眼关注哪个维度）", 48, y);
+        y += 18;
+        String[] firstHeaders = {"首选卡槽", "人数", "占比"};
+        int[] firstXs = {90, 520, 640};
+        g.setColor(new Color(22, 119, 255));
+        g.fillRect(48, y, 984, 40);
+        g.setColor(Color.WHITE);
+        g.setFont(new Font("Microsoft YaHei", Font.BOLD, 17));
+        for (int i = 0; i < firstHeaders.length; i++) {
+            g.drawString(firstHeaders[i], firstXs[i], y + 26);
+        }
+        y += 40;
+        g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 17));
+        for (int i = 0; i < firstSlots.size(); i++) {
+            Map<String, Object> row = firstSlots.get(i);
+            g.setColor(i % 2 == 0 ? new Color(248, 250, 253) : Color.WHITE);
+            g.fillRect(48, y, 984, 40);
+            g.setColor(new Color(52, 73, 94));
+            g.drawString(text(row.get("slotName")), firstXs[0], y + 26);
+            g.drawString(text(row.get("playerCount")), firstXs[1], y + 26);
+            g.drawString(text(row.get("rate")) + "%", firstXs[2], y + 26);
+            y += 40;
+        }
+
+        y += 26;
+        g.setColor(Color.WHITE);
+        g.fillRoundRect(48, y, 984, 280, 20, 20);
         g.setColor(new Color(52, 73, 94));
         g.setFont(new Font("Microsoft YaHei", Font.PLAIN, 22));
         drawWrapped(g, analysis, 76, y + 44, 928, 36);

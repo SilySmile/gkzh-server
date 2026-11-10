@@ -131,6 +131,10 @@
             <artifactId>gkzh-zmwl</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.gkzh</groupId>
+            <artifactId>gkzh-zdyp</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-websocket</artifactId>
         </dependency>

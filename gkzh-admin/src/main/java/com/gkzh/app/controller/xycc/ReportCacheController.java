@@ -34,8 +34,13 @@ import com.gkzh.zyjdc.domain.ZyjdcRecord;
 import com.gkzh.zyjdc.domain.ZyjdcRole;
 import com.gkzh.zyjdc.mapper.ZyjdcRecordMapper;
 import com.gkzh.zyjdc.service.ZyjdcGameService;
-import com.gkzh.zytj.domain.GkzhMbtiStudentChoice;
-import com.gkzh.zytj.service.IGkzhMbtiStudentChoiceService;
+import com.gkzh.zytj.domain.ZytjRecord;
+import com.gkzh.zytj.mapper.ZytjRecordMapper;
+import com.gkzh.zdyp.domain.ZdypCard;
+import com.gkzh.zdyp.domain.ZdypCareer;
+import com.gkzh.zdyp.domain.ZdypRecord;
+import com.gkzh.zdyp.mapper.ZdypRecordMapper;
+import com.gkzh.zdyp.service.ZdypConfigService;
 import com.gkzh.school.domain.GkzhStudent;
 import com.gkzh.school.service.IGkzhStudentService;
 import com.gkzh.sszctop.domain.SszctopCareer;
@@ -81,7 +86,9 @@ public class ReportCacheController extends FrontBaseController {
     private final ZmwlGameService zmwlGameService;
     private final ZyjdcRecordMapper zyjdcRecordMapper;
     private final ZyjdcGameService zyjdcGameService;
-    private final IGkzhMbtiStudentChoiceService mbtiStudentChoiceService;
+    private final ZytjRecordMapper zytjRecordMapper;
+    private final ZdypRecordMapper zdypRecordMapper;
+    private final ZdypConfigService zdypConfigService;
     private final IGkzhStudentService studentService;
     private final SszctopStudentReportMapper sszctopReportMapper;
     private final ZycckReportPdfService zycckReportPdfService;
@@ -97,7 +104,8 @@ public class ReportCacheController extends FrontBaseController {
                                  JlczRecordMapper jlczRecordMapper, JlczGameService jlczGameService,
                                  ZmwlRecordMapper zmwlRecordMapper, ZmwlGameService zmwlGameService,
                                  ZyjdcRecordMapper zyjdcRecordMapper, ZyjdcGameService zyjdcGameService,
-                                 IGkzhMbtiStudentChoiceService mbtiStudentChoiceService) {
+                                 ZytjRecordMapper zytjRecordMapper,
+                                 ZdypRecordMapper zdypRecordMapper, ZdypConfigService zdypConfigService) {
         this.patternComboService = patternComboService;
         this.hollandCodeService = hollandCodeService;
         this.activityWeekService = activityWeekService;
@@ -114,7 +122,9 @@ public class ReportCacheController extends FrontBaseController {
         this.zmwlGameService = zmwlGameService;
         this.zyjdcRecordMapper = zyjdcRecordMapper;
         this.zyjdcGameService = zyjdcGameService;
-        this.mbtiStudentChoiceService = mbtiStudentChoiceService;
+        this.zytjRecordMapper = zytjRecordMapper;
+        this.zdypRecordMapper = zdypRecordMapper;
+        this.zdypConfigService = zdypConfigService;
         this.studentService = studentService;
         this.sszctopReportMapper = sszctopReportMapper;
         this.zycckReportPdfService = zycckReportPdfService;
@@ -172,7 +182,10 @@ public class ReportCacheController extends FrontBaseController {
                         pdf = createZyjdcPdf(activityId, game.getGameId(), userId);
                         if (pdf == null) pdf = createGamePdf(instance, area, game, participation);
                     } else if ("zytj".equals(game.getGameType())) {
-                        pdf = createZytjPdf(activityId, student.getStudentId());
+                        pdf = createZytjPdf(activityId, game.getGameId(), userId);
+                        if (pdf == null) pdf = createGamePdf(instance, area, game, participation);
+                    } else if ("zdyp".equals(game.getGameType())) {
+                        pdf = createZdypPdf(activityId, game.getGameId(), userId);
                         if (pdf == null) pdf = createGamePdf(instance, area, game, participation);
                     } else if ("zycck".equals(game.getGameType())) {
                         pdf = zycckReportPdfService.createForActivity(student.getSchoolId(), activityId, game.getGameId(), userId);
@@ -404,6 +417,48 @@ public class ReportCacheController extends FrontBaseController {
     }
 
     /** 职面未来个人报告：与小程序选择卡同源，输出方向、标签、方向解读与寄语。 */
+    private byte[] createZdypPdf(Long activityId, Long gameId, Long userId) throws Exception {
+        ZdypRecord record = zdypRecordMapper.selectOne(new QueryWrapper<ZdypRecord>()
+                .eq("instance_id", activityId).eq("game_id", gameId).eq("user_id", userId)
+                .eq("status", "finished").last("LIMIT 1"));
+        if (record == null) return null;
+        List<String> lines = new java.util.ArrayList<>();
+        lines.add("我的职业拼图报告");
+        lines.add("岗位：" + textValue(record.getCareerName(), "-"));
+        lines.add("职业认知分型：" + textValue(record.getBehaviorName(), "-"));
+        lines.add("闯关次数：" + numberOrZero(record.getAttemptNo()) + " 次");
+        if (record.getBestMs() != null) {
+            lines.add("最快通关用时：" + String.format(java.util.Locale.ROOT, "%.1f 秒", record.getBestMs() / 1000d));
+        }
+        lines.add("个人结论");
+        lines.add(textValue(record.getConclusion(), "暂无个人结论"));
+        lines.add("提升建议");
+        lines.add(textValue(record.getSuggestion(), "暂无提升建议"));
+
+        lines.add("这张岗位拼图");
+        if (record.getCareerId() != null) {
+            for (ZdypCard card : zdypConfigService.listAllCards(record.getCareerId())) {
+                String dimension = ZdypConfigService.SLOTS.get(card.getDimensionCode());
+                lines.add("【" + textValue(dimension, "岗位信息") + "】" + textValue(card.getCardText(), "-"));
+            }
+        }
+
+        ZdypCareer career = null;
+        for (ZdypCareer item : zdypConfigService.listAllCareers()) {
+            if (record.getCareerId() != null && record.getCareerId().equals(item.getCareerId())) {
+                career = item;
+                break;
+            }
+        }
+        lines.add("岗位解析");
+        lines.add("岗位定义：" + textValue(career == null ? null : career.getIntro(), "暂无岗位定义"));
+        lines.add("行业价值：" + textValue(career == null ? null : career.getIndustryValue(), "暂无行业价值说明"));
+        lines.add("新生入门建议：" + textValue(career == null ? null : career.getNewcomerAdvice(), "暂无入门建议"));
+        lines.add("提示：拼图结果只反映本次职业信息加工表现，不代表能力评价，"
+                + "建议结合岗位真实要求继续探索，并主动了解职业缺点与行业风险。");
+        return createTextPdf(lines);
+    }
+
     private byte[] createZmwlPdf(Long activityId, Long gameId, Long userId) throws Exception {
         ZmwlRecord record = zmwlRecordMapper.selectOne(new QueryWrapper<ZmwlRecord>()
                 .eq("instance_id", activityId).eq("game_id", gameId).eq("user_id", userId)
@@ -515,17 +570,22 @@ public class ReportCacheController extends FrontBaseController {
         return win ? "恭喜完成本局对弈。" : "调整策略后再试一次。";
     }
 
-    private byte[] createZytjPdf(Long activityId, Long studentId) throws Exception {
-        GkzhMbtiStudentChoice query = new GkzhMbtiStudentChoice();
-        query.setActivityId(activityId);
-        query.setStudentId(studentId);
-        List<GkzhMbtiStudentChoice> choices = mbtiStudentChoiceService.selectGkzhMbtiStudentChoiceList(query);
-        if (choices == null || choices.isEmpty()) return null;
-        GkzhMbtiStudentChoice choice = choices.get(0);
+    /** 职业探索卡 PDF：使用提交时写入的人格类型与三段文案快照，与结果页保持一致。 */
+    private byte[] createZytjPdf(Long activityId, Long gameId, Long userId) throws Exception {
+        ZytjRecord record = zytjRecordMapper.selectOne(new QueryWrapper<ZytjRecord>()
+                .eq("instance_id", activityId).eq("game_id", gameId).eq("user_id", userId)
+                .eq("game_type", "zytj").orderByDesc("record_id").last("limit 1"));
+        if (record == null || record.getTypeCode() == null) return null;
         List<String> lines = new java.util.ArrayList<>();
-        lines.add("职愿探究结果报告");
-        addLine(lines, "MBTI 类型", choice.getChoiceCode());
-        addLine(lines, "选择用时（秒）", choice.getChoiceTime());
+        lines.add("职愿探究 · 职业探索卡");
+        addLine(lines, "你的人格类型是", record.getTypeCode());
+        addLine(lines, "性格特点", record.getFeature());
+        addLine(lines, "适合职业领域", record.getCareerField());
+        addLine(lines, "典型职业", record.getTypicalCareers());
+        addLine(lines, "用时（秒）", record.getDurationMs() == null ? null : record.getDurationMs() / 1000L);
+        if ("1".equals(record.getIsTimeout())) {
+            addLine(lines, "提示", "本局到点自动提交，未选满的列已按该列首个物品补全。");
+        }
         return createTextPdf(lines);
     }
 

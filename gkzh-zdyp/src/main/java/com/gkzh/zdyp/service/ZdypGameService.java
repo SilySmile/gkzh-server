@@ -519,14 +519,31 @@ public class ZdypGameService {
         data.put("career", careerView(career, record));
         data.put("slots", slotList());
         List<Map<String, Object>> cardViews = new ArrayList<>();
-        for (ZdypCard card : cards) {
+        List<ZdypCard> ordered = orderedCards(cards, attempt.getAttemptNo() == null ? 1 : attempt.getAttemptNo());
+        for (int i = 0; i < ordered.size(); i++) {
+            ZdypCard card = ordered.get(i);
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("cardId", card.getCardId());
+            item.put("cardNo", i + 1);
             item.put("cardText", card.getCardText());
             cardViews.add(item);
         }
         data.put("cards", cardViews);
         return data;
+    }
+
+    /**
+     * 按尝试次数循环左移卡片顺序，使每一局的卡片编号不同，避免固定编号直接暴露答案。
+     * 结果页用同一规则还原正确答案的编号，因此必须与开始闯关时保持完全一致。
+     */
+    private List<ZdypCard> orderedCards(List<ZdypCard> cards, int attemptNo) {
+        List<ZdypCard> copy = new ArrayList<>(cards);
+        if (copy.isEmpty()) {
+            return copy;
+        }
+        int shift = Math.floorMod(attemptNo - 1, copy.size());
+        java.util.Collections.rotate(copy, -shift);
+        return copy;
     }
 
     /** 一次闯关的结果视图：四个卡槽的正确答案、学生放置内容、科普文案与行为分型。 */
@@ -542,6 +559,13 @@ public class ZdypGameService {
         for (ZdypCard card : configService.listAllCards(career.getCareerId())) {
             cardTexts.put(card.getCardId(), card.getCardText());
         }
+        // 与本局开始闯关时相同的编号规则：结果页“正确排序”必须能对上学生看到的卡片编号。
+        Map<Long, Integer> cardNos = new HashMap<>();
+        List<ZdypCard> ordered = orderedCards(configService.listActiveCards(career.getCareerId()),
+                attempt.getAttemptNo() == null ? 1 : attempt.getAttemptNo());
+        for (int i = 0; i < ordered.size(); i++) {
+            cardNos.put(ordered.get(i).getCardId(), i + 1);
+        }
         List<Map<String, Object>> slots = new ArrayList<>();
         for (Map.Entry<String, String> slot : ZdypConfigService.SLOTS.entrySet()) {
             Map<String, Object> row = new LinkedHashMap<>();
@@ -550,8 +574,10 @@ public class ZdypGameService {
             row.put("slotCode", slot.getKey());
             row.put("slotName", slot.getValue());
             row.put("correctCardId", correctCard == null ? null : correctCard.getCardId());
+            row.put("correctCardNo", correctCard == null ? null : cardNos.get(correctCard.getCardId()));
             row.put("correctCardText", correctCard == null ? null : correctCard.getCardText());
             row.put("cardId", answer == null ? null : answer.getCardId());
+            row.put("cardNo", answer == null ? null : cardNos.get(answer.getCardId()));
             row.put("cardText", answer == null ? null : cardTexts.get(answer.getCardId()));
             row.put("correct", answer != null && "1".equals(answer.getIsCorrect()));
             row.put("filled", answer != null);

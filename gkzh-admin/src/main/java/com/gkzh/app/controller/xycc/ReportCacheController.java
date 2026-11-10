@@ -818,12 +818,14 @@ public class ReportCacheController extends FrontBaseController {
     }
 
     private void appendTitleValues(List<String> lines, Object rawItems) {
-        if (!(rawItems instanceof Iterable)) return;
-        for (Object item : (Iterable<?>) rawItems) {
-            if (item instanceof Map) {
-                Object title = ((Map<?, ?>) item).get("title");
-                addLine(lines, title == null ? "项目" : String.valueOf(title), ((Map<?, ?>) item).get("description"));
-            } else if (item != null) lines.add(String.valueOf(item));
+        // 列表元素可能是 Map，也可能是 Career/WorkEnv 这类只有标题的实体；
+        // 统一按标题取值，避免把实体 toString() 的多行结构打进报告。
+        for (String[] row : com.gkzh.app.service.ReportValueFormatter.titleValues(rawItems)) {
+            if (row[1] == null) {
+                lines.add(row[0]);
+            } else {
+                addLine(lines, row[0], row[1]);
+            }
         }
     }
     private String safeName(String value) { return value == null || value.trim().isEmpty() ? "未分类区域" : value.replaceAll("[\\\\/:*?\"<>|]", "_"); }

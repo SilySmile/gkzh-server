@@ -363,12 +363,17 @@ public class GkzhStudentCheckinServiceImpl implements IGkzhStudentCheckinService
 
     @Override
     public StudentTokenResponse register(StudentRegisterRequest request) {
+        return register(request, true);
+    }
+
+    @Override
+    public StudentTokenResponse register(StudentRegisterRequest request, boolean requireProfile) {
         if (request.getSchoolId() == null || request.getStudentNo() == null || request.getStudentNo().trim().isEmpty()) {
             throw new RuntimeException("请选择学校并填写学号");
         }
-        if (request.getGrade() == null || request.getGrade().trim().isEmpty()
-                || request.getEducation() == null || request.getEducation().trim().isEmpty()
-                || request.getGraduationTime() == null || !request.getGraduationTime().matches("\\d{4}-(0[1-9]|1[0-2])")) {
+        if (requireProfile
+                && (isBlankProfileValue(request.getGrade()) || isBlankProfileValue(request.getEducation())
+                    || !isValidGraduationMonth(request.getGraduationTime()))) {
             throw new RuntimeException("请填写年级、学历和毕业时间");
         }
         validateRegistrationDepartment(request);
@@ -400,9 +405,16 @@ public class GkzhStudentCheckinServiceImpl implements IGkzhStudentCheckinService
         existStudent.setPassword(passwordEncoder.encode(request.getPassword()));
         // 注册资料以用户本次填写为准，修正批量导入或后台预录时的错误资料。
         existStudent.setDepartmentId(request.getDepartmentId());
-        existStudent.setGrade(request.getGrade());
-        existStudent.setEducation(request.getEducation());
-        existStudent.setGraduationTime(request.getGraduationTime());
+        // 年级/学历/毕业时间允许旧版小程序不传；未传时保留后台已有资料，不能被覆盖成空。
+        if (!isBlankProfileValue(request.getGrade())) {
+            existStudent.setGrade(request.getGrade());
+        }
+        if (!isBlankProfileValue(request.getEducation())) {
+            existStudent.setEducation(request.getEducation());
+        }
+        if (isValidGraduationMonth(request.getGraduationTime())) {
+            existStudent.setGraduationTime(request.getGraduationTime());
+        }
         existStudent.setClassName(request.getClassName());
         existStudent.setEnrollmentYear(request.getEnrollmentYear());
         existStudent.setStudentName(request.getStudentName());
@@ -413,6 +425,16 @@ public class GkzhStudentCheckinServiceImpl implements IGkzhStudentCheckinService
         // 注册接口无需后台登录态，直接更新学生档案，避免后台账号同步逻辑要求管理员会话。
         gkzhStudentMapper.updateGkzhStudent(existStudent);
         return issueToken(existStudent, null);
+    }
+
+    /** 注册可选项判空：旧版小程序未升级时年级/学历可能为空。 */
+    private static boolean isBlankProfileValue(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
+    /** 毕业时间格式为 yyyy-MM；为空或不合法时视为未填写。 */
+    private static boolean isValidGraduationMonth(String value) {
+        return value != null && value.matches("\\d{4}-(0[1-9]|1[0-2])");
     }
 
     /** 注册只能选择学校下的一级院系及其直属二级专业。 */

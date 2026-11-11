@@ -75,6 +75,16 @@ public interface IGkzhStudentCheckinService
     public StudentTokenResponse register(StudentRegisterRequest request);
 
     /**
+     * 学生注册，可控制是否强制校验年级、学历和毕业时间。
+     * 小程序旧版本还没有这三项输入，后台可通过开关关闭校验后再放开注册。
+     *
+     * @param request        注册资料
+     * @param requireProfile true：缺少年级/学历/毕业时间直接拒绝；false：按实际提交的字段保存
+     * @return 登录令牌
+     */
+    public StudentTokenResponse register(StudentRegisterRequest request, boolean requireProfile);
+
+    /**
      * 学生登录（仅登录，不含签到）
      */
     public StudentTokenResponse login(StudentLoginSimpleRequest request);

@@ -1,9 +1,12 @@
 package com.gkzh.web.controller.school;
 
 import java.util.List;
+import java.util.Map;
 
 import com.gkzh.common.core.domain.entity.SysUser;
 import com.gkzh.school.dto.GkzhStudentDTO;
+import com.gkzh.system.domain.SysConfig;
+import com.gkzh.system.service.ISysConfigService;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -37,8 +40,58 @@ import javax.servlet.http.HttpServletResponse;
 @RestController
 @RequestMapping("/school/student")
 public class GkzhStudentController extends BaseController {
+
+    /** 小程序注册是否强制校验年级、学历、毕业时间的系统参数键。 */
+    private static final String REGISTER_CHECK_KEY = "student.register.requireProfile";
+
     @Autowired
     private IGkzhStudentService gkzhStudentService;
+
+    /** 系统参数读写：注册校验开关保存在 sys_config，Web 保存后立即生效。 */
+    @Autowired
+    private ISysConfigService configService;
+
+    /**
+     * 读取小程序注册校验开关。
+     * 未配置时返回 false，保证未升级的小程序旧版本仍能注册。
+     */
+    @PreAuthorize("@ss.hasPermi('school:student:list')")
+    @GetMapping("/register-check")
+    public AjaxResult registerCheck() {
+        AjaxResult result = AjaxResult.success();
+        result.put("requireProfile", isRegisterProfileRequired());
+        return result;
+    }
+
+    /**
+     * 保存小程序注册校验开关。
+     *
+     * @param body requireProfile=true 时小程序注册必须填写年级、学历、毕业时间
+     */
+    @PreAuthorize("@ss.hasPermi('school:student:edit')")
+    @PutMapping("/register-check")
+    public AjaxResult saveRegisterCheck(@RequestBody Map<String, Object> body) {
+        boolean enabled = body != null && Boolean.parseBoolean(String.valueOf(body.get("requireProfile")));
+        SysConfig probe = new SysConfig();
+        probe.setConfigKey(REGISTER_CHECK_KEY);
+        List<SysConfig> configs = configService.selectConfigList(probe);
+        if (configs == null || configs.isEmpty()) {
+            SysConfig config = new SysConfig();
+            config.setConfigName("学生注册校验年级学历毕业时间");
+            config.setConfigKey(REGISTER_CHECK_KEY);
+            config.setConfigValue(String.valueOf(enabled));
+            config.setConfigType("N");
+            config.setRemark("true=小程序注册必须填写年级、学历、毕业时间；false=不校验");
+            return toAjax(configService.insertConfig(config));
+        }
+        SysConfig config = configs.get(0);
+        config.setConfigValue(String.valueOf(enabled));
+        return toAjax(configService.updateConfig(config));
+    }
+
+    private boolean isRegisterProfileRequired() {
+        return "true".equalsIgnoreCase(configService.selectConfigByKey(REGISTER_CHECK_KEY));
+    }
 
     /**
      * 查询学生列表

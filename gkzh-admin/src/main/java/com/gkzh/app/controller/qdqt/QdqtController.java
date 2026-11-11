@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import com.gkzh.school.domain.GkzhStudent;
 import com.gkzh.school.service.IGkzhStudentService;
+import com.gkzh.system.service.ISysConfigService;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -32,6 +33,9 @@ public class QdqtController extends FrontBaseController
     private StuTokenService stuTokenService;
     @Autowired
     private IGkzhStudentCheckinService checkinService;
+    /** 注册校验开关读取系统参数。 */
+    @Autowired
+    private ISysConfigService configService;
     @Autowired
     private IGkzhStudentService studentService;
 
@@ -82,7 +86,11 @@ public class QdqtController extends FrontBaseController
     @ApiOperation("注册")
     @PostMapping("/register")
     public AjaxResult register(@RequestBody StudentRegisterRequest request) {
-        StudentTokenResponse result = checkinService.register(request);
+        // 是否强制校验年级/学历/毕业时间由 Web「学生管理」开关控制，未配置时按不校验处理，
+        // 保证未升级的小程序旧版本仍能完成注册。
+        boolean requireProfile = "true".equalsIgnoreCase(
+                configService.selectConfigByKey("student.register.requireProfile"));
+        StudentTokenResponse result = checkinService.register(request, requireProfile);
         return AjaxResult.success(result);
     }
 

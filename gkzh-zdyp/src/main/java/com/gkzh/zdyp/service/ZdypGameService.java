@@ -389,6 +389,9 @@ public class ZdypGameService {
         record.setUpdateTime(now);
         if (pass) {
             completeParticipation(record);
+        } else {
+            // 未通关也要在活动页显示「失败」水印；学生仍可继续重闯，通关后会改回完成。
+            markParticipationFailed(record);
         }
         return resultView(record, attempt, career);
     }
@@ -440,6 +443,7 @@ public class ZdypGameService {
             return;
         }
         JSONObject result = new JSONObject();
+        result.put("result", "pass");
         result.put("careerCode", record.getCareerCode());
         result.put("careerName", record.getCareerName());
         result.put("behaviorType", record.getBehaviorType());
@@ -447,6 +451,26 @@ public class ZdypGameService {
         result.put("attemptNo", record.getAttemptNo());
         result.put("bestMs", record.getBestMs());
         participation.setStatus("1");
+        participation.setFinishTime(DateUtils.getNowDate());
+        participation.setResultJson(result.toJSONString());
+        activityWeekService.updateGameParticipation(participation);
+    }
+
+    /**
+     * 未通关时把活动游戏参与记录标记为失败（status=2），活动页据此显示「失败」水印。
+     * 已经通关的记录不会被降级；学生继续重闯并通关后，会由 completeParticipation 改回完成。
+     */
+    private void markParticipationFailed(ZdypRecord record) {
+        GkzhGameParticipation participation = activityWeekService.getLatestParticipation(record.getGameId(), record.getUserId());
+        if (participation == null || "1".equals(participation.getStatus())) {
+            return;
+        }
+        JSONObject result = new JSONObject();
+        result.put("result", "fail");
+        result.put("careerCode", record.getCareerCode());
+        result.put("careerName", record.getCareerName());
+        result.put("attemptNo", record.getAttemptNo());
+        participation.setStatus("2");
         participation.setFinishTime(DateUtils.getNowDate());
         participation.setResultJson(result.toJSONString());
         activityWeekService.updateGameParticipation(participation);
@@ -519,7 +543,7 @@ public class ZdypGameService {
         data.put("career", careerView(career, record));
         data.put("slots", slotList());
         List<Map<String, Object>> cardViews = new ArrayList<>();
-        List<ZdypCard> ordered = orderedCards(cards, attempt.getAttemptNo() == null ? 1 : attempt.getAttemptNo());
+        List<ZdypCard> ordered = orderedCards(cards, attemptSeed(attempt));
         for (int i = 0; i < ordered.size(); i++) {
             ZdypCard card = ordered.get(i);
             Map<String, Object> item = new LinkedHashMap<>();
@@ -532,18 +556,34 @@ public class ZdypGameService {
         return data;
     }
 
-    /**
-     * 按尝试次数循环左移卡片顺序，使每一局的卡片编号不同，避免固定编号直接暴露答案。
-     * 结果页用同一规则还原正确答案的编号，因此必须与开始闯关时保持完全一致。
-     */
-    private List<ZdypCard> orderedCards(List<ZdypCard> cards, int attemptNo) {
-        List<ZdypCard> copy = new ArrayList<>(cards);
-        if (copy.isEmpty()) {
-            return copy;
+    /** 每次尝试的随机种子：优先使用尝试编号（全局唯一），缺失时退回尝试序号。 */
+    private long attemptSeed(ZdypAttempt attempt) {
+        if (attempt == null) {
+            return 0L;
         }
-        int shift = Math.floorMod(attemptNo - 1, copy.size());
-        java.util.Collections.rotate(copy, -shift);
+        return attempt.getAttemptId() != null ? attempt.getAttemptId()
+                : (attempt.getAttemptNo() == null ? 0L : attempt.getAttemptNo().longValue());
+    }
+
+    /**
+     * 按本局种子打乱卡片顺序，使每局的选项排列随机，避免固定顺序被记住或直接对应卡槽。
+     * 结果页用同一套规则还原正确答案的编号，因此必须与开始闯关时保持完全一致；
+     * 这里用「种子 + 卡片编号」的哈希排序，不依赖数据库随机函数，同一次尝试可重复得到相同顺序。
+     */
+    private List<ZdypCard> orderedCards(List<ZdypCard> cards, long seed) {
+        List<ZdypCard> copy = new ArrayList<>(cards);
+        copy.sort(java.util.Comparator.comparingLong(card -> shuffleKey(seed, card.getCardId())));
         return copy;
+    }
+
+    /** 生成排序键；哈希相同（极少见）时按卡片编号兜底，保证顺序稳定。 */
+    private long shuffleKey(long seed, Long cardId) {
+        String raw = seed + ":" + cardId;
+        long hash = 1125899906842597L;
+        for (int i = 0; i < raw.length(); i++) {
+            hash = 31 * hash + raw.charAt(i);
+        }
+        return hash * 1000 + (cardId == null ? 0 : Math.floorMod(cardId, 1000));
     }
 
     /** 一次闯关的结果视图：四个卡槽的正确答案、学生放置内容、科普文案与行为分型。 */
@@ -562,7 +602,7 @@ public class ZdypGameService {
         // 与本局开始闯关时相同的编号规则：结果页“正确排序”必须能对上学生看到的卡片编号。
         Map<Long, Integer> cardNos = new HashMap<>();
         List<ZdypCard> ordered = orderedCards(configService.listActiveCards(career.getCareerId()),
-                attempt.getAttemptNo() == null ? 1 : attempt.getAttemptNo());
+                attemptSeed(attempt));
         for (int i = 0; i < ordered.size(); i++) {
             cardNos.put(ordered.get(i).getCardId(), i + 1);
         }

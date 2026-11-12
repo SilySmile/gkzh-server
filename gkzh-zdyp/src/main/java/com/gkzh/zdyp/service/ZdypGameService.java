@@ -389,9 +389,6 @@ public class ZdypGameService {
         record.setUpdateTime(now);
         if (pass) {
             completeParticipation(record);
-        } else {
-            // 未通关也要在活动页显示「失败」水印；学生仍可继续重闯，通关后会改回完成。
-            markParticipationFailed(record);
         }
         return resultView(record, attempt, career);
     }
@@ -451,26 +448,6 @@ public class ZdypGameService {
         result.put("attemptNo", record.getAttemptNo());
         result.put("bestMs", record.getBestMs());
         participation.setStatus("1");
-        participation.setFinishTime(DateUtils.getNowDate());
-        participation.setResultJson(result.toJSONString());
-        activityWeekService.updateGameParticipation(participation);
-    }
-
-    /**
-     * 未通关时把活动游戏参与记录标记为失败（status=2），活动页据此显示「失败」水印。
-     * 已经通关的记录不会被降级；学生继续重闯并通关后，会由 completeParticipation 改回完成。
-     */
-    private void markParticipationFailed(ZdypRecord record) {
-        GkzhGameParticipation participation = activityWeekService.getLatestParticipation(record.getGameId(), record.getUserId());
-        if (participation == null || "1".equals(participation.getStatus())) {
-            return;
-        }
-        JSONObject result = new JSONObject();
-        result.put("result", "fail");
-        result.put("careerCode", record.getCareerCode());
-        result.put("careerName", record.getCareerName());
-        result.put("attemptNo", record.getAttemptNo());
-        participation.setStatus("2");
         participation.setFinishTime(DateUtils.getNowDate());
         participation.setResultJson(result.toJSONString());
         activityWeekService.updateGameParticipation(participation);

@@ -545,22 +545,24 @@ public class ZdypGameService {
     /**
      * 按本局种子打乱卡片顺序，使每局的选项排列随机，避免固定顺序被记住或直接对应卡槽。
      * 结果页用同一套规则还原正确答案的编号，因此必须与开始闯关时保持完全一致；
-     * 这里用「种子 + 卡片编号」的哈希排序，不依赖数据库随机函数，同一次尝试可重复得到相同顺序。
+     * 这里用「种子 + 卡片编号」的混合哈希排序，不依赖数据库随机函数，同一次尝试可重复得到相同顺序。
      */
-    private List<ZdypCard> orderedCards(List<ZdypCard> cards, long seed) {
+    static List<ZdypCard> orderedCards(List<ZdypCard> cards, long seed) {
         List<ZdypCard> copy = new ArrayList<>(cards);
         copy.sort(java.util.Comparator.comparingLong(card -> shuffleKey(seed, card.getCardId())));
         return copy;
     }
 
-    /** 生成排序键；哈希相同（极少见）时按卡片编号兜底，保证顺序稳定。 */
-    private long shuffleKey(long seed, Long cardId) {
-        String raw = seed + ":" + cardId;
-        long hash = 1125899906842597L;
-        for (int i = 0; i < raw.length(); i++) {
-            hash = 31 * hash + raw.charAt(i);
-        }
-        return hash * 1000 + (cardId == null ? 0 : Math.floorMod(cardId, 1000));
+    /**
+     * SplitMix64 风格的混合哈希。
+     * 早期版本用「31 * hash + 字符」的简单累加，同一前缀的编号（41、42、43、44）算出的键
+     * 只差最后一位，排序结果恒等于原顺序，等于没有随机；这里改用乘法混合，种子不同则结果互不相关。
+     */
+    static long shuffleKey(long seed, Long cardId) {
+        long x = seed * 0x9E3779B97F4A7C15L + (cardId == null ? 0L : cardId) * 0xBF58476D1CE4E5B9L;
+        x = (x ^ (x >>> 30)) * 0xBF58476D1CE4E5B9L;
+        x = (x ^ (x >>> 27)) * 0x94D049BB133111EBL;
+        return x ^ (x >>> 31);
     }
 
     /** 一次闯关的结果视图：四个卡槽的正确答案、学生放置内容、科普文案与行为分型。 */

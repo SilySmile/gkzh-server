@@ -1,5 +1,6 @@
 package com.gkzh.app.service;
 
+import com.gkzh.activity.domain.week.GkzhGameParticipation;
 import com.gkzh.activity.service.IActivityWeekService;
 import com.gkzh.common.exception.ServiceException;
 import com.gkzh.zdyp.domain.ZdypAnswer;
@@ -57,6 +58,7 @@ public class ZdypGameServiceTest {
     private ZdypAnswerMapper answerMapper;
     private ZdypConfigService configService;
     private ZdypGameService service;
+    private IActivityWeekService activityWeekService;
     private ZdypRecord record;
     private ZdypAttempt attempt;
     private List<ZdypAnswer> firstAttemptAnswers;
@@ -67,7 +69,7 @@ public class ZdypGameServiceTest {
         attemptMapper = mock(ZdypAttemptMapper.class);
         answerMapper = mock(ZdypAnswerMapper.class);
         configService = mock(ZdypConfigService.class);
-        IActivityWeekService activityWeekService = mock(IActivityWeekService.class);
+        activityWeekService = mock(IActivityWeekService.class);
         service = new ZdypGameService(recordMapper, attemptMapper, answerMapper, configService, activityWeekService);
 
         ZdypSetting setting = new ZdypSetting();
@@ -100,6 +102,7 @@ public class ZdypGameServiceTest {
 
         record = new ZdypRecord();
         record.setRecordId(RECORD_ID);
+        record.setGameId(9L);
         record.setUserId(USER_ID);
         record.setGameType("zdyp");
         record.setStatus("participating");
@@ -184,6 +187,39 @@ public class ZdypGameServiceTest {
         assertEquals("participating", record.getStatus());
         assertEquals(1, record.getTimeoutCount());
         assertEquals("1", attempt.getIsTimeout());
+    }
+
+    @Test
+    void failedAttemptMarksParticipationAsFailed() {
+        GkzhGameParticipation participation = new GkzhGameParticipation();
+        participation.setStatus("0");
+        when(activityWeekService.getLatestParticipation(9L, USER_ID)).thenReturn(participation);
+
+        Map<String, Object> result = service.submit(RECORD_ID, USER_ID, 1, List.of(
+                placement("content", CARD_PROSPECT),
+                placement("skill", CARD_SKILL),
+                placement("weakness", CARD_WEAKNESS),
+                placement("prospect", CARD_CONTENT)));
+
+        assertEquals(Boolean.FALSE, result.get("pass"));
+        // 活动区域页根据 status=2 显示「失败」水印
+        assertEquals("2", participation.getStatus());
+        verify(activityWeekService).updateGameParticipation(participation);
+    }
+
+    @Test
+    void passedAttemptMarksParticipationAsCompleted() {
+        GkzhGameParticipation participation = new GkzhGameParticipation();
+        participation.setStatus("0");
+        when(activityWeekService.getLatestParticipation(9L, USER_ID)).thenReturn(participation);
+
+        service.submit(RECORD_ID, USER_ID, 1, List.of(
+                placement("content", CARD_CONTENT),
+                placement("skill", CARD_SKILL),
+                placement("weakness", CARD_WEAKNESS),
+                placement("prospect", CARD_PROSPECT)));
+
+        assertEquals("1", participation.getStatus());
     }
 
     @Test
